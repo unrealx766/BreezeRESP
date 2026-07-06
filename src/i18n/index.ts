@@ -1,0 +1,18 @@
+import { createI18n } from "vue-i18n";
+import zhCN from "./zh-CN.json";
+import en from "./en.json";
+
+export const i18n = createI18n({
+  legacy: false,
+  locale: "zh-CN",
+  fallbackLocale: "en",
+  messages: {
+    "zh-CN": zhCN,
+    en,
+  },
+});
+
+export const availableLocales = [
+  { code: "zh-CN", label: "中文" },
+  { code: "en", label: "English" },
+];
