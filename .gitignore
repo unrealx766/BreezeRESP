@@ -22,3 +22,16 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Screenshots (dev artifacts)
+/*.png
+
+# OS generated files
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+
+# Tauri build artifacts
+src-tauri/target/
+src-tauri/gen/schemas/
