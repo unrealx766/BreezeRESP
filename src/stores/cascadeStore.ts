@@ -94,10 +94,12 @@ export const useCascadeStore = defineStore("cascade", () => {
     expandedPaths.value = s;
   }
 
-  async function refreshKeys() {
+  async function refreshKeys(force = false) {
     const connStore = useConnectionStore();
     const connId = connStore.activeConnectionId;
-    if (!connId || refreshing) return;
+    if (!connId) return;
+    // Skip if already refreshing, unless forced (e.g. DB switch)
+    if (refreshing && !force) return;
 
     refreshing = true;
     loading.value = true;

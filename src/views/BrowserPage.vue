@@ -33,8 +33,10 @@ async function handleDbChange() {
   try {
     await connStore.switchDb(db);
     cascade.selectedKey = null;
+    cascade.searchQuery = "";
+    cascade.typeFilter = "all";
     detail.clearDetail();
-    await cascade.refreshKeys();
+    await cascade.refreshKeys(true);
   } catch (e) {
     console.error("DB switch failed:", e);
   } finally {
