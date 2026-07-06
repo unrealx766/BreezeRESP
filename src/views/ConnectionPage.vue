@@ -5,7 +5,7 @@ import { useI18n } from "vue-i18n";
 import { useConnectionStore } from "@/stores/connectionStore";
 import type { RedisConnection } from "@/types";
 import {
-  Plus, Server, Wifi, WifiOff, Trash2, Edit3, Zap,
+  Plus, Server, Wifi, WifiOff, Trash2, Edit3, Zap, AlertCircle,
   X, Loader2,
 } from "lucide-vue-next";
 
@@ -17,6 +17,9 @@ const showForm = ref(false);
 const editingId = ref<string | null>(null);
 const testing = ref<string | null>(null);
 const testResult = ref<{ id: string; ok: boolean } | null>(null);
+const formTesting = ref(false);
+const formTestResult = ref<{ ok: boolean } | null>(null);
+const formError = ref("");
 
 const form = ref({
   name: "",
@@ -30,22 +33,39 @@ const form = ref({
 function openNew() {
   editingId.value = null;
   form.value = { name: "", host: "127.0.0.1", port: 6379, password: "", db: 0, ssl: false };
+  formError.value = "";
+  formTestResult.value = null;
   showForm.value = true;
 }
 
 function openEdit(conn: RedisConnection) {
   editingId.value = conn.id;
-  form.value = { name: conn.name, host: conn.host, port: conn.port, password: conn.password, db: conn.db, ssl: conn.ssl };
+  form.value = { name: conn.name, host: conn.host, port: conn.port, password: "", db: conn.db, ssl: conn.ssl };
+  formError.value = "";
+  formTestResult.value = null;
   showForm.value = true;
 }
 
 function saveForm() {
+  if (!form.value.name.trim()) {
+    formError.value = t("connection.nameRequired");
+    return;
+  }
   if (editingId.value) {
     connStore.updateConnection(editingId.value, { ...form.value });
   } else {
     connStore.addConnection({ ...form.value, lastUsed: undefined });
   }
   showForm.value = false;
+}
+
+async function handleFormTest() {
+  formTesting.value = true;
+  formTestResult.value = null;
+  const ok = await connStore.testFormConnection(form.value);
+  formTesting.value = false;
+  formTestResult.value = { ok };
+  setTimeout(() => { formTestResult.value = null; }, 3000);
 }
 
 async function handleConnect(id: string) {
@@ -237,7 +257,9 @@ function statusColor(status: string) {
             </div>
             <div>
               <label class="block text-xs font-medium text-text-secondary mb-1.5">{{ t("connection.password") }}</label>
-              <input v-model="form.password" type="password" class="w-full px-3 py-2 text-sm border border-border rounded-lg bg-bg-primary focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20" />
+              <input v-model="form.password" type="password"
+                :placeholder="editingId ? t('connection.passwordUnchanged') : ''"
+                class="w-full px-3 py-2 text-sm border border-border rounded-lg bg-bg-primary focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20" />
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div>
@@ -253,16 +275,36 @@ function statusColor(status: string) {
             </div>
           </div>
 
-          <div class="flex justify-end gap-2 mt-6">
-            <button @click="showForm = false" class="px-4 py-2 text-sm text-text-secondary hover:bg-bg-hover rounded-lg transition-colors">
-              {{ t("common.cancel") }}
-            </button>
+          <div class="flex justify-between gap-2 mt-6">
             <button
-              @click="saveForm"
-              class="px-4 py-2 bg-redis text-white text-sm font-medium rounded-lg hover:bg-redis-dark transition-colors"
+              @click="handleFormTest"
+              :disabled="formTesting"
+              class="inline-flex items-center gap-1.5 px-3 py-2 border border-border text-sm text-text-secondary rounded-lg hover:bg-bg-hover transition-colors disabled:opacity-60"
             >
-              {{ t("common.save") }}
+              <Loader2 v-if="formTesting" :size="14" class="animate-spin" />
+              <Zap v-else :size="14" />
+              {{ t("connection.testFromForm") }}
+              <span v-if="formTestResult" class="ml-1" :class="formTestResult.ok ? 'text-success' : 'text-danger'">
+                {{ formTestResult.ok ? '✓' : '✗' }}
+              </span>
             </button>
+            <div class="flex gap-2">
+              <button @click="showForm = false" class="px-4 py-2 text-sm text-text-secondary hover:bg-bg-hover rounded-lg transition-colors">
+                {{ t("common.cancel") }}
+              </button>
+              <button
+                @click="saveForm"
+                class="px-4 py-2 bg-redis text-white text-sm font-medium rounded-lg hover:bg-redis-dark transition-colors"
+              >
+                {{ t("common.save") }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Form error -->
+          <div v-if="formError" class="mt-3 flex items-center gap-1.5 text-xs text-danger">
+            <AlertCircle :size="12" />
+            {{ formError }}
           </div>
         </div>
       </div>

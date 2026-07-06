@@ -68,6 +68,10 @@ export const useConnectionStore = defineStore("connection", () => {
   async function updateConnection(id: string, patch: Partial<RedisConnection>) {
     const idx = connections.value.findIndex((c) => c.id === id);
     if (idx !== -1) {
+      // If password is empty in patch, keep the existing password (backend doesn't return it)
+      if (patch.password === "" && connections.value[idx].password) {
+        patch = { ...patch, password: connections.value[idx].password };
+      }
       connections.value[idx] = { ...connections.value[idx], ...patch };
       // Persist to disk
       try {
@@ -137,6 +141,25 @@ export const useConnectionStore = defineStore("connection", () => {
     }
   }
 
+  /** Test a connection from form data without saving it */
+  async function testFormConnection(config: Omit<RedisConnection, "id" | "status">): Promise<boolean> {
+    const tempConfig: RustConnectionConfig = {
+      id: `__form_test_${Date.now()}`,
+      name: config.name,
+      host: config.host,
+      port: config.port,
+      password: config.password,
+      db: config.db,
+      ssl: config.ssl,
+    };
+    try {
+      return await tauriApi.connection.testConnection(tempConfig);
+    } catch (e) {
+      console.error("Form test connection failed:", e);
+      return false;
+    }
+  }
+
   /** Switch the active database for a connected session */
   async function switchDb(db: number) {
     const id = activeConnectionId.value;
@@ -166,6 +189,7 @@ export const useConnectionStore = defineStore("connection", () => {
     connect,
     disconnect,
     testConnection,
+    testFormConnection,
     switchDb,
     loadSavedConnections,
   };

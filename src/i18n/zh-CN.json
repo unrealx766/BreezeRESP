@@ -32,7 +32,11 @@
     "emptyTitle": "暂无连接",
     "emptyDesc": "点击上方按钮创建你的第一个 Redis 连接",
     "lastUsed": "上次使用",
-    "confirmDelete": "确定删除连接 \"{name}\" 吗？"
+    "confirmDelete": "确定删除连接 \"{name}\" 吗？",
+    "nameRequired": "连接名称不能为空",
+    "testFromForm": "测试连接",
+    "testFailed": "连接测试失败",
+    "passwordUnchanged": "留空则保持原密码不变"
   },
   "browser": {
     "title": "数据浏览器",

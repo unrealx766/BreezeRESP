@@ -32,7 +32,11 @@
     "emptyTitle": "No Connections",
     "emptyDesc": "Click the button above to create your first Redis connection",
     "lastUsed": "Last Used",
-    "confirmDelete": "Are you sure to delete connection \"{name}\"?"
+    "confirmDelete": "Are you sure to delete connection \"{name}\"?",
+    "nameRequired": "Connection name is required",
+    "testFromForm": "Test Connection",
+    "testFailed": "Connection test failed",
+    "passwordUnchanged": "Leave blank to keep current password"
   },
   "browser": {
     "title": "Data Browser",
