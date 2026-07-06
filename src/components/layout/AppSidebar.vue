@@ -30,9 +30,7 @@ function navigate(path: string) {
   <aside class="w-56 h-full bg-bg-sidebar border-r border-border flex flex-col shrink-0">
     <!-- Brand -->
     <div class="px-4 py-4 flex items-center gap-2.5">
-      <div class="w-8 h-8 rounded-lg bg-redis flex items-center justify-center">
-        <span class="text-white font-bold text-sm">R</span>
-      </div>
+      <img src="/breezeresp.svg" alt="BreezeRESP" class="w-8 h-8 rounded-lg" />
       <div>
         <h1 class="text-sm font-semibold text-text-primary leading-none">{{ t("app.title") }}</h1>
         <p class="text-[10px] text-text-muted mt-0.5">{{ t("app.subtitle") }}</p>
