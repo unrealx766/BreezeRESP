@@ -23,9 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 
-# Screenshots (dev artifacts)
-/*.png
-
 # OS generated files
 Thumbs.db
 Thumbs.db:encryptable
