@@ -10,7 +10,7 @@ import TtlGauge from "@/components/charts/TtlGauge.vue";
 import {
   Search, RefreshCw, Trash2, Copy, Tag, Database,
   Type, Hash, List, CircleDot, BarChart3,
-  AlertTriangle, X, Wifi,
+  AlertTriangle, X, Wifi, ChevronDown, Check,
 } from "lucide-vue-next";
 
 const { t } = useI18n();
@@ -21,12 +21,29 @@ const connStore = useConnectionStore();
 const currentDb = ref(0);
 const switchingDb = ref(false);
 const connectionLost = ref(false);
+const showDbDropdown = ref(false);
+
+function selectDb(db: number) {
+  currentDb.value = db;
+  showDbDropdown.value = false;
+  handleDbChange();
+}
 
 // Sync currentDb when active connection changes
 const activeConn = computed(() => connStore.activeConnection);
 watch(activeConn, (conn) => {
   if (conn) currentDb.value = conn.db;
 }, { immediate: true });
+
+// Sync currentDb when DB is switched externally (e.g. from sidebar)
+watch(
+  () => connStore.activeConnection?.db,
+  (db) => {
+    if (db !== undefined && db !== currentDb.value) {
+      currentDb.value = db;
+    }
+  }
+);
 
 // Watch for connection loss
 watch(
@@ -111,7 +128,13 @@ function copyKey(key: string) {
 watch(
   () => connStore.activeConnectionId,
   (id) => {
-    if (id) cascade.refreshKeys();
+    if (id) {
+      cascade.selectedKey = null;
+      cascade.searchQuery = "";
+      cascade.typeFilter = "all";
+      detail.clearDetail();
+      cascade.refreshKeys(true);
+    }
   }
 );
 
@@ -153,15 +176,42 @@ onMounted(() => {
       <div class="px-3 pt-3 pb-2 border-b border-border-light">
         <div class="flex items-center gap-2">
           <Database :size="13" class="text-redis shrink-0" />
-          <select
-            :value="currentDb"
-            @change="(e) => { currentDb = Number((e.target as HTMLSelectElement).value); handleDbChange(); }"
-            :disabled="switchingDb"
-            class="flex-1 px-2 py-1 text-xs font-mono font-semibold bg-bg-primary border border-border rounded-lg focus:outline-none focus:border-redis disabled:opacity-50"
-          >
-            <option v-for="n in 16" :key="n - 1" :value="n - 1">DB{{ n - 1 }}</option>
-          </select>
-          <RefreshCw v-if="switchingDb" :size="12" class="animate-spin text-text-muted shrink-0" />
+          <div class="relative flex-1">
+            <button
+              @click="showDbDropdown = !showDbDropdown"
+              :disabled="switchingDb"
+              class="w-full flex items-center justify-between px-2 py-1.5 text-xs font-mono font-semibold bg-bg-primary border border-border rounded-lg hover:border-redis/40 focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20 transition-colors disabled:opacity-50"
+            >
+              <span>DB{{ currentDb }}</span>
+              <div class="flex items-center gap-1">
+                <RefreshCw v-if="switchingDb" :size="11" class="animate-spin text-text-muted" />
+                <ChevronDown :size="12" class="text-text-muted transition-transform" :class="showDbDropdown ? 'rotate-180' : ''" />
+              </div>
+            </button>
+            <!-- Backdrop -->
+            <div v-if="showDbDropdown" class="fixed inset-0 z-40" @click="showDbDropdown = false" />
+            <!-- Dropdown panel -->
+            <div
+              v-if="showDbDropdown"
+              class="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-lg py-1 z-50 max-h-52 overflow-y-auto"
+            >
+              <div class="px-2.5 py-1 border-b border-border-light mb-0.5">
+                <span class="text-[9px] font-semibold text-text-muted uppercase tracking-wider">Database</span>
+              </div>
+              <button
+                v-for="n in 16"
+                :key="n - 1"
+                @click="selectDb(n - 1)"
+                class="w-full flex items-center justify-between px-2.5 py-1.5 text-xs font-mono transition-colors"
+                :class="currentDb === n - 1
+                  ? 'text-redis font-semibold bg-redis/5'
+                  : 'text-text-secondary font-medium hover:bg-bg-hover hover:text-text-primary'"
+              >
+                <span>DB{{ n - 1 }}</span>
+                <Check v-if="currentDb === n - 1" :size="11" class="text-redis" />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
       <div class="p-3 space-y-2 border-b border-border-light">
