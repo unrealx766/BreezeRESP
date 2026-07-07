@@ -125,6 +125,9 @@ export const tauriApi = {
 
     renameKey: (connectionId: string, oldKey: string, newKey: string) =>
       invoke<boolean>("rename_key", { connectionId, oldKey, newKey }),
+
+    dbSize: (connectionId: string) =>
+      invoke<number>("db_size", { connectionId }),
   },
 
   pipeline: {

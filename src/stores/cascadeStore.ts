@@ -14,14 +14,13 @@ export const useCascadeStore = defineStore("cascade", () => {
   const selectedKey = ref<string | null>(null);
   const loading = ref(false);
   const expandedPaths = ref(new Set<string>());
+  const totalKeyCount = ref(0);
+  let scanCursor = 0;
   let refreshing = false;
 
   const filteredKeys = computed(() => {
     let result = keys.value;
-    if (debouncedSearchQuery.value) {
-      const q = debouncedSearchQuery.value.toLowerCase();
-      result = result.filter((k) => k.key.toLowerCase().includes(q));
-    }
+    // Search is handled server-side via SCAN MATCH pattern
     if (typeFilter.value !== "all") {
       result = result.filter((k) => k.type === typeFilter.value);
     }
@@ -71,7 +70,24 @@ export const useCascadeStore = defineStore("cascade", () => {
     return root;
   });
 
+  // Flat list of visible tree nodes (expanded children included) for virtual scrolling
+  const visibleNodes = computed(() => {
+    const nodes: { node: KeyTreeNode; depth: number }[] = [];
+    function walk(nodeList: KeyTreeNode[], depth: number) {
+      for (const node of nodeList) {
+        nodes.push({ node, depth });
+        if (!node.key && expandedPaths.value.has(node.fullPath)) {
+          walk(node.children, depth + 1);
+        }
+      }
+    }
+    walk(keyTree.value, 0);
+    return nodes;
+  });
+
   const keyCount = computed(() => keys.value.length);
+  const hasMore = computed(() => scanCursor !== 0);
+  const loadedCount = computed(() => keys.value.length);
 
   const typeDistribution = computed(() => {
     const dist: Record<RedisDataType, number> = { string: 0, hash: 0, list: 0, set: 0, zset: 0 };
@@ -95,50 +111,74 @@ export const useCascadeStore = defineStore("cascade", () => {
     expandedPaths.value = s;
   }
 
+  async function fetchDbSize(connId: string) {
+    try {
+      totalKeyCount.value = await tauriApi.cascade.dbSize(connId);
+    } catch { /* best-effort */ }
+  }
+
+  async function scanBatch(connId: string, cursor: number): Promise<{ keys: RedisKey[]; nextCursor: number }> {
+    const maxIterations = 10;
+    let iterations = 0;
+    const newKeys: RedisKey[] = [];
+    const searchPattern = debouncedSearchQuery.value ? `*${debouncedSearchQuery.value}*` : "*";
+
+    do {
+      const raw = await tauriApi.cascade.scanKeys(connId, searchPattern, cursor, 200);
+      const response = raw as unknown as [number, any[]];
+      const nextCursor = response[0];
+      const rustKeys = Array.isArray(response[1]) ? response[1] : [];
+
+      newKeys.push(
+        ...rustKeys.map((rk: any) => ({
+          key: rk.key,
+          type: (rk.keyType || rk.key_type || "string") as RedisDataType,
+          ttl: rk.ttl ?? -1,
+          size: rk.size ?? 0,
+        }))
+      );
+      cursor = nextCursor;
+      iterations++;
+    } while (cursor !== 0 && iterations < maxIterations);
+
+    return { keys: newKeys, nextCursor: cursor };
+  }
+
   async function refreshKeys(force = false) {
     const connStore = useConnectionStore();
     const connId = connStore.activeConnectionId;
     if (!connId) return;
-    // Skip if already refreshing, unless forced (e.g. DB switch)
     if (refreshing && !force) return;
 
     refreshing = true;
     loading.value = true;
     try {
-      let allKeys: RedisKey[] = [];
-      let cursor = 0;
-      const maxIterations = 100;
-      let iterations = 0;
-      const searchPattern = debouncedSearchQuery.value || "*";
-
-      do {
-        const raw = await tauriApi.cascade.scanKeys(
-          connId,
-          searchPattern,
-          cursor,
-          200
-        );
-
-        // Tauri returns Rust tuple as JSON array: [cursor_number, keys_array]
-        const response = raw as unknown as [number, any[]];
-        const nextCursor = response[0];
-        const rustKeys = Array.isArray(response[1]) ? response[1] : [];
-
-        allKeys.push(
-          ...rustKeys.map((rk: any) => ({
-            key: rk.key,
-            type: (rk.keyType || rk.key_type || "string") as RedisDataType,
-            ttl: rk.ttl ?? -1,
-            size: rk.size ?? 0,
-          }))
-        );
-        cursor = nextCursor;
-        iterations++;
-      } while (cursor !== 0 && iterations < maxIterations);
-
-      keys.value = allKeys;
+      scanCursor = 0;
+      const result = await scanBatch(connId, 0);
+      keys.value = result.keys;
+      scanCursor = result.nextCursor;
+      await fetchDbSize(connId);
     } catch (e) {
       console.error("Failed to scan keys:", e);
+    } finally {
+      loading.value = false;
+      refreshing = false;
+    }
+  }
+
+  async function loadMoreKeys() {
+    const connStore = useConnectionStore();
+    const connId = connStore.activeConnectionId;
+    if (!connId || scanCursor === 0 || refreshing) return;
+
+    refreshing = true;
+    loading.value = true;
+    try {
+      const result = await scanBatch(connId, scanCursor);
+      keys.value = [...keys.value, ...result.keys];
+      scanCursor = result.nextCursor;
+    } catch (e) {
+      console.error("Failed to load more keys:", e);
     } finally {
       loading.value = false;
       refreshing = false;
@@ -169,13 +209,18 @@ export const useCascadeStore = defineStore("cascade", () => {
     loading,
     expandedPaths,
     debouncedSearchQuery,
+    totalKeyCount,
     filteredKeys,
     keyTree,
+    visibleNodes,
     keyCount,
+    loadedCount,
+    hasMore,
     typeDistribution,
     selectKey,
     toggleNode,
     refreshKeys,
+    loadMoreKeys,
     deleteKey,
   };
 });

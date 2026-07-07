@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import { watch, onMounted, ref, computed } from "vue";
+import { watch, onMounted, ref, computed, nextTick } from "vue";
 import { useCascadeStore } from "@/stores/cascadeStore";
 import { useDetailStore } from "@/stores/detailStore";
 import { useConnectionStore } from "@/stores/connectionStore";
@@ -34,6 +34,56 @@ watch(
     }, 300);
   }
 );
+
+// When debounced search changes, re-scan from Redis with new pattern
+watch(
+  () => cascade.debouncedSearchQuery,
+  () => {
+    // Reset scroll position when search changes
+    scrollTop.value = 0;
+    nextTick(() => {
+      const el = treeScrollRef.value;
+      if (el) el.scrollTop = 0;
+    });
+    cascade.refreshKeys(true);
+  }
+);
+
+// --- Virtual scroll ---
+const ITEM_HEIGHT = 32;
+const BUFFER = 10;
+const treeScrollRef = ref<HTMLElement | null>(null);
+const scrollTop = ref(0);
+const containerHeight = ref(500);
+
+const visibleItems = computed(() => {
+  const nodes = cascade.visibleNodes;
+  const start = Math.max(0, Math.floor(scrollTop.value / ITEM_HEIGHT) - BUFFER);
+  const visibleCount = Math.ceil(containerHeight.value / ITEM_HEIGHT) + 2 * BUFFER;
+  const end = Math.min(nodes.length, start + visibleCount);
+  return nodes.slice(start, end).map((item, i) => ({
+    ...item,
+    index: start + i,
+  }));
+});
+
+const topPadding = computed(() => {
+  const start = Math.max(0, Math.floor(scrollTop.value / ITEM_HEIGHT) - BUFFER);
+  return start * ITEM_HEIGHT;
+});
+const bottomPadding = computed(() => {
+  const end = Math.min(
+    cascade.visibleNodes.length,
+    Math.max(0, Math.floor(scrollTop.value / ITEM_HEIGHT) - BUFFER) + Math.ceil(containerHeight.value / ITEM_HEIGHT) + 2 * BUFFER
+  );
+  return Math.max(0, (cascade.visibleNodes.length - end) * ITEM_HEIGHT);
+});
+
+function onTreeScroll(e: Event) {
+  const el = e.target as HTMLElement;
+  scrollTop.value = el.scrollTop;
+  containerHeight.value = el.clientHeight;
+}
 
 // Immediately flush debounce when resetting search (e.g. DB switch, connection change)
 function resetSearchImmediate() {
@@ -287,17 +337,37 @@ onMounted(() => {
             <RefreshCw :size="14" :class="cascade.loading ? 'animate-spin' : ''" class="text-text-muted" />
           </button>
         </div>
-        <div class="text-[11px] text-text-muted">{{ t("browser.keyCount", { count: cascade.keyCount }) }}</div>
+        <div class="text-[11px] text-text-muted">
+          {{ cascade.totalKeyCount > cascade.loadedCount
+            ? t("browser.keyCountWithTotal", { loaded: cascade.loadedCount, total: cascade.totalKeyCount })
+            : t("browser.keyCount", { count: cascade.keyCount }) }}
+        </div>
       </div>
 
-      <div class="flex-1 overflow-y-auto py-1">
-        <div v-if="cascade.filteredKeys.length === 0" class="flex flex-col items-center py-8 text-text-muted">
+      <div ref="treeScrollRef" class="flex-1 overflow-y-auto py-1" @scroll="onTreeScroll">
+        <div v-if="cascade.filteredKeys.length === 0 && !cascade.loading" class="flex flex-col items-center py-8 text-text-muted">
           <Search :size="24" class="mb-2 opacity-40" />
           <span class="text-xs">{{ t("browser.noKeys") }}</span>
         </div>
-        <template v-else>
-          <KeyTreeItem v-for="node in cascade.keyTree" :key="node.fullPath" :node="node" :depth="0" @select="handleSelect" />
-        </template>
+        <div v-else :style="{ paddingTop: topPadding + 'px', paddingBottom: bottomPadding + 'px' }">
+          <KeyTreeItem
+            v-for="item in visibleItems"
+            :key="item.node.fullPath"
+            :node="item.node"
+            :depth="item.depth"
+            @select="handleSelect"
+          />
+          <!-- Load more button: in document flow, right after last rendered item -->
+          <div v-if="cascade.hasMore" class="px-3 py-2">
+            <button
+              @click="cascade.loadMoreKeys()"
+              :disabled="cascade.loading"
+              class="w-full py-1.5 text-[11px] font-medium text-redis border border-dashed border-redis/30 rounded-lg hover:bg-redis/5 transition-colors disabled:opacity-50"
+            >
+              {{ cascade.loading ? "..." : t("browser.loadMore") }}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 

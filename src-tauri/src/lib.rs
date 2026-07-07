@@ -50,6 +50,7 @@ pub fn run() {
             commands::cascade::delete_key,
             commands::cascade::set_key_ttl,
             commands::cascade::rename_key,
+            commands::cascade::db_size,
             // Pipeline commands
             commands::pipeline::execute_pipeline,
             // Sandbox commands

@@ -310,3 +310,21 @@ pub async fn rename_key(
         .map_err(|e| format!("RENAME error: {}", e))?;
     Ok(true)
 }
+
+/// Get the total number of keys in the current database
+#[tauri::command]
+pub async fn db_size(
+    state: State<'_, AppState>,
+    connection_id: String,
+) -> Result<u64, String> {
+    let pool = {
+        let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
+        pm.get_pool(&connection_id)?
+    };
+    let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
+    let size: u64 = redis::cmd("DBSIZE")
+        .query_async(&mut *conn)
+        .await
+        .map_err(|e| format!("DBSIZE error: {}", e))?;
+    Ok(size)
+}

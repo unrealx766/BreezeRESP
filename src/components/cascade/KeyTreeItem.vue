@@ -39,38 +39,26 @@ const isExpanded = computed(() => cascade.expandedPaths.has(props.node.fullPath)
 </script>
 
 <template>
-  <div>
-    <div
-      class="flex items-center gap-1.5 px-2 py-1 cursor-pointer text-xs transition-colors rounded-md mx-1"
-      :class="isSelected ? 'bg-redis/8 text-redis' : 'hover:bg-bg-hover text-text-secondary'"
-      :style="{ paddingLeft: `${depth * 16 + 8}px` }"
-      @click="emit('select', node)"
-    >
-      <template v-if="!isLeaf">
-        <ChevronDown v-if="isExpanded" :size="12" class="text-text-muted shrink-0" />
-        <ChevronRight v-else :size="12" class="text-text-muted shrink-0" />
-        <FolderOpen v-if="isExpanded" :size="12" class="text-warning shrink-0" />
-        <Folder v-else :size="12" class="text-warning shrink-0" />
-      </template>
-      <template v-else>
-        <component :is="typeIcons[node.key!.type]" :size="12" :class="`text-type-${node.key!.type} shrink-0`" />
-      </template>
-
-      <span class="truncate">{{ node.label }}</span>
-
-      <span v-if="isLeaf && node.key && node.key.ttl > 0" class="ml-auto text-[10px] text-text-muted shrink-0">
-        {{ formatTtl(node.key.ttl) }}
-      </span>
-    </div>
-
-    <template v-if="!isLeaf && isExpanded">
-      <KeyTreeItem
-        v-for="child in node.children"
-        :key="child.fullPath"
-        :node="child"
-        :depth="depth + 1"
-        @select="(n) => emit('select', n)"
-      />
+  <div
+    class="flex items-center gap-1.5 px-2 py-1 cursor-pointer text-xs transition-colors rounded-md mx-1"
+    :class="isSelected ? 'bg-redis/8 text-redis' : 'hover:bg-bg-hover text-text-secondary'"
+    :style="{ paddingLeft: `${depth * 16 + 8}px` }"
+    @click="emit('select', node)"
+  >
+    <template v-if="!isLeaf">
+      <ChevronDown v-if="isExpanded" :size="12" class="text-text-muted shrink-0" />
+      <ChevronRight v-else :size="12" class="text-text-muted shrink-0" />
+      <FolderOpen v-if="isExpanded" :size="12" class="text-warning shrink-0" />
+      <Folder v-else :size="12" class="text-warning shrink-0" />
     </template>
+    <template v-else>
+      <component :is="typeIcons[node.key!.type]" :size="12" :class="`text-type-${node.key!.type} shrink-0`" />
+    </template>
+
+    <span class="truncate">{{ node.label }}</span>
+
+    <span v-if="isLeaf && node.key && node.key.ttl > 0" class="ml-auto text-[10px] text-text-muted shrink-0">
+      {{ formatTtl(node.key.ttl) }}
+    </span>
   </div>
 </template>
