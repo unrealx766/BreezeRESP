@@ -98,6 +98,15 @@ export const useConnectionStore = defineStore("connection", () => {
     if (conn) conn.status = status;
   }
 
+  /** Mark the active connection as lost (called by metrics polling on failure) */
+  function markConnectionLost(id: string) {
+    const conn = connections.value.find((c) => c.id === id);
+    if (conn && conn.status === "connected") {
+      conn.status = "error";
+      lastError.value = "Connection lost";
+    }
+  }
+
   async function connect(id: string): Promise<boolean> {
     const conn = connections.value.find((c) => c.id === id);
     if (!conn) return false;
@@ -194,6 +203,7 @@ export const useConnectionStore = defineStore("connection", () => {
     removeConnection,
     connect,
     disconnect,
+    markConnectionLost,
     testConnection,
     testFormConnection,
     switchDb,

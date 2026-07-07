@@ -19,7 +19,15 @@ function toggleLocale() {
     <!-- Left: Connection info -->
     <div class="flex items-center gap-3">
       <template v-if="connStore.activeConnection">
-        <span class="w-2 h-2 rounded-full bg-success" />
+        <span
+          class="w-2 h-2 rounded-full shrink-0"
+          :class="{
+            'bg-success': connStore.activeConnection.status === 'connected',
+            'bg-text-muted': connStore.activeConnection.status === 'disconnected',
+            'bg-warning animate-pulse': connStore.activeConnection.status === 'connecting',
+            'bg-danger': connStore.activeConnection.status === 'error',
+          }"
+        />
         <span class="text-sm font-medium text-text-primary">{{ connStore.activeConnection.name }}</span>
         <span class="text-xs text-text-muted">{{ connStore.activeConnection.host }}:{{ connStore.activeConnection.port }}</span>
         <span class="badge bg-redis-light text-redis text-[10px]">DB{{ connStore.activeConnection.db }}</span>

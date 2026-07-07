@@ -20,6 +20,8 @@ export const useMetricsStore = defineStore("metrics", () => {
   });
   const monitoring = ref(false);
   let monitorTimer: ReturnType<typeof setInterval> | null = null;
+  let consecutiveFailures = 0;
+  const MAX_FAILURES = 3;
 
   const qps = computed(() => metrics.value.qps);
   const memoryUsed = computed(() => metrics.value.memoryUsed);
@@ -62,6 +64,7 @@ export const useMetricsStore = defineStore("metrics", () => {
 
     try {
       const data = await tauriApi.metrics.get(connId);
+      consecutiveFailures = 0;
       metrics.value.qps = data.instantaneousOpsPerSec ?? 0;
       metrics.value.memoryUsed = data.usedMemory ?? 0;
       metrics.value.memoryTotal = data.totalMemory ?? 0;
@@ -80,6 +83,12 @@ export const useMetricsStore = defineStore("metrics", () => {
       }
     } catch (e) {
       console.error("Failed to fetch metrics:", e);
+      consecutiveFailures++;
+      if (consecutiveFailures >= MAX_FAILURES) {
+        connStore.markConnectionLost(connId);
+        consecutiveFailures = 0;
+        stopMonitoring();
+      }
     }
   }
 

@@ -15,7 +15,12 @@ const metricsStore = useMetricsStore();
     <div class="flex items-center gap-1.5">
       <span
         class="w-1.5 h-1.5 rounded-full"
-        :class="connStore.activeConnection?.status === 'connected' ? 'bg-success' : 'bg-text-muted'"
+        :class="{
+          'bg-success': connStore.activeConnection?.status === 'connected',
+          'bg-danger': connStore.activeConnection?.status === 'error',
+          'bg-warning animate-pulse': connStore.activeConnection?.status === 'connecting',
+          'bg-text-muted': !connStore.activeConnection || connStore.activeConnection?.status === 'disconnected',
+        }"
       />
       <span>{{ connStore.activeConnection?.name || t("status.noConnection") }}</span>
     </div>
