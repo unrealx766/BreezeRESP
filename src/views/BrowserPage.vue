@@ -124,6 +124,38 @@ function copyKey(key: string) {
   navigator.clipboard.writeText(key);
 }
 
+async function deleteKey() {
+  const key = detail.currentKey?.key;
+  if (!key) return;
+  const confirmed = window.confirm(t("browser.confirmDelete", { key }));
+  if (!confirmed) return;
+  try {
+    await cascade.deleteKey(key);
+    detail.clearDetail();
+  } catch (e) {
+    console.error("Delete key failed:", e);
+  }
+}
+
+// Cell value popup for truncated content
+const cellPopup = ref({ show: false, content: '', x: 0, y: 0, title: '' });
+
+function showCellPopup(e: MouseEvent, content: string, title: string) {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  cellPopup.value = {
+    show: true,
+    content,
+    title,
+    x: Math.min(e.clientX + 8, vw - 420),
+    y: Math.min(e.clientY + 8, vh - 260),
+  };
+}
+
+function closeCellPopup() {
+  cellPopup.value = { show: false, content: '', x: 0, y: 0, title: '' };
+}
+
 // Auto-load keys when connection changes or page mounts
 watch(
   () => connStore.activeConnectionId,
@@ -263,86 +295,92 @@ onMounted(() => {
             <button @click="detail.refresh()" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-bg-hover" :title="t('browser.refresh')">
               <RefreshCw :size="13" class="text-text-muted" />
             </button>
-            <button class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-danger/10" :title="t('browser.deleteKey')">
+            <button @click="deleteKey" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-danger/10" :title="t('browser.deleteKey')">
               <Trash2 :size="13" class="text-danger" />
             </button>
           </div>
         </div>
 
-        <div class="flex-1 overflow-auto p-4">
+        <div class="flex-1 overflow-auto p-4 flex flex-col min-h-0">
           <!-- String -->
-          <div v-if="detail.currentValue?.type === 'string'" class="space-y-3">
-            <label class="text-xs font-medium text-text-secondary">{{ t("detail.value") }}</label>
-            <textarea :value="(detail.currentValue as any).value" readonly rows="12"
-              class="w-full px-4 py-3 text-sm font-mono bg-bg-primary border border-border rounded-lg resize-none focus:outline-none focus:border-redis" />
+          <div v-if="detail.currentValue?.type === 'string'" class="flex flex-col min-h-0">
+            <label class="text-xs font-medium text-text-secondary mb-3 shrink-0">{{ t("detail.value") }}</label>
+            <textarea :value="(detail.currentValue as any).value" readonly
+              class="flex-1 w-full px-4 py-3 text-sm font-mono bg-bg-primary border border-border rounded-lg resize-none focus:outline-none focus:border-redis min-h-[200px]" />
           </div>
 
           <!-- Hash -->
-          <div v-else-if="detail.currentValue?.type === 'hash'" class="space-y-3">
-            <label class="text-xs font-medium text-text-secondary">{{ t("detail.value") }} ({{ (detail.currentValue as any).fields.length }} fields)</label>
-            <div class="border border-border rounded-lg overflow-hidden">
+          <div v-else-if="detail.currentValue?.type === 'hash'" class="flex flex-col min-h-0">
+            <label class="text-xs font-medium text-text-secondary mb-3 shrink-0">{{ t("detail.value") }} ({{ (detail.currentValue as any).fields.length }} fields)</label>
+            <div class="border border-border rounded-lg flex-1 min-h-0">
+              <div class="h-full overflow-y-auto">
               <table class="w-full text-sm">
-                <thead><tr class="bg-bg-primary">
+                <thead class="sticky top-0 z-10"><tr class="bg-bg-primary">
                   <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border w-1/3">{{ t("detail.field") }}</th>
                   <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border">{{ t("detail.value") }}</th>
                 </tr></thead>
                 <tbody>
                   <tr v-for="(f, i) in (detail.currentValue as any).fields" :key="f.field" class="border-b border-border-light last:border-0" :class="i % 2 ? 'bg-bg-primary/50' : ''">
                     <td class="px-3 py-2 font-mono text-xs text-text-primary font-medium">{{ f.field }}</td>
-                    <td class="px-3 py-2 font-mono text-xs text-text-secondary">{{ f.value }}</td>
+                    <td class="px-3 py-2 font-mono text-xs text-text-secondary truncate max-w-0" @click="showCellPopup($event, f.value, f.field)"><span class="truncate block cursor-pointer">{{ f.value }}</span></td>
                   </tr>
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
 
           <!-- List -->
-          <div v-else-if="detail.currentValue?.type === 'list'" class="space-y-3">
-            <label class="text-xs font-medium text-text-secondary">{{ t("detail.value") }} ({{ (detail.currentValue as any).items.length }} items)</label>
-            <div class="border border-border rounded-lg overflow-hidden">
+          <div v-else-if="detail.currentValue?.type === 'list'" class="flex flex-col min-h-0">
+            <label class="text-xs font-medium text-text-secondary mb-3 shrink-0">{{ t("detail.value") }} ({{ (detail.currentValue as any).items.length }} items)</label>
+            <div class="border border-border rounded-lg flex-1 min-h-0">
+              <div class="h-full overflow-y-auto">
               <table class="w-full text-sm">
-                <thead><tr class="bg-bg-primary">
+                <thead class="sticky top-0 z-10"><tr class="bg-bg-primary">
                   <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border w-16">{{ t("detail.index") }}</th>
                   <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border">{{ t("detail.value") }}</th>
                 </tr></thead>
                 <tbody>
                   <tr v-for="(item, i) in (detail.currentValue as any).items" :key="i" class="border-b border-border-light last:border-0" :class="i % 2 ? 'bg-bg-primary/50' : ''">
                     <td class="px-3 py-2 text-xs text-text-muted font-mono">{{ i }}</td>
-                    <td class="px-3 py-2 font-mono text-xs text-text-primary">{{ item }}</td>
+                    <td class="px-3 py-2 font-mono text-xs text-text-primary truncate max-w-0" @click="showCellPopup($event, item, `Index ${i}`)"><span class="truncate block cursor-pointer">{{ item }}</span></td>
                   </tr>
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
 
           <!-- Set -->
-          <div v-else-if="detail.currentValue?.type === 'set'" class="space-y-3">
-            <label class="text-xs font-medium text-text-secondary">{{ t("detail.value") }} ({{ (detail.currentValue as any).members.length }} members)</label>
-            <div class="space-y-1">
+          <div v-else-if="detail.currentValue?.type === 'set'" class="flex flex-col min-h-0">
+            <label class="text-xs font-medium text-text-secondary mb-3 shrink-0">{{ t("detail.value") }} ({{ (detail.currentValue as any).members.length }} members)</label>
+            <div class="flex-1 min-h-0 overflow-y-auto space-y-1">
               <div v-for="(m, i) in (detail.currentValue as any).members" :key="m"
                 class="px-3 py-2 text-xs font-mono bg-bg-primary border border-border-light rounded-lg flex items-center gap-2">
-                <span class="text-text-muted w-6 text-right">{{ i + 1 }}</span>
-                <span class="text-text-primary">{{ m }}</span>
+                <span class="text-text-muted w-6 text-right shrink-0">{{ i + 1 }}</span>
+                <span class="text-text-primary truncate cursor-pointer" @click="showCellPopup($event, m, `Member ${i + 1}`)">{{ m }}</span>
               </div>
             </div>
           </div>
 
           <!-- ZSet -->
-          <div v-else-if="detail.currentValue?.type === 'zset'" class="space-y-3">
-            <label class="text-xs font-medium text-text-secondary">{{ t("detail.value") }} ({{ (detail.currentValue as any).members.length }} members)</label>
-            <div class="border border-border rounded-lg overflow-hidden">
+          <div v-else-if="detail.currentValue?.type === 'zset'" class="flex flex-col min-h-0">
+            <label class="text-xs font-medium text-text-secondary mb-3 shrink-0">{{ t("detail.value") }} ({{ (detail.currentValue as any).members.length }} members)</label>
+            <div class="border border-border rounded-lg flex-1 min-h-0">
+              <div class="h-full overflow-y-auto">
               <table class="w-full text-sm">
-                <thead><tr class="bg-bg-primary">
+                <thead class="sticky top-0 z-10"><tr class="bg-bg-primary">
                   <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border w-24">{{ t("detail.score") }}</th>
                   <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border">{{ t("detail.member") }}</th>
                 </tr></thead>
                 <tbody>
                   <tr v-for="(m, i) in (detail.currentValue as any).members" :key="m.member" class="border-b border-border-light last:border-0" :class="i % 2 ? 'bg-bg-primary/50' : ''">
                     <td class="px-3 py-2 text-xs font-mono text-redis font-semibold">{{ m.score.toLocaleString() }}</td>
-                    <td class="px-3 py-2 font-mono text-xs text-text-primary">{{ m.member }}</td>
+                    <td class="px-3 py-2 font-mono text-xs text-text-primary truncate max-w-0" @click="showCellPopup($event, m.member, `Score: ${m.score}`)"><span class="truncate block cursor-pointer">{{ m.member }}</span></td>
                   </tr>
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         </div>
@@ -378,5 +416,25 @@ onMounted(() => {
       </div>
     </div>
     </div>
+
+    <!-- Cell value popup (Teleport to body to avoid overflow clipping) -->
+    <Teleport to="body">
+      <div v-if="cellPopup.show" class="fixed inset-0 z-[9990]" @click="closeCellPopup" />
+      <div
+        v-if="cellPopup.show"
+        class="fixed z-[9999] w-96 max-h-64 bg-white border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden"
+        :style="{ left: cellPopup.x + 'px', top: cellPopup.y + 'px' }"
+      >
+        <div class="flex items-center justify-between px-3 py-2 border-b border-border-light bg-bg-primary shrink-0">
+          <span class="text-xs font-semibold text-text-secondary truncate">{{ cellPopup.title }}</span>
+          <button @click="closeCellPopup" class="text-text-muted hover:text-text-primary shrink-0 ml-2">
+            <X :size="12" />
+          </button>
+        </div>
+        <div class="px-3 py-2.5 text-xs font-mono text-text-primary overflow-auto whitespace-pre-wrap break-all flex-1">
+          {{ cellPopup.content }}
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
