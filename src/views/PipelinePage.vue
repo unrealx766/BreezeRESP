@@ -190,12 +190,12 @@ function onDrop(idx: number) {
               <Trash2 :size="12" class="text-danger" />
             </button>
           </div>
-
-          <!-- Add button -->
-          <button @click="pipeline.addCommand()" class="w-full py-2 border-2 border-dashed border-border rounded-lg text-xs text-text-muted hover:border-redis hover:text-redis transition-colors flex items-center justify-center gap-1.5">
-            <Plus :size="14" /> {{ t("pipeline.addCommand") }}
-          </button>
         </div>
+
+        <!-- Add button (outside scrollable area, always visible at bottom) -->
+        <button @click="pipeline.addCommand()" class="w-full py-2 mt-2 border-2 border-dashed border-border rounded-lg text-xs text-text-muted hover:border-redis hover:text-redis transition-colors flex items-center justify-center gap-1.5 shrink-0">
+          <Plus :size="14" /> {{ t("pipeline.addCommand") }}
+        </button>
       </div>
 
       <!-- Results Summary Panel -->
