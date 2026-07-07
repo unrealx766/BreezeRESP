@@ -20,6 +20,7 @@ const testResult = ref<{ id: string; ok: boolean } | null>(null);
 const formTesting = ref(false);
 const formTestResult = ref<{ ok: boolean } | null>(null);
 const formError = ref("");
+const connectError = ref<string | null>(null);
 
 const form = ref({
   name: "",
@@ -69,8 +70,13 @@ async function handleFormTest() {
 }
 
 async function handleConnect(id: string) {
-  await connStore.connect(id);
-  router.push("/browser");
+  connectError.value = null;
+  const ok = await connStore.connect(id);
+  if (ok) {
+    router.push("/browser");
+  } else {
+    connectError.value = connStore.lastError || t("connection.connectFailed");
+  }
 }
 
 async function handleTest(conn: RedisConnection) {
@@ -105,7 +111,7 @@ function statusColor(status: string) {
       <div>
         <h2 class="text-xl font-semibold text-text-primary">{{ t("connection.title") }}</h2>
         <p class="text-sm text-text-muted mt-1">
-          {{ connStore.connections.length }} connections, {{ connStore.connectedCount }} active
+          {{ t("connection.summary", { total: connStore.connections.length, active: connStore.connectedCount }) }}
         </p>
       </div>
       <button
@@ -114,6 +120,21 @@ function statusColor(status: string) {
       >
         <Plus :size="16" />
         {{ t("connection.newConnection") }}
+      </button>
+    </div>
+
+    <!-- Connection Error Banner -->
+    <div
+      v-if="connectError"
+      class="mb-4 flex items-start gap-2 px-4 py-3 bg-danger/5 border border-danger/20 rounded-lg"
+    >
+      <AlertCircle :size="16" class="text-danger mt-0.5 shrink-0" />
+      <div class="flex-1 min-w-0">
+        <p class="text-sm font-medium text-danger">{{ t("connection.connectFailed") }}</p>
+        <p class="text-xs text-text-muted mt-0.5 break-all">{{ connectError }}</p>
+      </div>
+      <button @click="connectError = null" class="shrink-0 text-text-muted hover:text-text-primary">
+        <X :size="14" />
       </button>
     </div>
 

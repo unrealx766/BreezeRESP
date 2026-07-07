@@ -72,7 +72,7 @@ function navigate(path: string) {
           :key="conn.id"
           class="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs cursor-pointer hover:bg-bg-hover transition-colors"
           :class="connStore.activeConnectionId === conn.id ? 'bg-bg-active' : ''"
-          @click="connStore.connect(conn.id).then(() => navigate('/browser'))"
+          @click="connStore.connect(conn.id).then((ok) => { if (ok) navigate('/browser') })"
         >
           <span
             class="w-2 h-2 rounded-full shrink-0"

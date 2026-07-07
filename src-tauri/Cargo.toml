@@ -2,7 +2,7 @@
 name = "breezeresp"
 version = "0.1.0"
 description = "A Tauri App"
-authors = ["you"]
+authors = ["unrealx766"]
 license = "GPL-3.0"
 edition = "2021"
 

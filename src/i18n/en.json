@@ -1,7 +1,9 @@
 {
   "app": {
     "title": "BreezeRESP",
-    "subtitle": "Redis Desktop Client"
+    "subtitle": "Redis Desktop Client",
+    "copyright": "Copyright © 2026 unrealx766. All Rights Reserved.",
+    "version": "v0.1.0"
   },
   "nav": {
     "connections": "Connections",
@@ -36,7 +38,9 @@
     "nameRequired": "Connection name is required",
     "testFromForm": "Test Connection",
     "testFailed": "Connection test failed",
-    "passwordUnchanged": "Leave blank to keep current password"
+    "passwordUnchanged": "Leave blank to keep current password",
+    "connectFailed": "Connection Failed",
+    "summary": "{total} connections, {active} active"
   },
   "browser": {
     "title": "Data Browser",
@@ -89,6 +93,7 @@
     "individualSum": "Individual Sum",
     "rttSaving": "RTT Saving",
     "emptyHint": "Click \"Add Command\" to start building a Pipeline",
+    "commandsQueued": "{count} commands queued",
     "executing": "Executing...",
     "templates": "Templates"
   },

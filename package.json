@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "license": "GPL-3.0",
+  "author": {
+    "name": "unrealx766"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",

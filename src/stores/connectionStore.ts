@@ -6,6 +6,7 @@ import { tauriApi, type RustConnectionConfig } from "@/services/tauriApi";
 export const useConnectionStore = defineStore("connection", () => {
   const connections = ref<RedisConnection[]>([]);
   const activeConnectionId = ref<string | null>(null);
+  const lastError = ref<string | null>(null);
 
   const activeConnection = computed(() =>
     connections.value.find((c) => c.id === activeConnectionId.value) ?? null
@@ -97,19 +98,23 @@ export const useConnectionStore = defineStore("connection", () => {
     if (conn) conn.status = status;
   }
 
-  async function connect(id: string) {
+  async function connect(id: string): Promise<boolean> {
     const conn = connections.value.find((c) => c.id === id);
-    if (!conn) return;
+    if (!conn) return false;
 
+    lastError.value = null;
     setStatus(id, "connecting");
     try {
       await tauriApi.connection.connect(toRustConfig(conn));
       setStatus(id, "connected");
       activeConnectionId.value = id;
       conn.lastUsed = Date.now();
+      return true;
     } catch (e) {
       console.error("Connect failed:", e);
       setStatus(id, "error");
+      lastError.value = typeof e === "string" ? e : (e as Error)?.message || String(e);
+      return false;
     }
   }
 
@@ -183,6 +188,7 @@ export const useConnectionStore = defineStore("connection", () => {
     activeConnectionId,
     activeConnection,
     connectedCount,
+    lastError,
     addConnection,
     updateConnection,
     removeConnection,

@@ -66,5 +66,8 @@ const metricsStore = useMetricsStore();
       <!-- Hit Rate -->
       <span>{{ t("status.hitRate") }}: {{ metricsStore.hitRate }}%</span>
     </template>
+
+    <!-- App version & Copyright (right side) -->
+    <span class="ml-auto text-text-muted/60">{{ t("app.version") }} · {{ t("app.copyright") }}</span>
   </footer>
 </template>

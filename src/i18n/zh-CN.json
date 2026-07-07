@@ -1,7 +1,9 @@
 {
   "app": {
     "title": "BreezeRESP",
-    "subtitle": "Redis 桌面客户端"
+    "subtitle": "Redis 桌面客户端",
+    "copyright": "Copyright © 2026 unrealx766. All Rights Reserved.",
+    "version": "v0.1.0"
   },
   "nav": {
     "connections": "连接管理",
@@ -36,7 +38,9 @@
     "nameRequired": "连接名称不能为空",
     "testFromForm": "测试连接",
     "testFailed": "连接测试失败",
-    "passwordUnchanged": "留空则保持原密码不变"
+    "passwordUnchanged": "留空则保持原密码不变",
+    "connectFailed": "连接失败",
+    "summary": "{total} 个连接, {active} 个活跃"
   },
   "browser": {
     "title": "数据浏览器",
@@ -89,6 +93,7 @@
     "individualSum": "单独执行总计",
     "rttSaving": "RTT 节省",
     "emptyHint": "点击\"添加命令\"开始构建 Pipeline",
+    "commandsQueued": "{count} 条命令已排队",
     "executing": "执行中...",
     "templates": "命令模板"
   },

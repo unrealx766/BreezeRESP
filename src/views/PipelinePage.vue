@@ -84,7 +84,7 @@ function onDrop(idx: number) {
           <Layers :size="20" class="text-redis" />
           {{ t("pipeline.title") }}
         </h2>
-        <p class="text-sm text-text-muted mt-1">{{ pipeline.commandCount }} commands queued</p>
+        <p class="text-sm text-text-muted mt-1">{{ t("pipeline.commandsQueued", { count: pipeline.commandCount }) }}</p>
       </div>
       <div class="flex items-center gap-2">
         <button @click="pipeline.clearResults()" :disabled="!pipeline.hasResults"
