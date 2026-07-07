@@ -69,8 +69,8 @@ export const useConnectionStore = defineStore("connection", () => {
   async function updateConnection(id: string, patch: Partial<RedisConnection>) {
     const idx = connections.value.findIndex((c) => c.id === id);
     if (idx !== -1) {
-      // If password is empty in patch, keep the existing password (backend doesn't return it)
-      if (patch.password === "" && connections.value[idx].password) {
+      // If password is undefined in patch, preserve the existing password
+      if (patch.password === undefined) {
         patch = { ...patch, password: connections.value[idx].password };
       }
       connections.value[idx] = { ...connections.value[idx], ...patch };

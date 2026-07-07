@@ -30,6 +30,12 @@ pub async fn connect(
     state: State<'_, AppState>,
     config: ConnectionConfig,
 ) -> Result<ConnectionInfo, String> {
+    // Remove stale pool if exists (config may have changed)
+    {
+        let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
+        let _ = pm.remove(&config.id);
+    }
+
     // Create or get pool
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;

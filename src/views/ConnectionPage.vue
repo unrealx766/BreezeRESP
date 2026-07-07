@@ -6,7 +6,7 @@ import { useConnectionStore } from "@/stores/connectionStore";
 import type { RedisConnection } from "@/types";
 import {
   Plus, Server, Wifi, WifiOff, Trash2, Edit3, Zap, AlertCircle,
-  X, Loader2,
+  X, Loader2, Lock, Unlock,
 } from "lucide-vue-next";
 
 const router = useRouter();
@@ -21,6 +21,8 @@ const formTesting = ref(false);
 const formTestResult = ref<{ ok: boolean } | null>(null);
 const formError = ref("");
 const connectError = ref<string | null>(null);
+const usePassword = ref(false);
+const hadPassword = ref(false);
 
 const form = ref({
   name: "",
@@ -36,6 +38,8 @@ function openNew() {
   form.value = { name: "", host: "127.0.0.1", port: 6379, password: "", db: 0, ssl: false };
   formError.value = "";
   formTestResult.value = null;
+  usePassword.value = false;
+  hadPassword.value = false;
   showForm.value = true;
 }
 
@@ -44,20 +48,44 @@ function openEdit(conn: RedisConnection) {
   form.value = { name: conn.name, host: conn.host, port: conn.port, password: "", db: conn.db, ssl: conn.ssl };
   formError.value = "";
   formTestResult.value = null;
+  usePassword.value = !!conn.password;
+  hadPassword.value = !!conn.password;
   showForm.value = true;
 }
 
-function saveForm() {
+async function saveForm() {
   if (!form.value.name.trim()) {
     formError.value = t("connection.nameRequired");
     return;
   }
-  if (editingId.value) {
-    connStore.updateConnection(editingId.value, { ...form.value });
-  } else {
-    connStore.addConnection({ ...form.value, lastUsed: undefined });
+  const data = { ...form.value };
+  if (!usePassword.value) {
+    data.password = "";
   }
-  showForm.value = false;
+  if (editingId.value) {
+    // Preserve old password only if toggle was on AND user didn't type a new one
+    if (usePassword.value && !data.password && hadPassword.value) {
+      data.password = undefined as any; // signal to keep old password
+    }
+    const wasConnected = connStore.connections.find((c) => c.id === editingId.value)?.status === "connected";
+    await connStore.updateConnection(editingId.value, { ...data });
+    showForm.value = false;
+    // Reconnect in background if was connected (card shows loading state)
+    if (wasConnected) {
+      reconnectInBackground(editingId.value);
+    }
+  } else {
+    connStore.addConnection({ ...data, lastUsed: undefined });
+    showForm.value = false;
+  }
+}
+
+function reconnectInBackground(id: string) {
+  connStore.disconnect(id).then(() => connStore.connect(id)).then((ok) => {
+    if (!ok) {
+      connectError.value = connStore.lastError || t("connection.connectFailed");
+    }
+  });
 }
 
 async function handleFormTest() {
@@ -217,8 +245,9 @@ function statusColor(status: string) {
           </button>
           <button
             @click="handleTest(conn)"
-            class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-bg-hover transition-colors relative"
-            :title="t('connection.testConnection')"
+            :disabled="conn.status === 'connected' || conn.status === 'connecting'"
+            class="w-8 h-8 flex items-center justify-center rounded-lg transition-colors relative disabled:opacity-30 disabled:cursor-not-allowed hover:bg-bg-hover"
+            :title="conn.status === 'connected' ? t('connection.alreadyConnected') : t('connection.testConnection')"
           >
             <Loader2 v-if="testing === conn.id" :size="14" class="animate-spin text-text-muted" />
             <Zap v-else :size="14" class="text-text-muted" />
@@ -277,10 +306,28 @@ function statusColor(status: string) {
               </div>
             </div>
             <div>
-              <label class="block text-xs font-medium text-text-secondary mb-1.5">{{ t("connection.password") }}</label>
-              <input v-model="form.password" type="password"
+              <div class="flex items-center justify-between mb-1.5">
+                <label class="text-xs font-medium text-text-secondary">{{ t("connection.password") }}</label>
+                <button
+                  type="button"
+                  @click="usePassword = !usePassword"
+                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium transition-colors"
+                  :class="usePassword
+                    ? 'bg-redis-light text-redis hover:bg-redis-light/80'
+                    : 'bg-bg-primary text-text-muted hover:bg-bg-hover'"
+                >
+                  <Lock v-if="usePassword" :size="10" />
+                  <Unlock v-else :size="10" />
+                  {{ usePassword ? t("connection.requirePassword") : t("connection.noPassword") }}
+                </button>
+              </div>
+              <input
+                v-if="usePassword"
+                v-model="form.password"
+                type="password"
                 :placeholder="editingId ? t('connection.passwordUnchanged') : ''"
-                class="w-full px-3 py-2 text-sm border border-border rounded-lg bg-bg-primary focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20" />
+                class="w-full px-3 py-2 text-sm border border-border rounded-lg bg-bg-primary focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20"
+              />
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div>
