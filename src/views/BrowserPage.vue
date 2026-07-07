@@ -23,6 +23,28 @@ const switchingDb = ref(false);
 const connectionLost = ref(false);
 const showDbDropdown = ref(false);
 
+// Debounce search input: wait 300ms after user stops typing before triggering filter/scan
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+watch(
+  () => cascade.searchQuery,
+  (val) => {
+    if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+      cascade.debouncedSearchQuery = val;
+    }, 300);
+  }
+);
+
+// Immediately flush debounce when resetting search (e.g. DB switch, connection change)
+function resetSearchImmediate() {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = null;
+  }
+  cascade.searchQuery = "";
+  cascade.debouncedSearchQuery = "";
+}
+
 function selectDb(db: number) {
   currentDb.value = db;
   showDbDropdown.value = false;
@@ -77,7 +99,7 @@ async function handleDbChange() {
   try {
     await connStore.switchDb(db);
     cascade.selectedKey = null;
-    cascade.searchQuery = "";
+    resetSearchImmediate();
     cascade.typeFilter = "all";
     detail.clearDetail();
     await cascade.refreshKeys(true);
@@ -162,7 +184,7 @@ watch(
   (id) => {
     if (id) {
       cascade.selectedKey = null;
-      cascade.searchQuery = "";
+      resetSearchImmediate();
       cascade.typeFilter = "all";
       detail.clearDetail();
       cascade.refreshKeys(true);

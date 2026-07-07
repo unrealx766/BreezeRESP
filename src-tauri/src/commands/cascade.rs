@@ -57,21 +57,64 @@ pub async fn scan_keys(
         .map_err(|e| format!("Failed to parse SCAN keys: {}", e))?;
 
     let mut result = Vec::with_capacity(keys.len());
+
+    if keys.is_empty() {
+        return Ok((next_cursor, result));
+    }
+
+    // Pipeline: batch TYPE + TTL + MEMORY USAGE for all keys (3 round-trips total)
+    let mut pipe = redis::pipe();
     for key in &keys {
-        let type_str: String = redis::cmd("TYPE")
-            .arg(key)
-            .query_async(&mut *conn)
-            .await
+        pipe.cmd("TYPE").arg(key);
+    }
+    for key in &keys {
+        pipe.cmd("TTL").arg(key);
+    }
+    for key in &keys {
+        pipe.cmd("MEMORY").arg("USAGE").arg(key);
+    }
+
+    let n = keys.len();
+    let expected = 3 * n;
+    let values: Vec<redis::Value> = pipe
+        .query_async(&mut *conn)
+        .await
+        .unwrap_or_default();
+
+    // Fallback: if pipeline returned wrong count, query per-key
+    if values.len() != expected {
+        result.clear();
+        for key in &keys {
+            let type_str: String = redis::cmd("TYPE")
+                .arg(key)
+                .query_async(&mut *conn)
+                .await
+                .unwrap_or_else(|_| "none".to_string());
+            let ttl: i64 = conn.ttl(key).await.unwrap_or(-1);
+            let size: u64 = redis::cmd("MEMORY")
+                .arg("USAGE")
+                .arg(key)
+                .query_async(&mut *conn)
+                .await
+                .unwrap_or(0);
+            result.push(RedisKeyInfo {
+                key: key.clone(),
+                key_type: type_str,
+                ttl,
+                size,
+            });
+        }
+        return Ok((next_cursor, result));
+    }
+
+    for (i, key) in keys.iter().enumerate() {
+        let type_str = redis::from_redis_value::<String>(&values[i])
             .unwrap_or_else(|_| "none".to_string());
 
-        let ttl: i64 = conn.ttl(key).await.unwrap_or(-1);
+        let ttl: i64 = redis::from_redis_value::<i64>(&values[n + i])
+            .unwrap_or(-1);
 
-        // Try MEMORY USAGE for size estimation
-        let size: u64 = redis::cmd("MEMORY")
-            .arg("USAGE")
-            .arg(key)
-            .query_async(&mut *conn)
-            .await
+        let size: u64 = redis::from_redis_value::<u64>(&values[2 * n + i])
             .unwrap_or(0);
 
         result.push(RedisKeyInfo {

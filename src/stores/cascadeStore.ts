@@ -7,6 +7,7 @@ import { useConnectionStore } from "./connectionStore";
 export const useCascadeStore = defineStore("cascade", () => {
   const keys = ref<RedisKey[]>([]);
   const searchQuery = ref("");
+  const debouncedSearchQuery = ref("");
   const typeFilter = ref<RedisDataType | "all">("all");
   const sortField = ref<SortField>("name");
   const sortOrder = ref<SortOrder>("asc");
@@ -17,8 +18,8 @@ export const useCascadeStore = defineStore("cascade", () => {
 
   const filteredKeys = computed(() => {
     let result = keys.value;
-    if (searchQuery.value) {
-      const q = searchQuery.value.toLowerCase();
+    if (debouncedSearchQuery.value) {
+      const q = debouncedSearchQuery.value.toLowerCase();
       result = result.filter((k) => k.key.toLowerCase().includes(q));
     }
     if (typeFilter.value !== "all") {
@@ -108,11 +109,12 @@ export const useCascadeStore = defineStore("cascade", () => {
       let cursor = 0;
       const maxIterations = 100;
       let iterations = 0;
+      const searchPattern = debouncedSearchQuery.value || "*";
 
       do {
         const raw = await tauriApi.cascade.scanKeys(
           connId,
-          searchQuery.value || "*",
+          searchPattern,
           cursor,
           200
         );
@@ -166,6 +168,7 @@ export const useCascadeStore = defineStore("cascade", () => {
     selectedKey,
     loading,
     expandedPaths,
+    debouncedSearchQuery,
     filteredKeys,
     keyTree,
     keyCount,
