@@ -2,6 +2,7 @@ use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ServerMetrics {
     pub used_memory: u64,
     pub total_memory: u64,

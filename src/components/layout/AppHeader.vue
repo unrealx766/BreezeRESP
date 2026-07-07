@@ -2,7 +2,7 @@
 import { useI18n } from "vue-i18n";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { availableLocales } from "@/i18n";
-import { Search, Globe } from "lucide-vue-next";
+import { Globe } from "lucide-vue-next";
 
 const { t, locale } = useI18n();
 const connStore = useConnectionStore();
@@ -29,16 +29,8 @@ function toggleLocale() {
       </template>
     </div>
 
-    <!-- Right: Search + Language -->
+    <!-- Right: Language -->
     <div class="flex items-center gap-2">
-      <div class="relative">
-        <Search :size="14" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
-        <input
-          type="text"
-          :placeholder="t('browser.search')"
-          class="pl-8 pr-3 py-1.5 text-xs bg-bg-primary border border-border rounded-lg w-52 focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20 transition-all"
-        />
-      </div>
       <button
         @click="toggleLocale"
         class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-text-secondary hover:bg-bg-hover transition-colors"

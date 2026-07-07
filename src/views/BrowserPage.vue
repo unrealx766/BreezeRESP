@@ -10,6 +10,7 @@ import TtlGauge from "@/components/charts/TtlGauge.vue";
 import {
   Search, RefreshCw, Trash2, Copy, Tag, Database,
   Type, Hash, List, CircleDot, BarChart3,
+  AlertTriangle, X, Wifi,
 } from "lucide-vue-next";
 
 const { t } = useI18n();
@@ -19,12 +20,38 @@ const connStore = useConnectionStore();
 
 const currentDb = ref(0);
 const switchingDb = ref(false);
+const connectionLost = ref(false);
 
 // Sync currentDb when active connection changes
 const activeConn = computed(() => connStore.activeConnection);
 watch(activeConn, (conn) => {
   if (conn) currentDb.value = conn.db;
 }, { immediate: true });
+
+// Watch for connection loss
+watch(
+  () => connStore.activeConnection?.status,
+  (newStatus, oldStatus) => {
+    if (oldStatus === "connected" && newStatus !== "connected") {
+      connectionLost.value = true;
+    }
+    if (newStatus === "connected") {
+      connectionLost.value = false;
+    }
+  }
+);
+
+async function handleReconnect() {
+  const id = connStore.activeConnectionId;
+  if (!id) return;
+  connectionLost.value = false;
+  const ok = await connStore.connect(id);
+  if (ok) {
+    await cascade.refreshKeys(true);
+  } else {
+    connectionLost.value = true;
+  }
+}
 
 async function handleDbChange() {
   if (switchingDb.value) return;
@@ -96,7 +123,30 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="h-full flex">
+  <div class="h-full flex flex-col">
+    <!-- Connection Lost Banner -->
+    <div
+      v-if="connectionLost"
+      class="px-4 py-2.5 bg-danger/5 border-b border-danger/20 flex items-center gap-3 shrink-0"
+    >
+      <AlertTriangle :size="16" class="text-danger shrink-0" />
+      <div class="flex-1 min-w-0">
+        <p class="text-sm font-medium text-danger">{{ t("connection.connectionLost") }}</p>
+        <p class="text-xs text-text-muted mt-0.5">{{ t("connection.connectionLostDesc") }}</p>
+      </div>
+      <button
+        @click="handleReconnect"
+        class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-danger/10 text-danger rounded-lg text-xs font-medium hover:bg-danger/20 transition-colors shrink-0"
+      >
+        <Wifi :size="12" />
+        {{ t("connection.reconnect") }}
+      </button>
+      <button @click="connectionLost = false" class="shrink-0 text-text-muted hover:text-text-primary">
+        <X :size="14" />
+      </button>
+    </div>
+
+    <div class="flex-1 flex min-h-0">
     <!-- Left Panel: Key Tree -->
     <div class="w-72 border-r border-border flex flex-col bg-white shrink-0">
       <!-- DB Selector -->
@@ -276,6 +326,7 @@ onMounted(() => {
           <span class="text-text-primary font-mono">{{ (detail.currentValue as any).encoding }}</span>
         </div>
       </div>
+    </div>
     </div>
   </div>
 </template>

@@ -40,6 +40,9 @@
     "testFailed": "连接测试失败",
     "passwordUnchanged": "留空则保持原密码不变",
     "connectFailed": "连接失败",
+    "connectionLost": "连接已断开",
+    "connectionLostDesc": "与 Redis 服务器的连接已中断，请检查网络或服务状态后重新连接。",
+    "reconnect": "重新连接",
     "summary": "{total} 个连接, {active} 个活跃"
   },
   "browser": {

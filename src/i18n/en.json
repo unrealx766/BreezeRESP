@@ -40,6 +40,9 @@
     "testFailed": "Connection test failed",
     "passwordUnchanged": "Leave blank to keep current password",
     "connectFailed": "Connection Failed",
+    "connectionLost": "Connection Lost",
+    "connectionLostDesc": "The connection to the Redis server has been interrupted. Please check the network or server status and reconnect.",
+    "reconnect": "Reconnect",
     "summary": "{total} connections, {active} active"
   },
   "browser": {

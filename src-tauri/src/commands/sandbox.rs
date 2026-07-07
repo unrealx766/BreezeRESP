@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use tauri::State;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DiffEntry {
     pub path: String,
     pub before: Option<String>,

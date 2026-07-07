@@ -9,6 +9,7 @@ pub struct PipelineCommand {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PipelineResult {
     pub success: bool,
     pub value: String,
@@ -17,6 +18,7 @@ pub struct PipelineResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PipelineResponse {
     pub results: Vec<PipelineResult>,
     pub total_latency_ms: f64,

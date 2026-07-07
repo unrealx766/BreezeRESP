@@ -32,7 +32,7 @@ export const useMetricsStore = defineStore("metrics", () => {
     return total > 0 ? ((metrics.value.keyspaceHits / total) * 100).toFixed(1) : "0.0";
   });
   const uptimeFormatted = computed(() => {
-    const s = metrics.value.uptimeSeconds;
+    const s = Number.isFinite(metrics.value.uptimeSeconds) ? metrics.value.uptimeSeconds : 0;
     const d = Math.floor(s / 86400);
     const h = Math.floor((s % 86400) / 3600);
     const m = Math.floor((s % 3600) / 60);
@@ -42,6 +42,7 @@ export const useMetricsStore = defineStore("metrics", () => {
   });
 
   function formatBytes(bytes: number): string {
+    if (!Number.isFinite(bytes)) return "0B";
     if (bytes < 1024) return `${bytes}B`;
     if (bytes < 1048576) return `${(bytes / 1024).toFixed(2)}K`;
     if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(2)}M`;
@@ -61,16 +62,16 @@ export const useMetricsStore = defineStore("metrics", () => {
 
     try {
       const data = await tauriApi.metrics.get(connId);
-      metrics.value.qps = data.instantaneousOpsPerSec;
-      metrics.value.memoryUsed = data.usedMemory;
-      metrics.value.memoryTotal = data.totalMemory;
-      metrics.value.version = data.version;
-      metrics.value.connectedClients = data.connectedClients;
-      metrics.value.uptimeSeconds = data.uptimeSeconds;
-      metrics.value.usedCpuSys = data.usedCpuSys;
-      metrics.value.usedCpuUser = data.usedCpuUser;
-      metrics.value.keyspaceHits = data.keyspaceHits;
-      metrics.value.keyspaceMisses = data.keyspaceMisses;
+      metrics.value.qps = data.instantaneousOpsPerSec ?? 0;
+      metrics.value.memoryUsed = data.usedMemory ?? 0;
+      metrics.value.memoryTotal = data.totalMemory ?? 0;
+      metrics.value.version = data.version ?? "";
+      metrics.value.connectedClients = data.connectedClients ?? 0;
+      metrics.value.uptimeSeconds = data.uptimeSeconds ?? 0;
+      metrics.value.usedCpuSys = data.usedCpuSys ?? 0;
+      metrics.value.usedCpuUser = data.usedCpuUser ?? 0;
+      metrics.value.keyspaceHits = data.keyspaceHits ?? 0;
+      metrics.value.keyspaceMisses = data.keyspaceMisses ?? 0;
 
       // Update QPS history
       metrics.value.qpsHistory.push({ timestamp: Date.now(), value: data.instantaneousOpsPerSec });
