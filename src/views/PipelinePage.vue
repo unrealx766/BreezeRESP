@@ -6,7 +6,7 @@ import { useMetricsStore } from "@/stores/metricsStore";
 import QpsChart from "@/components/charts/QpsChart.vue";
 import {
   Plus, Play, Trash2, Eraser, GripVertical, CheckCircle, XCircle,
-  Clock, Zap, Layers, ArrowUpDown,
+  Clock, Zap, Layers, ArrowUpDown, AlertTriangle, X,
 } from "lucide-vue-next";
 
 const { t } = useI18n();
@@ -77,6 +77,18 @@ function onDrop(idx: number) {
 
 <template>
   <div class="h-full flex flex-col p-6 overflow-y-auto">
+    <!-- Error Banner -->
+    <div
+      v-if="pipeline.lastError"
+      class="flex items-center gap-3 px-4 py-2.5 bg-danger/5 border border-danger/20 rounded-lg mb-4"
+    >
+      <AlertTriangle :size="16" class="text-danger shrink-0" />
+      <p class="flex-1 text-sm text-danger">{{ pipeline.lastError }}</p>
+      <button @click="pipeline.lastError = null" class="text-text-muted hover:text-text-primary shrink-0">
+        <X :size="14" />
+      </button>
+    </div>
+
     <!-- Header + QPS -->
     <div class="flex items-start justify-between mb-4">
       <div>
