@@ -94,6 +94,29 @@ impl ShadowStore {
     pub fn remove(&mut self, id: &str) {
         self.snapshots.remove(id);
     }
+
+    /// Get the command string from a snapshot.
+    pub fn get_command(&self, id: &str) -> Option<String> {
+        self.snapshots.get(id).map(|s| s.command.clone())
+    }
+
+    /// Get the before-state from a snapshot.
+    pub fn get_before_state(&self, id: &str) -> Option<HashMap<String, String>> {
+        self.snapshots.get(id).map(|s| s.before_state.clone())
+    }
+
+    /// Get keys that were added (exist in after_state but not in before_state).
+    pub fn get_added_keys(&self, id: &str) -> Vec<String> {
+        match self.snapshots.get(id) {
+            Some(snap) => snap
+                .after_state
+                .keys()
+                .filter(|k| !snap.before_state.contains_key(*k))
+                .cloned()
+                .collect(),
+            None => vec![],
+        }
+    }
 }
 
 impl Default for ShadowStore {

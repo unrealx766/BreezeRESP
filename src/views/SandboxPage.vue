@@ -2,8 +2,8 @@
 import { useI18n } from "vue-i18n";
 import { useSandboxStore } from "@/stores/sandboxStore";
 import {
-  FlaskConical, Play, Check, RotateCcw, History,
-  Plus, Minus, Edit3, Terminal, AlertTriangle,
+  FlaskConical, Play, Check, History,
+  Plus, Minus, Edit3, Terminal, AlertTriangle, X,
 } from "lucide-vue-next";
 
 const { t } = useI18n();
@@ -19,6 +19,27 @@ function handleKeydown(e: KeyboardEvent) {
 function formatTime(ts: number): string {
   const d = new Date(ts);
   return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}`;
+}
+
+const commandTemplates = [
+  { label: "GET", cmd: "GET key" },
+  { label: "SET", cmd: "SET key value" },
+  { label: "HGETALL", cmd: "HGETALL key" },
+  { label: "HSET", cmd: "HSET key field value" },
+  { label: "LPUSH", cmd: "LPUSH key value" },
+  { label: "LRANGE", cmd: "LRANGE key 0 -1" },
+  { label: "SADD", cmd: "SADD key member" },
+  { label: "SMEMBERS", cmd: "SMEMBERS key" },
+  { label: "ZADD", cmd: "ZADD key 1 member" },
+  { label: "ZRANGE", cmd: "ZRANGE key 0 -1 WITHSCORES" },
+  { label: "TTL", cmd: "TTL key" },
+  { label: "DEL", cmd: "DEL key" },
+  { label: "EXISTS", cmd: "EXISTS key" },
+  { label: "INFO", cmd: "INFO" },
+];
+
+function useTemplate(cmd: string) {
+  sandbox.commandInput = cmd;
 }
 </script>
 
@@ -38,12 +59,33 @@ function formatTime(ts: number): string {
       </div>
     </div>
 
+    <!-- Error Banner -->
+    <div
+      v-if="sandbox.lastError"
+      class="flex items-center gap-3 px-4 py-2.5 bg-danger/5 border border-danger/20 rounded-lg mb-4"
+    >
+      <AlertTriangle :size="16" class="text-danger shrink-0" />
+      <p class="flex-1 text-sm text-danger">{{ sandbox.lastError }}</p>
+      <button @click="sandbox.lastError = null" class="text-text-muted hover:text-text-primary shrink-0">
+        <X :size="14" />
+      </button>
+    </div>
+
     <!-- Command Input Terminal -->
     <div class="card overflow-hidden mb-4">
       <div class="bg-gray-900 px-4 py-2 flex items-center gap-2">
         <Terminal :size="14" class="text-green-400" />
         <span class="text-xs text-green-400 font-mono">redis&gt;</span>
         <span class="text-xs text-gray-500 font-mono ml-1">sandbox mode</span>
+      </div>
+      <!-- Command Templates -->
+      <div class="flex flex-wrap gap-1.5 px-4 pt-3 pb-1 bg-bg-primary border-t border-border-light">
+        <span class="text-[11px] text-text-muted self-center mr-1">{{ t("sandbox.templates") }}:</span>
+        <button v-for="tpl in commandTemplates" :key="tpl.label"
+          @click="useTemplate(tpl.cmd)"
+          class="px-2 py-0.5 text-[11px] font-mono bg-white border border-border rounded text-text-secondary hover:border-redis hover:text-redis transition-colors">
+          {{ tpl.label }}
+        </button>
       </div>
       <div class="p-4 bg-bg-primary">
         <div class="flex gap-3">
@@ -96,12 +138,9 @@ function formatTime(ts: number): string {
         </div>
         <div class="flex items-center gap-2">
           <button @click="sandbox.applyChange()"
-            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-success rounded-lg hover:bg-success/90 transition-colors">
-            <Check :size="13" /> {{ t("sandbox.apply") }}
-          </button>
-          <button @click="sandbox.rollbackChange()"
-            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary bg-bg-primary border border-border rounded-lg hover:bg-bg-hover transition-colors">
-            <RotateCcw :size="13" /> {{ t("sandbox.rollback") }}
+            :disabled="sandbox.applying"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-success rounded-lg hover:bg-success/90 transition-colors disabled:opacity-50">
+            <Check :size="13" /> {{ sandbox.applying ? t("sandbox.applying") : t("sandbox.apply") }}
           </button>
         </div>
       </div>
@@ -169,9 +208,10 @@ function formatTime(ts: number): string {
           <button
             v-if="item.status === 'applied'"
             @click="sandbox.rollbackHistoryItem(item.id)"
-            class="text-[10px] text-danger hover:underline shrink-0"
+            :disabled="sandbox.rollingBack"
+            class="text-[10px] text-danger hover:underline shrink-0 disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed"
           >
-            {{ t("sandbox.rollback") }}
+            {{ sandbox.rollingBack ? t("sandbox.rollingBack") : t("sandbox.rollback") }}
           </button>
         </div>
       </div>

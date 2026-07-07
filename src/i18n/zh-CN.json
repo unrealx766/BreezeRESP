@@ -58,6 +58,7 @@
     "selectKey": "选择一个 Key 查看详情",
     "noKeys": "未找到匹配的 Key",
     "deleteKey": "删除 Key",
+    "confirmDelete": "确定删除 Key \"{key}\" 吗？此操作不可撤销。",
     "renameKey": "重命名 Key",
     "setTtl": "设置 TTL",
     "copyKey": "复制 Key 名"
@@ -121,8 +122,11 @@
     "rolledBack": "已回滚",
     "previewStatus": "预览中",
     "executing": "模拟执行中...",
+    "applying": "提交中...",
+    "rollingBack": "回滚中...",
     "changesSummary": "变更摘要: +{added} ~{modified} -{deleted}",
-    "hint": "沙盒模式下命令不会直接执行，而是先预览变更影响"
+    "hint": "沙盒模式下命令不会直接执行，而是先预览变更影响",
+    "templates": "命令模板"
   },
   "status": {
     "memory": "内存",

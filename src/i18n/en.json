@@ -58,6 +58,7 @@
     "selectKey": "Select a key to view details",
     "noKeys": "No matching keys found",
     "deleteKey": "Delete Key",
+    "confirmDelete": "Are you sure to delete key \"{key}\"? This action cannot be undone.",
     "renameKey": "Rename Key",
     "setTtl": "Set TTL",
     "copyKey": "Copy Key Name"
@@ -121,8 +122,11 @@
     "rolledBack": "Rolled Back",
     "previewStatus": "Preview",
     "executing": "Simulating...",
+    "applying": "Applying...",
+    "rollingBack": "Rolling back...",
     "changesSummary": "Summary: +{added} ~{modified} -{deleted}",
-    "hint": "Commands are not executed directly in sandbox mode. Preview changes first."
+    "hint": "Commands are not executed directly in sandbox mode. Preview changes first.",
+    "templates": "Templates"
   },
   "status": {
     "memory": "Memory",

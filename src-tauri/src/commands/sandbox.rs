@@ -17,6 +17,7 @@ pub struct DiffEntry {
 pub struct SandboxPreview {
     pub command: String,
     pub diff: Vec<DiffEntry>,
+    pub snapshot_id: String,
 }
 
 /// Get the current string representation of a key's value
@@ -89,9 +90,13 @@ fn extract_keys(parts: &[&str]) -> Vec<String> {
         "ZADD" | "ZREM" | "ZRANGE" | "ZCARD" | "ZSCORE" | "ZRANK" => {
             vec![parts[1].to_string()]
         }
-        "MSET" | "MGET" => {
-            // Multiple keys
+        "MSET" => {
+            // MSET key value key value ...
             parts[1..].iter().step_by(2).map(|s| s.to_string()).collect()
+        }
+        "MGET" => {
+            // MGET key key key ...
+            parts[1..].iter().map(|s| s.to_string()).collect()
         }
         _ => {
             // Default: assume second token is key
@@ -181,12 +186,7 @@ pub async fn sandbox_preview(
         }
     }
 
-    // Step 7: Clean up snapshot
-    {
-        let ss = state.shadow_store.lock().map_err(|e| e.to_string())?;
-        let mut ss = ss;
-        ss.remove(&snap_id);
-    }
+    // Step 7: Keep snapshot for later apply/rollback (don't clean up)
 
     // Convert DiffResult to Vec<DiffEntry>
     let mut diff = Vec::new();
@@ -217,7 +217,7 @@ pub async fn sandbox_preview(
         }
     }
 
-    Ok(SandboxPreview { command, diff })
+    Ok(SandboxPreview { command, diff, snapshot_id: snap_id })
 }
 
 /// Apply a sandboxed change to the actual Redis instance
@@ -225,7 +225,7 @@ pub async fn sandbox_preview(
 pub async fn sandbox_apply(
     state: State<'_, AppState>,
     connection_id: String,
-    snapshot_id: String,
+    command: String,
 ) -> Result<bool, String> {
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
@@ -233,20 +233,7 @@ pub async fn sandbox_apply(
     };
     let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
 
-    // Get stored command from snapshot
-    let cmd_str = {
-        let ss = state.shadow_store.lock().map_err(|e| e.to_string())?;
-        let ss = ss;
-        // Try to find the snapshot - since preview already cleaned it up,
-        // we just re-parse from the snapshot_id which is the command
-        // In practice, the frontend stores the command and passes it
-        // For now, just return success
-        drop(ss);
-        snapshot_id
-    };
-
-    // Re-execute the command
-    let parts: Vec<&str> = cmd_str.split_whitespace().collect();
+    let parts: Vec<&str> = command.split_whitespace().collect();
     if parts.is_empty() {
         return Err("Empty command".to_string());
     }
@@ -263,16 +250,36 @@ pub async fn sandbox_apply(
     Ok(true)
 }
 
-/// Rollback a sandboxed change (no-op since preview already rolled back)
+/// Rollback a sandboxed change by restoring the before-state
 #[tauri::command]
 pub async fn sandbox_rollback(
     state: State<'_, AppState>,
-    _connection_id: String,
-    snapshot_id: String,
+    connection_id: String,
+    before_state: HashMap<String, String>,
+    added_keys: Vec<String>,
 ) -> Result<bool, String> {
-    // Preview already performs rollback, so this is a cleanup operation
-    let ss = state.shadow_store.lock().map_err(|e| e.to_string())?;
-    let mut ss = ss;
-    ss.remove(&snapshot_id);
+    let pool = {
+        let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
+        pm.get_pool(&connection_id)?
+    };
+    let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
+
+    // Restore each key to its before-state
+    for (key, val) in &before_state {
+        let _: Result<(), _> = redis::cmd("SET")
+            .arg(key)
+            .arg(val)
+            .query_async(&mut *conn)
+            .await;
+    }
+
+    // Delete keys that were added by the command (didn't exist before)
+    for key in &added_keys {
+        let _: Result<i64, _> = redis::cmd("DEL")
+            .arg(key)
+            .query_async(&mut *conn)
+            .await;
+    }
+
     Ok(true)
 }

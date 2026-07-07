@@ -94,10 +94,13 @@ export interface SandboxSnapshot {
 
 export interface SandboxHistoryItem {
   id: string;
+  snapshotId: string;
   command: string;
   timestamp: number;
   status: "preview" | "applied" | "rolled-back";
   diffCount: number;
+  beforeState: Record<string, string>;
+  addedKeys: string[];
 }
 
 // Metrics

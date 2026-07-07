@@ -63,6 +63,7 @@ export interface RustDiffEntry {
 export interface RustSandboxPreview {
   command: string;
   diff: RustDiffEntry[];
+  snapshotId: string;
 }
 
 export interface RustServerMetrics {
@@ -135,11 +136,11 @@ export const tauriApi = {
     preview: (connectionId: string, command: string) =>
       invoke<RustSandboxPreview>("sandbox_preview", { connectionId, command }),
 
-    apply: (connectionId: string, snapshotId: string) =>
-      invoke<boolean>("sandbox_apply", { connectionId, snapshotId }),
+    apply: (connectionId: string, command: string) =>
+      invoke<boolean>("sandbox_apply", { connectionId, command }),
 
-    rollback: (connectionId: string, snapshotId: string) =>
-      invoke<boolean>("sandbox_rollback", { connectionId, snapshotId }),
+    rollback: (connectionId: string, beforeState: Record<string, string>, addedKeys: string[]) =>
+      invoke<boolean>("sandbox_rollback", { connectionId, beforeState, addedKeys }),
   },
 
   metrics: {

@@ -3,13 +3,19 @@ import { ref, computed } from "vue";
 import type { DiffEntry, SandboxHistoryItem } from "@/types";
 import { tauriApi } from "@/services/tauriApi";
 import { useConnectionStore } from "./connectionStore";
+import { useCascadeStore } from "./cascadeStore";
 
 export const useSandboxStore = defineStore("sandbox", () => {
   const commandInput = ref("");
   const executing = ref(false);
+  const applying = ref(false);
+  const rollingBack = ref(false);
+  const lastError = ref<string | null>(null);
   const currentDiff = ref<DiffEntry[]>([]);
   const history = ref<SandboxHistoryItem[]>([]);
   const showPreview = ref(false);
+  const currentSnapshotId = ref<string | null>(null);
+  const currentCommand = ref<string>("");
 
   const hasDiff = computed(() => currentDiff.value.length > 0);
   const addedCount = computed(() => currentDiff.value.filter((d) => d.changeType === "added").length);
@@ -35,59 +41,123 @@ export const useSandboxStore = defineStore("sandbox", () => {
         changeType: d.changeType as "added" | "modified" | "deleted",
       }));
 
+      currentSnapshotId.value = result.snapshotId;
+      currentCommand.value = commandInput.value.trim();
       showPreview.value = true;
     } catch (e) {
       console.error("Sandbox preview failed:", e);
       currentDiff.value = [];
+      currentSnapshotId.value = null;
     } finally {
       executing.value = false;
     }
   }
 
   async function applyChange() {
-    if (!commandInput.value.trim()) return;
-
     const connStore = useConnectionStore();
     const connId = connStore.activeConnectionId;
-    if (!connId) return;
+    const cmd = currentCommand.value;
+    if (!connId || !cmd) return;
+
+    applying.value = true;
+    lastError.value = null;
 
     try {
-      // Pass the command as snapshot_id since Rust apply re-executes it
-      await tauriApi.sandbox.apply(connId, commandInput.value.trim());
+      const ok = await tauriApi.sandbox.apply(connId, cmd);
+      if (!ok) {
+        lastError.value = "Apply returned false.";
+        return;
+      }
+
+      // Extract before-state and added keys from diff for reliable rollback
+      const beforeState: Record<string, string> = {};
+      const addedKeys: string[] = [];
+      for (const entry of currentDiff.value) {
+        if (entry.changeType === "added") {
+          addedKeys.push(entry.path);
+        } else if (entry.before != null) {
+          beforeState[entry.path] = entry.before;
+        }
+      }
 
       history.value.unshift({
         id: `sb-${Date.now()}`,
-        command: commandInput.value,
+        snapshotId: currentSnapshotId.value ?? "",
+        command: cmd,
         timestamp: Date.now(),
         status: "applied",
         diffCount: currentDiff.value.length,
+        beforeState,
+        addedKeys,
       });
+
+      // Refresh keys after apply
+      try {
+        const cascade = useCascadeStore();
+        await cascade.refreshKeys(true);
+      } catch { /* best-effort */ }
+
+      // Only reset preview on success
+      resetPreview();
     } catch (e) {
+      const msg = typeof e === "string" ? e : (e as Error)?.message || String(e);
+      lastError.value = msg;
       console.error("Sandbox apply failed:", e);
+    } finally {
+      applying.value = false;
     }
-
-    resetPreview();
-  }
-
-  function rollbackChange() {
-    // Preview already rolled back on the backend, just reset UI
-    resetPreview();
   }
 
   function resetPreview() {
     currentDiff.value = [];
     showPreview.value = false;
     commandInput.value = "";
+    currentSnapshotId.value = null;
+    currentCommand.value = "";
   }
 
-  function rollbackHistoryItem(id: string) {
+  async function rollbackHistoryItem(id: string) {
     const item = history.value.find((h) => h.id === id);
-    if (item) item.status = "rolled-back";
+    if (!item || item.status !== "applied") return;
+
+    const connStore = useConnectionStore();
+    const connId = connStore.activeConnectionId;
+    if (!connId) {
+      lastError.value = "No active connection.";
+      return;
+    }
+
+    rollingBack.value = true;
+    lastError.value = null;
+
+    try {
+      const ok = await tauriApi.sandbox.rollback(connId, item.beforeState, item.addedKeys);
+      if (!ok) {
+        lastError.value = "Rollback returned false.";
+        return;
+      }
+      item.status = "rolled-back";
+
+      // Refresh keys after rollback
+      try {
+        const cascade = useCascadeStore();
+        await cascade.refreshKeys(true);
+      } catch { /* best-effort */ }
+    } catch (e) {
+      const msg = typeof e === "string" ? e : (e as Error)?.message || String(e);
+      lastError.value = msg;
+      console.error("Sandbox history rollback failed:", e);
+    } finally {
+      rollingBack.value = false;
+    }
   }
 
   return {
     commandInput,
     executing,
+    applying,
+    rollingBack,
+    lastError,
     currentDiff,
     history,
     showPreview,
@@ -97,7 +167,6 @@ export const useSandboxStore = defineStore("sandbox", () => {
     deletedCount,
     executePreview,
     applyChange,
-    rollbackChange,
     resetPreview,
     rollbackHistoryItem,
   };
