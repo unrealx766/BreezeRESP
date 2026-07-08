@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import { watch, onMounted, ref, computed, nextTick } from "vue";
+import { watch, onMounted, ref, reactive, computed, nextTick } from "vue";
 import { useCascadeStore } from "@/stores/cascadeStore";
 import { useDetailStore } from "@/stores/detailStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import type { RedisDataType } from "@/types";
 import KeyTreeItem from "@/components/cascade/KeyTreeItem.vue";
 import TtlGauge from "@/components/charts/TtlGauge.vue";
+import FloatingWindow from "@/components/shared/FloatingWindow.vue";
 import {
   Search, RefreshCw, Trash2, Copy, Tag, Database,
   Type, Hash, List, CircleDot, BarChart3,
@@ -209,23 +210,98 @@ async function deleteKey() {
   }
 }
 
-// Cell value popup for truncated content
-const cellPopup = ref({ show: false, content: '', x: 0, y: 0, title: '' });
+// Floating windows for cell value display
+interface FloatingWin {
+  id: string;
+  title: string;
+  content: string;
+  redisKey: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  pinned: boolean;
+  zIndex: number;
+}
+
+const floatingWindows = reactive<FloatingWin[]>([]);
+let winIdCounter = 0;
+let topZIndex = 9999;
+
+function getNextZIndex() {
+  return ++topZIndex;
+}
 
 function showCellPopup(e: MouseEvent, content: string, title: string) {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  cellPopup.value = {
-    show: true,
-    content,
+  const x = Math.min(e.clientX + 8, vw - 420);
+  const y = Math.min(e.clientY + 8, vh - 260);
+  const redisKey = detail.currentKey?.key ?? '';
+
+  // Find existing non-pinned window and update it
+  const existing = floatingWindows.find((w) => !w.pinned);
+  if (existing) {
+    existing.title = title;
+    existing.content = content;
+    existing.redisKey = redisKey;
+    existing.x = x;
+    existing.y = y;
+    existing.zIndex = getNextZIndex();
+    return;
+  }
+
+  // Create new window
+  floatingWindows.push({
+    id: `fw-${++winIdCounter}`,
     title,
-    x: Math.min(e.clientX + 8, vw - 420),
-    y: Math.min(e.clientY + 8, vh - 260),
-  };
+    content,
+    redisKey,
+    x,
+    y,
+    width: 380,
+    height: 240,
+    pinned: false,
+    zIndex: getNextZIndex(),
+  });
 }
 
-function closeCellPopup() {
-  cellPopup.value = { show: false, content: '', x: 0, y: 0, title: '' };
+function closeFloatingWin(id: string) {
+  const idx = floatingWindows.findIndex((w) => w.id === id);
+  if (idx !== -1) floatingWindows.splice(idx, 1);
+}
+
+function togglePin(id: string) {
+  const win = floatingWindows.find((w) => w.id === id);
+  if (win) {
+    win.pinned = !win.pinned;
+    if (win.pinned) {
+      win.zIndex = getNextZIndex();
+    }
+  }
+}
+
+function updateWinPosition(id: string, x: number, y: number) {
+  const win = floatingWindows.find((w) => w.id === id);
+  if (win) {
+    win.x = x;
+    win.y = y;
+  }
+}
+
+function updateWinSize(id: string, w: number, h: number) {
+  const win = floatingWindows.find((win) => win.id === id);
+  if (win) {
+    win.width = w;
+    win.height = h;
+  }
+}
+
+function focusWin(id: string) {
+  const win = floatingWindows.find((w) => w.id === id);
+  if (win) {
+    win.zIndex = getNextZIndex();
+  }
 }
 
 // Auto-load keys when connection changes or page mounts
@@ -509,24 +585,27 @@ onMounted(() => {
     </div>
     </div>
 
-    <!-- Cell value popup (Teleport to body to avoid overflow clipping) -->
+    <!-- Floating windows (Teleport to body to avoid overflow clipping) -->
     <Teleport to="body">
-      <div v-if="cellPopup.show" class="fixed inset-0 z-[9990]" @click="closeCellPopup" />
-      <div
-        v-if="cellPopup.show"
-        class="fixed z-[9999] w-96 max-h-64 bg-white border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden"
-        :style="{ left: cellPopup.x + 'px', top: cellPopup.y + 'px' }"
-      >
-        <div class="flex items-center justify-between px-3 py-2 border-b border-border-light bg-bg-primary shrink-0">
-          <span class="text-xs font-semibold text-text-secondary truncate">{{ cellPopup.title }}</span>
-          <button @click="closeCellPopup" class="text-text-muted hover:text-text-primary shrink-0 ml-2">
-            <X :size="12" />
-          </button>
-        </div>
-        <div class="px-3 py-2.5 text-xs font-mono text-text-primary overflow-auto whitespace-pre-wrap break-all flex-1">
-          {{ cellPopup.content }}
-        </div>
-      </div>
+      <FloatingWindow
+        v-for="win in floatingWindows"
+        :key="win.id"
+        :id="win.id"
+        :title="win.title"
+        :content="win.content"
+        :redis-key="win.redisKey"
+        :x="win.x"
+        :y="win.y"
+        :width="win.width"
+        :height="win.height"
+        :pinned="win.pinned"
+        :z-index="win.zIndex"
+        @close="closeFloatingWin"
+        @toggle-pin="togglePin"
+        @update-position="updateWinPosition"
+        @update-size="updateWinSize"
+        @focus="focusWin"
+      />
     </Teleport>
   </div>
 </template>

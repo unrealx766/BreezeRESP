@@ -139,6 +139,10 @@
     "hitRate": "Hit Rate",
     "noConnection": "Not Connected"
   },
+  "floating": {
+    "pin": "Pin Window",
+    "unpin": "Unpin Window"
+  },
   "common": {
     "confirm": "Confirm",
     "cancel": "Cancel",

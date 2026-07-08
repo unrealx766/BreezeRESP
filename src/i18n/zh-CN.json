@@ -139,6 +139,10 @@
     "hitRate": "命中率",
     "noConnection": "未连接"
   },
+  "floating": {
+    "pin": "固定窗口",
+    "unpin": "取消固定"
+  },
   "common": {
     "confirm": "确认",
     "cancel": "取消",
