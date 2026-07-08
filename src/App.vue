@@ -3,6 +3,7 @@ import { onMounted } from "vue";
 import AppSidebar from "@/components/layout/AppSidebar.vue";
 import AppHeader from "@/components/layout/AppHeader.vue";
 import StatusBar from "@/components/layout/StatusBar.vue";
+import ToastContainer from "@/components/shared/ToastContainer.vue";
 import { useMetricsStore } from "@/stores/metricsStore";
 
 const metricsStore = useMetricsStore();
@@ -34,6 +35,9 @@ onMounted(() => {
       <!-- Status Bar -->
       <StatusBar />
     </div>
+
+    <!-- Global Toast -->
+    <ToastContainer ref="toast" />
   </div>
 </template>
 

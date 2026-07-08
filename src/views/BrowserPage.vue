@@ -641,7 +641,7 @@ onMounted(() => {
 
           <!-- Hash -->
           <div v-else-if="detail.currentValue?.type === 'hash'" class="flex flex-col min-h-0">
-            <label class="text-xs font-medium text-text-secondary mb-3 shrink-0">{{ t("detail.value") }} ({{ (detail.currentValue as any).fields.length }} fields)</label>
+            <label class="text-xs font-medium text-text-secondary mb-3 shrink-0">{{ t("detail.value") }} ({{ t("detail.fieldCount", (detail.currentValue as any).fields.length) }})</label>
             <div class="border border-border rounded-lg flex-1 min-h-0">
               <div class="h-full overflow-y-auto">
               <table class="w-full text-sm">
@@ -676,7 +676,7 @@ onMounted(() => {
 
           <!-- List -->
           <div v-else-if="detail.currentValue?.type === 'list'" class="flex flex-col min-h-0">
-            <label class="text-xs font-medium text-text-secondary mb-3 shrink-0">{{ t("detail.value") }} ({{ (detail.currentValue as any).items.length }} items)</label>
+            <label class="text-xs font-medium text-text-secondary mb-3 shrink-0">{{ t("detail.value") }} ({{ t("detail.itemCount", (detail.currentValue as any).items.length) }})</label>
             <div class="border border-border rounded-lg flex-1 min-h-0">
               <div class="h-full overflow-y-auto">
               <table class="w-full text-sm">
@@ -709,7 +709,7 @@ onMounted(() => {
 
           <!-- Set -->
           <div v-else-if="detail.currentValue?.type === 'set'" class="flex flex-col min-h-0">
-            <label class="text-xs font-medium text-text-secondary mb-3 shrink-0">{{ t("detail.value") }} ({{ (detail.currentValue as any).members.length }} members)</label>
+            <label class="text-xs font-medium text-text-secondary mb-3 shrink-0">{{ t("detail.value") }} ({{ t("detail.memberCount", (detail.currentValue as any).members.length) }})</label>
             <div class="flex-1 min-h-0 overflow-y-auto space-y-1">
               <div v-for="(m, i) in (detail.currentValue as any).members" :key="m"
                 class="px-3 py-2 text-xs font-mono bg-bg-primary border border-border-light rounded-lg flex items-center gap-2">
@@ -733,7 +733,7 @@ onMounted(() => {
 
           <!-- ZSet -->
           <div v-else-if="detail.currentValue?.type === 'zset'" class="flex flex-col min-h-0">
-            <label class="text-xs font-medium text-text-secondary mb-3 shrink-0">{{ t("detail.value") }} ({{ (detail.currentValue as any).members.length }} members)</label>
+            <label class="text-xs font-medium text-text-secondary mb-3 shrink-0">{{ t("detail.value") }} ({{ t("detail.memberCount", (detail.currentValue as any).members.length) }})</label>
             <div class="border border-border rounded-lg flex-1 min-h-0">
               <div class="h-full overflow-y-auto">
               <table class="w-full text-sm">

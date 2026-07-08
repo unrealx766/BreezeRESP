@@ -94,7 +94,10 @@
     "editValue": "编辑值",
     "confirmEdit": "确定要修改此值吗？",
     "ttlPersist": "永不过期",
-    "ttlSeconds": "{n}秒"
+    "ttlSeconds": "{n}秒",
+    "fieldCount": "{n} 个字段",
+    "itemCount": "{n} 项",
+    "memberCount": "{n} 个成员"
   },
   "pipeline": {
     "title": "Pipeline 构建器",

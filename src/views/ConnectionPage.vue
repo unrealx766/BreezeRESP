@@ -5,6 +5,7 @@ import { useI18n } from "vue-i18n";
 import { useConnectionStore } from "@/stores/connectionStore";
 import type { RedisConnection } from "@/types";
 import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
+import { toast } from "@/utils/toast";
 import {
   Plus, Server, Wifi, WifiOff, Trash2, Edit3, Zap, AlertCircle,
   X, Loader2, Lock, Unlock,
@@ -23,7 +24,6 @@ const testResult = ref<{ id: string; ok: boolean } | null>(null);
 const formTesting = ref(false);
 const formTestResult = ref<{ ok: boolean } | null>(null);
 const formError = ref("");
-const connectError = ref<string | null>(null);
 const usePassword = ref(false);
 const hadPassword = ref(false);
 
@@ -86,7 +86,7 @@ async function saveForm() {
 function reconnectInBackground(id: string) {
   connStore.disconnect(id).then(() => connStore.connect(id)).then((ok) => {
     if (!ok) {
-      connectError.value = connStore.lastError || t("connection.connectFailed");
+      toast.error(connStore.lastError || t("connection.connectFailed"));
     }
   });
 }
@@ -101,12 +101,11 @@ async function handleFormTest() {
 }
 
 async function handleConnect(id: string) {
-  connectError.value = null;
   const ok = await connStore.connect(id);
   if (ok) {
     router.push("/browser");
   } else {
-    connectError.value = connStore.lastError || t("connection.connectFailed");
+    toast.error(connStore.lastError || t("connection.connectFailed"));
   }
 }
 
@@ -161,21 +160,6 @@ function statusColor(status: string) {
       </button>
     </div>
 
-    <!-- Connection Error Banner -->
-    <div
-      v-if="connectError"
-      class="mb-4 flex items-start gap-2 px-4 py-3 bg-danger/5 border border-danger/20 rounded-lg"
-    >
-      <AlertCircle :size="16" class="text-danger mt-0.5 shrink-0" />
-      <div class="flex-1 min-w-0">
-        <p class="text-sm font-medium text-danger">{{ t("connection.connectFailed") }}</p>
-        <p class="text-xs text-text-muted mt-0.5 break-all">{{ connectError }}</p>
-      </div>
-      <button @click="connectError = null" class="shrink-0 text-text-muted hover:text-text-primary">
-        <X :size="14" />
-      </button>
-    </div>
-
     <!-- Empty State -->
     <div
       v-if="connStore.connections.length === 0"
@@ -204,15 +188,15 @@ function statusColor(status: string) {
       >
         <!-- Status indicator -->
         <div class="flex items-start justify-between mb-3">
-          <div class="flex items-center gap-2.5">
+          <div class="flex items-center gap-2.5 min-w-0">
             <div
-              class="w-9 h-9 rounded-lg flex items-center justify-center"
+              class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
               :class="conn.status === 'connected' ? 'bg-success/10' : 'bg-bg-primary'"
             >
               <Server :size="18" :class="statusColor(conn.status)" />
             </div>
-            <div>
-              <h3 class="text-sm font-semibold text-text-primary truncate max-w-[160px]" :title="conn.name">{{ conn.name }}</h3>
+            <div class="min-w-0">
+              <h3 class="text-sm font-semibold text-text-primary truncate" :title="conn.name">{{ conn.name }}</h3>
               <p class="text-xs text-text-muted">{{ conn.host }}:{{ conn.port }}</p>
             </div>
           </div>

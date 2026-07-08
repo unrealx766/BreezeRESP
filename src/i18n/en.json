@@ -94,7 +94,10 @@
     "editValue": "Edit Value",
     "confirmEdit": "Are you sure to modify this value?",
     "ttlPersist": "No Expiry",
-    "ttlSeconds": "{n}s"
+    "ttlSeconds": "{n}s",
+    "fieldCount": "1 field | {n} fields",
+    "itemCount": "1 item | {n} items",
+    "memberCount": "1 member | {n} members"
   },
   "pipeline": {
     "title": "Pipeline Builder",
