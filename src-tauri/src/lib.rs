@@ -7,6 +7,7 @@ use tauri::Manager;
 pub struct AppState {
     pub pool_manager: Mutex<core::pool::ConnectionPoolManager>,
     pub config_store: Mutex<core::config_store::ConfigStore>,
+    pub pipeline_store: Mutex<core::pipeline_store::PipelineStore>,
     pub shadow_store: Mutex<core::shadow_store::ShadowStore>,
 }
 
@@ -25,11 +26,13 @@ pub fn run() {
             let app_name = b"BreezeRESP";
             key[..app_name.len()].copy_from_slice(app_name);
 
-            let config_store = core::config_store::ConfigStore::new(data_dir, key);
+            let config_store = core::config_store::ConfigStore::new(data_dir.clone(), key);
+            let pipeline_store = core::pipeline_store::PipelineStore::new(data_dir, key);
 
             app.manage(AppState {
                 pool_manager: Mutex::new(core::pool::ConnectionPoolManager::new()),
                 config_store: Mutex::new(config_store),
+                pipeline_store: Mutex::new(pipeline_store),
                 shadow_store: Mutex::new(core::shadow_store::ShadowStore::new()),
             });
 
@@ -54,6 +57,9 @@ pub fn run() {
             commands::cascade::set_value,
             // Pipeline commands
             commands::pipeline::execute_pipeline,
+            commands::pipeline::save_pipeline,
+            commands::pipeline::list_pipelines,
+            commands::pipeline::delete_pipeline,
             // Sandbox commands
             commands::sandbox::sandbox_preview,
             commands::sandbox::sandbox_apply,

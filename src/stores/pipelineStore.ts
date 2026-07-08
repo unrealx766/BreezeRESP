@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
-import type { PipelineCommand } from "@/types";
+import type { PipelineCommand, SavedPipeline } from "@/types";
 import { tauriApi } from "@/services/tauriApi";
 import { useConnectionStore } from "./connectionStore";
 import { useCascadeStore } from "./cascadeStore";
@@ -11,6 +11,7 @@ export const usePipelineStore = defineStore("pipeline", () => {
   const totalLatency = ref<number | null>(null);
   const individualLatencySum = ref<number | null>(null);
   const lastError = ref<string | null>(null);
+  const savedPipelines = ref<SavedPipeline[]>([]);
 
   const commandCount = computed(() => commands.value.length);
   const executedCount = computed(() => commands.value.filter((c) => c.result !== undefined).length);
@@ -121,12 +122,57 @@ export const usePipelineStore = defineStore("pipeline", () => {
     clearResults();
   }
 
+  async function saveCurrentPipeline(name: string) {
+    const validCommands = commands.value.filter((cmd) => cmd.command.trim().length > 0);
+    if (validCommands.length === 0) return;
+
+    const id = `pipe-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const rustCommands = validCommands.map((c) => ({ command: c.command, args: c.args }));
+    const createdAt = Math.floor(Date.now() / 1000);
+
+    await tauriApi.pipeline.save(id, name, rustCommands, createdAt);
+    await loadSavedPipelines();
+  }
+
+  async function updatePipeline(pipelineId: string, name: string) {
+    const validCommands = commands.value.filter((cmd) => cmd.command.trim().length > 0);
+    if (validCommands.length === 0) return;
+
+    const rustCommands = validCommands.map((c) => ({ command: c.command, args: c.args }));
+    const existing = savedPipelines.value.find((p) => p.id === pipelineId);
+    const createdAt = existing?.createdAt ?? Math.floor(Date.now() / 1000);
+
+    await tauriApi.pipeline.save(pipelineId, name, rustCommands, createdAt);
+    await loadSavedPipelines();
+  }
+
+  async function loadSavedPipelines() {
+    try {
+      savedPipelines.value = await tauriApi.pipeline.list();
+    } catch (e) {
+      console.error("Failed to load saved pipelines:", e);
+    }
+  }
+
+  async function deletePipeline(id: string) {
+    await tauriApi.pipeline.delete(id);
+    await loadSavedPipelines();
+  }
+
+  function loadPipeline(saved: SavedPipeline) {
+    clearAll();
+    for (const cmd of saved.commands) {
+      addCommand(cmd.command, cmd.args);
+    }
+  }
+
   return {
     commands,
     executing,
     totalLatency,
     individualLatencySum,
     lastError,
+    savedPipelines,
     commandCount,
     executedCount,
     hasResults,
@@ -138,5 +184,10 @@ export const usePipelineStore = defineStore("pipeline", () => {
     executeAll,
     clearResults,
     clearAll,
+    saveCurrentPipeline,
+    updatePipeline,
+    loadSavedPipelines,
+    deletePipeline,
+    loadPipeline,
   };
 });

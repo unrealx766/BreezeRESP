@@ -1,17 +1,91 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { usePipelineStore } from "@/stores/pipelineStore";
 import { useMetricsStore } from "@/stores/metricsStore";
 import QpsChart from "@/components/charts/QpsChart.vue";
+import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
 import {
   Plus, Play, Trash2, Eraser, GripVertical, CheckCircle, XCircle,
   Clock, Zap, Layers, ArrowUpDown, AlertTriangle, X,
+  Save, FolderOpen, Download,
 } from "lucide-vue-next";
 
 const { t } = useI18n();
 const pipeline = usePipelineStore();
 const metrics = useMetricsStore();
+
+const confirmDialog = ref<InstanceType<typeof ConfirmDialog>>();
+
+// Save dialog state
+const showSaveDialog = ref(false);
+const saveName = ref("");
+const saveError = ref("");
+const showSavedList = ref(false);
+
+onMounted(() => {
+  pipeline.loadSavedPipelines();
+});
+
+function openSaveDialog() {
+  saveName.value = "";
+  saveError.value = "";
+  showSaveDialog.value = true;
+}
+
+function closeSaveDialog() {
+  showSaveDialog.value = false;
+  saveError.value = "";
+}
+
+async function doSave() {
+  const name = saveName.value.trim();
+  if (!name) {
+    saveError.value = t("connection.nameRequired");
+    return;
+  }
+  try {
+    await pipeline.saveCurrentPipeline(name);
+    closeSaveDialog();
+  } catch (e) {
+    saveError.value = typeof e === "string" ? e : (e as Error)?.message || String(e);
+  }
+}
+
+async function doLoad(id: string) {
+  const saved = pipeline.savedPipelines.find((p) => p.id === id);
+  if (!saved) return;
+  pipeline.loadPipeline(saved);
+  // Sync argsText map
+  const m = new Map(argsText.value);
+  for (const cmd of pipeline.commands) {
+    m.set(cmd.id, cmd.args.join(" "));
+  }
+  argsText.value = m;
+}
+
+async function doDelete(id: string) {
+  const saved = pipeline.savedPipelines.find((p) => p.id === id);
+  if (!saved) return;
+  const confirmed = await confirmDialog.value?.open({
+    title: t("common.confirmDeleteTitle"),
+    message: t("pipeline.confirmDeletePipeline", { name: saved.name }),
+    confirmLabel: t("common.delete"),
+    cancelLabel: t("common.cancel"),
+    danger: true,
+  });
+  if (!confirmed) return;
+  try {
+    await pipeline.deletePipeline(id);
+  } catch (e) {
+    console.error("Delete pipeline failed:", e);
+  }
+}
+
+function formatTimestamp(ts: number): string {
+  const d = new Date(ts * 1000);
+  return d.toLocaleDateString() + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
 
 // Raw args text per command (keyed by command id) to allow free typing with spaces
 const argsText = ref(new Map<string, string>());
@@ -99,6 +173,16 @@ function onDrop(idx: number) {
         <p class="text-sm text-text-muted mt-1">{{ t("pipeline.commandsQueued", { count: pipeline.commandCount }) }}</p>
       </div>
       <div class="flex items-center gap-2">
+        <button @click="openSaveDialog()" :disabled="pipeline.commandCount === 0"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-text-secondary bg-bg-primary border border-border rounded-lg hover:bg-bg-hover transition-colors disabled:opacity-40">
+          <Save :size="13" /> {{ t("pipeline.saveAs") }}
+        </button>
+        <button @click="showSavedList = !showSavedList"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-text-secondary bg-bg-primary border border-border rounded-lg hover:bg-bg-hover transition-colors"
+          :class="showSavedList ? 'border-redis text-redis' : ''">
+          <FolderOpen :size="13" /> {{ t("pipeline.savedPipelines") }}
+          <span v-if="pipeline.savedPipelines.length" class="text-[10px] bg-redis/10 text-redis rounded-full px-1.5">{{ pipeline.savedPipelines.length }}</span>
+        </button>
         <button @click="pipeline.clearResults()" :disabled="!pipeline.hasResults"
           class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-text-secondary bg-bg-primary border border-border rounded-lg hover:bg-bg-hover transition-colors disabled:opacity-40">
           <Eraser :size="13" /> {{ t("pipeline.clearResults") }}
@@ -110,6 +194,30 @@ function onDrop(idx: number) {
         <button @click="pipeline.executeAll()" :disabled="pipeline.commandCount === 0 || pipeline.executing"
           class="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium text-white bg-redis rounded-lg hover:bg-redis-dark transition-colors disabled:opacity-50 shadow-sm">
           <Play :size="14" /> {{ pipeline.executing ? t("pipeline.executing") : t("pipeline.executeAll") }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Save Dialog -->
+    <div v-if="showSaveDialog" class="card p-4 mb-4 flex items-end gap-3">
+      <div class="flex-1">
+        <label class="block text-xs font-medium text-text-secondary mb-1.5">{{ t("pipeline.pipelineName") }}</label>
+        <input
+          v-model="saveName"
+          @keyup.enter="doSave"
+          @keyup.escape="closeSaveDialog"
+          :placeholder="t('pipeline.pipelineNamePlaceholder')"
+          class="w-full px-3 py-2 text-sm border border-border rounded-lg bg-bg-primary focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20"
+          autofocus
+        />
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <p v-if="saveError" class="text-xs text-danger whitespace-nowrap">{{ saveError }}</p>
+        <button @click="doSave" class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-redis rounded-lg hover:bg-redis-dark transition-colors shadow-sm">
+          <Save :size="14" /> {{ t("pipeline.savePipeline") }}
+        </button>
+        <button @click="closeSaveDialog" class="px-3 py-2 text-sm text-text-muted hover:text-text-primary transition-colors">
+          <X :size="14" />
         </button>
       </div>
     </div>
@@ -198,6 +306,41 @@ function onDrop(idx: number) {
         </button>
       </div>
 
+      <!-- Saved Pipelines Panel -->
+      <div class="w-64 shrink-0" v-if="showSavedList">
+        <div class="card p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-semibold text-text-primary">{{ t("pipeline.savedPipelines") }}</h3>
+            <span class="text-[10px] text-text-muted">{{ pipeline.savedPipelines.length }}</span>
+          </div>
+          <div class="space-y-2 max-h-[calc(100vh-280px)] overflow-y-auto">
+            <p v-if="pipeline.savedPipelines.length === 0" class="text-xs text-text-muted text-center py-6">
+              {{ t("pipeline.noSavedPipelines") }}
+            </p>
+            <div
+              v-for="saved in pipeline.savedPipelines"
+              :key="saved.id"
+              class="p-2.5 rounded-lg border border-border-light hover:border-redis/30 transition-colors group"
+            >
+              <p class="text-xs font-semibold text-text-primary truncate" :title="saved.name">{{ saved.name }}</p>
+              <p class="text-[10px] text-text-muted mt-0.5">
+                {{ saved.commands.length }} cmds · {{ formatTimestamp(saved.createdAt) }}
+              </p>
+              <div class="flex gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button @click="doLoad(saved.id)"
+                  class="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1 text-[10px] font-medium text-redis bg-redis/8 rounded hover:bg-redis/15 transition-colors">
+                  <Download :size="10" /> {{ t("pipeline.loadPipeline") }}
+                </button>
+                <button @click="doDelete(saved.id)"
+                  class="inline-flex items-center justify-center px-2 py-1 text-[10px] text-text-muted hover:text-danger hover:bg-danger/8 rounded transition-colors">
+                  <Trash2 :size="10" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Results Summary Panel -->
       <div class="w-64 shrink-0" v-if="pipeline.hasResults">
         <div class="card p-4 space-y-4">
@@ -228,5 +371,7 @@ function onDrop(idx: number) {
         </div>
       </div>
     </div>
+
+    <ConfirmDialog ref="confirmDialog" />
   </div>
 </template>

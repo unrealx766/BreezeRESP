@@ -114,7 +114,19 @@
     "emptyHint": "Click \"Add Command\" to start building a Pipeline",
     "commandsQueued": "{count} commands queued",
     "executing": "Executing...",
-    "templates": "Templates"
+    "templates": "Templates",
+    "savePipeline": "Save Pipeline",
+    "saveAs": "Save As...",
+    "pipelineName": "Pipeline Name",
+    "pipelineNamePlaceholder": "Enter a name for this pipeline",
+    "savedPipelines": "Saved Pipelines",
+    "loadPipeline": "Load",
+    "deletePipeline": "Delete",
+    "confirmDeletePipeline": "Are you sure to delete pipeline \"{name}\"?",
+    "noSavedPipelines": "No saved pipelines",
+    "overwritePipeline": "Overwrite",
+    "saveSuccess": "Pipeline saved successfully",
+    "loadSuccess": "Pipeline loaded successfully"
   },
   "sandbox": {
     "title": "Command Sandbox",
@@ -168,6 +180,7 @@
     "error": "Error",
     "copy": "Copy",
     "copied": "Copied",
-    "language": "Language"
+    "language": "Language",
+    "confirmDeleteTitle": "Confirm Delete"
   }
 }

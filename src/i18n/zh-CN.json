@@ -114,7 +114,19 @@
     "emptyHint": "点击\"添加命令\"开始构建 Pipeline",
     "commandsQueued": "{count} 条命令已排队",
     "executing": "执行中...",
-    "templates": "命令模板"
+    "templates": "命令模板",
+    "savePipeline": "保存流水线",
+    "saveAs": "另存为...",
+    "pipelineName": "流水线名称",
+    "pipelineNamePlaceholder": "输入流水线名称",
+    "savedPipelines": "已保存的流水线",
+    "loadPipeline": "加载",
+    "deletePipeline": "删除",
+    "confirmDeletePipeline": "确定删除流水线 \"{name}\" 吗？",
+    "noSavedPipelines": "暂无已保存的流水线",
+    "overwritePipeline": "覆盖保存",
+    "saveSuccess": "流水线保存成功",
+    "loadSuccess": "流水线加载成功"
   },
   "sandbox": {
     "title": "命令沙盒",
@@ -168,6 +180,7 @@
     "error": "操作失败",
     "copy": "复制",
     "copied": "已复制",
-    "language": "语言"
+    "language": "语言",
+    "confirmDeleteTitle": "确认删除"
   }
 }

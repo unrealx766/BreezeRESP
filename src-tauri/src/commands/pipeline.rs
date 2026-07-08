@@ -1,4 +1,5 @@
 use crate::AppState;
+use crate::core::pipeline_store::{StoredPipeline, StoredPipelineCommand};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -110,4 +111,48 @@ pub async fn execute_pipeline(
         total_latency_ms: (total_elapsed * 100.0).round() / 100.0,
         individual_sum_ms: (individual_sum * 100.0).round() / 100.0,
     })
+}
+
+/// Save a pipeline configuration to encrypted local storage
+#[tauri::command]
+pub async fn save_pipeline(
+    state: State<'_, AppState>,
+    id: String,
+    name: String,
+    commands: Vec<PipelineCommand>,
+    created_at: u64,
+) -> Result<(), String> {
+    let store = state.pipeline_store.lock().map_err(|e| e.to_string())?;
+    let stored = StoredPipeline {
+        id,
+        name,
+        commands: commands
+            .into_iter()
+            .map(|c| StoredPipelineCommand {
+                command: c.command,
+                args: c.args,
+            })
+            .collect(),
+        created_at,
+    };
+    store.save(stored)
+}
+
+/// List all saved pipeline configurations
+#[tauri::command]
+pub async fn list_pipelines(
+    state: State<'_, AppState>,
+) -> Result<Vec<StoredPipeline>, String> {
+    let store = state.pipeline_store.lock().map_err(|e| e.to_string())?;
+    store.load_all()
+}
+
+/// Delete a saved pipeline by id
+#[tauri::command]
+pub async fn delete_pipeline(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), String> {
+    let store = state.pipeline_store.lock().map_err(|e| e.to_string())?;
+    store.delete(&id)
 }

@@ -8,6 +8,7 @@ import type { RedisDataType } from "@/types";
 import KeyTreeItem from "@/components/cascade/KeyTreeItem.vue";
 import TtlGauge from "@/components/charts/TtlGauge.vue";
 import FloatingWindow from "@/components/shared/FloatingWindow.vue";
+import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
 import {
   Search, RefreshCw, Trash2, Copy, Tag, Database,
   Type, Hash, List, CircleDot, BarChart3,
@@ -18,6 +19,8 @@ const { t } = useI18n();
 const cascade = useCascadeStore();
 const detail = useDetailStore();
 const connStore = useConnectionStore();
+
+const confirmDialog = ref<InstanceType<typeof ConfirmDialog>>();
 
 const currentDb = ref(0);
 const switchingDb = ref(false);
@@ -200,7 +203,13 @@ function copyKey(key: string) {
 async function deleteKey() {
   const key = detail.currentKey?.key;
   if (!key) return;
-  const confirmed = window.confirm(t("browser.confirmDelete", { key }));
+  const confirmed = await confirmDialog.value?.open({
+    title: t("common.confirmDeleteTitle"),
+    message: t("browser.confirmDelete", { key }),
+    confirmLabel: t("common.delete"),
+    cancelLabel: t("common.cancel"),
+    danger: true,
+  });
   if (!confirmed) return;
   try {
     await cascade.deleteKey(key);
@@ -847,5 +856,7 @@ onMounted(() => {
         @focus="focusWin"
       />
     </Teleport>
+
+    <ConfirmDialog ref="confirmDialog" />
   </div>
 </template>

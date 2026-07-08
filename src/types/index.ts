@@ -74,6 +74,13 @@ export interface PipelineResult {
   latencyMs: number;
 }
 
+export interface SavedPipeline {
+  id: string;
+  name: string;
+  commands: { command: string; args: string[] }[];
+  createdAt: number;
+}
+
 // Sandbox
 export type DiffChangeType = "added" | "modified" | "deleted";
 

@@ -4,6 +4,7 @@ import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useConnectionStore } from "@/stores/connectionStore";
 import type { RedisConnection } from "@/types";
+import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
 import {
   Plus, Server, Wifi, WifiOff, Trash2, Edit3, Zap, AlertCircle,
   X, Loader2, Lock, Unlock,
@@ -12,6 +13,8 @@ import {
 const router = useRouter();
 const { t } = useI18n();
 const connStore = useConnectionStore();
+
+const confirmDialog = ref<InstanceType<typeof ConfirmDialog>>();
 
 const showForm = ref(false);
 const editingId = ref<string | null>(null);
@@ -116,8 +119,15 @@ async function handleTest(conn: RedisConnection) {
   setTimeout(() => { testResult.value = null; }, 2000);
 }
 
-function handleDelete(conn: RedisConnection) {
-  if (confirm(t("connection.confirmDelete", { name: conn.name }))) {
+async function handleDelete(conn: RedisConnection) {
+  const confirmed = await confirmDialog.value?.open({
+    title: t("common.confirmDeleteTitle"),
+    message: t("connection.confirmDelete", { name: conn.name }),
+    confirmLabel: t("common.delete"),
+    cancelLabel: t("common.cancel"),
+    danger: true,
+  });
+  if (confirmed) {
     connStore.removeConnection(conn.id);
   }
 }
@@ -377,5 +387,7 @@ function statusColor(status: string) {
         </div>
       </div>
     </Teleport>
+
+    <ConfirmDialog ref="confirmDialog" />
   </div>
 </template>

@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { SavedPipeline } from "@/types";
 
 // ---- Rust-side response types (snake_case → camelCase via serde) ----
 
@@ -145,6 +146,15 @@ export const tauriApi = {
   pipeline: {
     execute: (connectionId: string, commands: RustPipelineCommand[]) =>
       invoke<RustPipelineResponse>("execute_pipeline", { connectionId, commands }),
+
+    save: (id: string, name: string, commands: RustPipelineCommand[], createdAt: number) =>
+      invoke<void>("save_pipeline", { id, name, commands, createdAt }),
+
+    list: () =>
+      invoke<SavedPipeline[]>("list_pipelines"),
+
+    delete: (id: string) =>
+      invoke<void>("delete_pipeline", { id }),
   },
 
   sandbox: {
