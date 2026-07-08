@@ -15,9 +15,9 @@ function toggleLocale() {
 </script>
 
 <template>
-  <header class="h-12 bg-white border-b border-border flex items-center justify-between px-4 shrink-0">
+  <header class="h-12 bg-white border-b border-border flex items-center justify-between px-4 shrink-0 overflow-hidden">
     <!-- Left: Connection info -->
-    <div class="flex items-center gap-3">
+    <div class="flex items-center gap-3 min-w-0">
       <template v-if="connStore.activeConnection">
         <span
           class="w-2 h-2 rounded-full shrink-0"
@@ -28,12 +28,12 @@ function toggleLocale() {
             'bg-danger': connStore.activeConnection.status === 'error',
           }"
         />
-        <span class="text-sm font-medium text-text-primary">{{ connStore.activeConnection.name }}</span>
-        <span class="text-xs text-text-muted">{{ connStore.activeConnection.host }}:{{ connStore.activeConnection.port }}</span>
-        <span class="badge bg-redis-light text-redis text-[10px]">DB{{ connStore.activeConnection.db }}</span>
+        <span class="text-sm font-medium text-text-primary truncate max-w-[180px]" :title="connStore.activeConnection.name">{{ connStore.activeConnection.name }}</span>
+        <span class="text-xs text-text-muted whitespace-nowrap hidden sm:block">{{ connStore.activeConnection.host }}:{{ connStore.activeConnection.port }}</span>
+        <span class="badge bg-redis-light text-redis text-[10px] shrink-0">DB{{ connStore.activeConnection.db }}</span>
       </template>
       <template v-else>
-        <span class="text-sm text-text-muted">{{ t("status.noConnection") }}</span>
+        <span class="text-sm text-text-muted whitespace-nowrap">{{ t("status.noConnection") }}</span>
       </template>
     </div>
 

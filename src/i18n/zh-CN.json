@@ -84,7 +84,17 @@
     "score": "分数",
     "edit": "编辑",
     "save": "保存",
-    "cancel": "取消"
+    "cancel": "取消",
+    "renameKey": "重命名 Key",
+    "renameKeyPlaceholder": "输入新 Key 名...",
+    "setTtl": "设置 TTL",
+    "setTtlPlaceholder": "秒数（-1 = 永不过期）",
+    "saveSuccess": "保存成功",
+    "saveFailed": "保存失败",
+    "editValue": "编辑值",
+    "confirmEdit": "确定要修改此值吗？",
+    "ttlPersist": "永不过期",
+    "ttlSeconds": "{n}秒"
   },
   "pipeline": {
     "title": "Pipeline 构建器",

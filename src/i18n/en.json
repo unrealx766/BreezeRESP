@@ -84,7 +84,17 @@
     "score": "Score",
     "edit": "Edit",
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "renameKey": "Rename Key",
+    "renameKeyPlaceholder": "Enter new key name...",
+    "setTtl": "Set TTL",
+    "setTtlPlaceholder": "Seconds (-1 = persist)",
+    "saveSuccess": "Saved successfully",
+    "saveFailed": "Save failed",
+    "editValue": "Edit Value",
+    "confirmEdit": "Are you sure to modify this value?",
+    "ttlPersist": "No Expiry",
+    "ttlSeconds": "{n}s"
   },
   "pipeline": {
     "title": "Pipeline Builder",

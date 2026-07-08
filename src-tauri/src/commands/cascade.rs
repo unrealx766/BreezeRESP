@@ -328,3 +328,201 @@ pub async fn db_size(
         .map_err(|e| format!("DBSIZE error: {}", e))?;
     Ok(size)
 }
+
+/// Set/update a value in Redis (supports all data types)
+///
+/// Actions:
+///   - "set": set full value (string → SET, hash → HSET field, list → LSET index, set → SREM+SADD, zset → ZADD)
+///   - "delete_field": remove a sub-element (HDEL, LREM 1, SREM, ZREM)
+///   - "add_field": add a new sub-element (HSET new field, RPUSH, SADD, ZADD)
+#[tauri::command]
+pub async fn set_value(
+    state: State<'_, AppState>,
+    connection_id: String,
+    key: String,
+    key_type: String,
+    action: String,
+    field: Option<String>,
+    value: Option<String>,
+    index: Option<i64>,
+    score: Option<f64>,
+    old_value: Option<String>,
+) -> Result<bool, String> {
+    let pool = {
+        let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
+        pm.get_pool(&connection_id)?
+    };
+    let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
+
+    match action.as_str() {
+        "set" => match key_type.as_str() {
+            "string" => {
+                let val = value.ok_or("value is required for string SET")?;
+                let _: () = redis::cmd("SET")
+                    .arg(&key)
+                    .arg(&val)
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("SET error: {}", e))?;
+                Ok(true)
+            }
+            "hash" => {
+                let f = field.ok_or("field is required for hash HSET")?;
+                let val = value.ok_or("value is required for hash HSET")?;
+                let _: () = redis::cmd("HSET")
+                    .arg(&key)
+                    .arg(&f)
+                    .arg(&val)
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("HSET error: {}", e))?;
+                Ok(true)
+            }
+            "list" => {
+                let idx = index.ok_or("index is required for list LSET")?;
+                let val = value.ok_or("value is required for list LSET")?;
+                let _: () = redis::cmd("LSET")
+                    .arg(&key)
+                    .arg(idx)
+                    .arg(&val)
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("LSET error: {}", e))?;
+                Ok(true)
+            }
+            "set" => {
+                let old = old_value.ok_or("old_value is required for set rename")?;
+                let new_val = value.ok_or("value is required for set rename")?;
+                // Remove old, add new
+                let _: i64 = redis::cmd("SREM")
+                    .arg(&key)
+                    .arg(&old)
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("SREM error: {}", e))?;
+                let _: i64 = redis::cmd("SADD")
+                    .arg(&key)
+                    .arg(&new_val)
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("SADD error: {}", e))?;
+                Ok(true)
+            }
+            "zset" => {
+                let old_member = old_value.as_deref().unwrap_or("");
+                let new_member = value.ok_or("value is required for zset")?;
+                let s = score.ok_or("score is required for zset ZADD")?;
+                // If member name changed, remove old
+                if !old_member.is_empty() && old_member != new_member {
+                    let _: i64 = redis::cmd("ZREM")
+                        .arg(&key)
+                        .arg(old_member)
+                        .query_async(&mut *conn)
+                        .await
+                        .map_err(|e| format!("ZREM error: {}", e))?;
+                }
+                let _: () = redis::cmd("ZADD")
+                    .arg(&key)
+                    .arg(s)
+                    .arg(&new_member)
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("ZADD error: {}", e))?;
+                Ok(true)
+            }
+            _ => Err(format!("Unsupported key type: {}", key_type)),
+        },
+        "delete_field" => match key_type.as_str() {
+            "hash" => {
+                let f = field.ok_or("field is required for hash HDEL")?;
+                let _: i64 = redis::cmd("HDEL")
+                    .arg(&key)
+                    .arg(&f)
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("HDEL error: {}", e))?;
+                Ok(true)
+            }
+            "list" => {
+                let val = value.ok_or("value is required for list LREM")?;
+                let _: i64 = redis::cmd("LREM")
+                    .arg(&key)
+                    .arg(1)
+                    .arg(&val)
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("LREM error: {}", e))?;
+                Ok(true)
+            }
+            "set" => {
+                let val = value.ok_or("value is required for set SREM")?;
+                let _: i64 = redis::cmd("SREM")
+                    .arg(&key)
+                    .arg(&val)
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("SREM error: {}", e))?;
+                Ok(true)
+            }
+            "zset" => {
+                let member = value.ok_or("value is required for zset ZREM")?;
+                let _: i64 = redis::cmd("ZREM")
+                    .arg(&key)
+                    .arg(&member)
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("ZREM error: {}", e))?;
+                Ok(true)
+            }
+            _ => Err(format!("delete_field not supported for type: {}", key_type)),
+        },
+        "add_field" => match key_type.as_str() {
+            "hash" => {
+                let f = field.ok_or("field is required for hash HSET")?;
+                let val = value.unwrap_or_default();
+                let _: () = redis::cmd("HSET")
+                    .arg(&key)
+                    .arg(&f)
+                    .arg(&val)
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("HSET error: {}", e))?;
+                Ok(true)
+            }
+            "list" => {
+                let val = value.unwrap_or_default();
+                let _: i64 = redis::cmd("RPUSH")
+                    .arg(&key)
+                    .arg(&val)
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("RPUSH error: {}", e))?;
+                Ok(true)
+            }
+            "set" => {
+                let val = value.ok_or("value is required for set SADD")?;
+                let _: i64 = redis::cmd("SADD")
+                    .arg(&key)
+                    .arg(&val)
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("SADD error: {}", e))?;
+                Ok(true)
+            }
+            "zset" => {
+                let member = value.ok_or("value is required for zset ZADD")?;
+                let s = score.unwrap_or(0.0);
+                let _: () = redis::cmd("ZADD")
+                    .arg(&key)
+                    .arg(s)
+                    .arg(&member)
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("ZADD error: {}", e))?;
+                Ok(true)
+            }
+            _ => Err(format!("add_field not supported for type: {}", key_type)),
+        },
+        _ => Err(format!("Unknown action: {}", action)),
+    }
+}

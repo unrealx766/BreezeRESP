@@ -202,7 +202,7 @@ function statusColor(status: string) {
               <Server :size="18" :class="statusColor(conn.status)" />
             </div>
             <div>
-              <h3 class="text-sm font-semibold text-text-primary">{{ conn.name }}</h3>
+              <h3 class="text-sm font-semibold text-text-primary truncate max-w-[160px]" :title="conn.name">{{ conn.name }}</h3>
               <p class="text-xs text-text-muted">{{ conn.host }}:{{ conn.port }}</p>
             </div>
           </div>
@@ -293,7 +293,7 @@ function statusColor(status: string) {
           <div class="space-y-4">
             <div>
               <label class="block text-xs font-medium text-text-secondary mb-1.5">{{ t("connection.name") }}</label>
-              <input v-model="form.name" class="w-full px-3 py-2 text-sm border border-border rounded-lg bg-bg-primary focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20" />
+              <input v-model="form.name" maxlength="50" class="w-full px-3 py-2 text-sm border border-border rounded-lg bg-bg-primary focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20" />
             </div>
             <div class="grid grid-cols-3 gap-3">
               <div class="col-span-2">

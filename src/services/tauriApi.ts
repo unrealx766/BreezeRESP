@@ -128,6 +128,18 @@ export const tauriApi = {
 
     dbSize: (connectionId: string) =>
       invoke<number>("db_size", { connectionId }),
+
+    setValue: (params: {
+      connectionId: string;
+      key: string;
+      keyType: string;
+      action: string;
+      field?: string;
+      value?: string;
+      index?: number;
+      score?: number;
+      oldValue?: string;
+    }) => invoke<boolean>("set_value", params),
   },
 
   pipeline: {

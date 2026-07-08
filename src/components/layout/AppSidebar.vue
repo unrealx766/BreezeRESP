@@ -142,7 +142,7 @@ function navigate(path: string) {
               'bg-danger': conn.status === 'error',
             }"
           />
-          <span class="truncate text-text-secondary flex-1">{{ conn.name }}</span>
+          <span class="truncate text-text-secondary flex-1" :title="conn.name">{{ conn.name }}</span>
           <!-- DB selector for active connected connection -->
           <div
             v-if="conn.status === 'connected' && connStore.activeConnectionId === conn.id"

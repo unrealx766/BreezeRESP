@@ -19,6 +19,7 @@ export const useDetailStore = defineStore("detail", () => {
   const ttlPercent = computed(() =>
     ttlTotal.value > 0 ? Math.max(0, (ttlRemaining.value / ttlTotal.value) * 100) : -1
   );
+  const isExpired = ref(false);
 
   /** Convert Rust KeyDetail response to frontend KeyDetail type */
   function mapKeyDetail(rust: any): KeyDetail {
@@ -96,12 +97,24 @@ export const useDetailStore = defineStore("detail", () => {
       if (currentDetail.value.key.ttl > 0) {
         ttlTotal.value = currentDetail.value.key.ttl;
         ttlRemaining.value = currentDetail.value.key.ttl;
+        isExpired.value = false;
+      } else if (currentDetail.value.key.ttl === 0) {
+        // Key has 0 TTL - already expired on server
+        ttlTotal.value = 1;
+        ttlRemaining.value = 0;
+        isExpired.value = true;
       } else {
+        // ttl = -1 (no expiry) or -2 (key missing)
         ttlTotal.value = 0;
         ttlRemaining.value = 0;
+        isExpired.value = false;
       }
     } catch (e) {
       console.error("Failed to load key detail:", e);
+      // If key had a TTL and now fails to load, it likely expired
+      if (ttlTotal.value > 0 || isExpired.value) {
+        isExpired.value = true;
+      }
       currentDetail.value = null;
     } finally {
       loading.value = false;
@@ -122,7 +135,12 @@ export const useDetailStore = defineStore("detail", () => {
   function startTtlTimer() {
     stopTtlTimer();
     ttlTimer = setInterval(() => {
-      if (ttlRemaining.value > 0) ttlRemaining.value--;
+      if (ttlRemaining.value > 0) {
+        ttlRemaining.value--;
+        if (ttlRemaining.value <= 0 && ttlTotal.value > 0) {
+          isExpired.value = true;
+        }
+      }
     }, 1000);
   }
   function stopTtlTimer() {
@@ -132,13 +150,166 @@ export const useDetailStore = defineStore("detail", () => {
 
   function setEditing(val: boolean) { editing.value = val; }
 
+  /** Save string value */
+  async function saveStringValue(newValue: string) {
+    const connStore = useConnectionStore();
+    const connId = connStore.activeConnectionId;
+    const key = currentDetail.value?.key.key;
+    if (!connId || !key) return false;
+    try {
+      await tauriApi.cascade.setValue({
+        connectionId: connId,
+        key,
+        keyType: "string",
+        action: "set",
+        value: newValue,
+      });
+      await loadDetail(key);
+      return true;
+    } catch (e) {
+      console.error("Failed to save string value:", e);
+      return false;
+    }
+  }
+
+  /** Save hash field value */
+  async function saveHashField(field: string, newValue: string) {
+    const connStore = useConnectionStore();
+    const connId = connStore.activeConnectionId;
+    const key = currentDetail.value?.key.key;
+    if (!connId || !key) return false;
+    try {
+      await tauriApi.cascade.setValue({
+        connectionId: connId,
+        key,
+        keyType: "hash",
+        action: "set",
+        field,
+        value: newValue,
+      });
+      await loadDetail(key);
+      return true;
+    } catch (e) {
+      console.error("Failed to save hash field:", e);
+      return false;
+    }
+  }
+
+  /** Save list item by index */
+  async function saveListItem(index: number, newValue: string) {
+    const connStore = useConnectionStore();
+    const connId = connStore.activeConnectionId;
+    const key = currentDetail.value?.key.key;
+    if (!connId || !key) return false;
+    try {
+      await tauriApi.cascade.setValue({
+        connectionId: connId,
+        key,
+        keyType: "list",
+        action: "set",
+        index,
+        value: newValue,
+      });
+      await loadDetail(key);
+      return true;
+    } catch (e) {
+      console.error("Failed to save list item:", e);
+      return false;
+    }
+  }
+
+  /** Save set member (rename) */
+  async function saveSetMember(oldValue: string, newValue: string) {
+    const connStore = useConnectionStore();
+    const connId = connStore.activeConnectionId;
+    const key = currentDetail.value?.key.key;
+    if (!connId || !key) return false;
+    try {
+      await tauriApi.cascade.setValue({
+        connectionId: connId,
+        key,
+        keyType: "set",
+        action: "set",
+        value: newValue,
+        oldValue,
+      });
+      await loadDetail(key);
+      return true;
+    } catch (e) {
+      console.error("Failed to save set member:", e);
+      return false;
+    }
+  }
+
+  /** Save zset member (update member name and/or score) */
+  async function saveZSetMember(oldMember: string, newMember: string, score: number) {
+    const connStore = useConnectionStore();
+    const connId = connStore.activeConnectionId;
+    const key = currentDetail.value?.key.key;
+    if (!connId || !key) return false;
+    try {
+      await tauriApi.cascade.setValue({
+        connectionId: connId,
+        key,
+        keyType: "zset",
+        action: "set",
+        value: newMember,
+        score,
+        oldValue: oldMember,
+      });
+      await loadDetail(key);
+      return true;
+    } catch (e) {
+      console.error("Failed to save zset member:", e);
+      return false;
+    }
+  }
+
+  /** Rename key */
+  async function renameKey(newKey: string) {
+    const connStore = useConnectionStore();
+    const connId = connStore.activeConnectionId;
+    const oldKey = currentDetail.value?.key.key;
+    if (!connId || !oldKey || oldKey === newKey) return false;
+    try {
+      await tauriApi.cascade.renameKey(connId, oldKey, newKey);
+      // Update cascade store
+      const cascadeStore = useCascadeStore();
+      const k = cascadeStore.keys.find((k) => k.key === oldKey);
+      if (k) k.key = newKey;
+      cascade.selectedKey = newKey;
+      await loadDetail(newKey);
+      return true;
+    } catch (e) {
+      console.error("Failed to rename key:", e);
+      return false;
+    }
+  }
+
+  /** Set TTL */
+  async function setTtl(ttl: number) {
+    const connStore = useConnectionStore();
+    const connId = connStore.activeConnectionId;
+    const key = currentDetail.value?.key.key;
+    if (!connId || !key) return false;
+    try {
+      await tauriApi.cascade.setKeyTtl(connId, key, ttl);
+      await loadDetail(key);
+      return true;
+    } catch (e) {
+      console.error("Failed to set TTL:", e);
+      return false;
+    }
+  }
+
   function clearDetail() {
     currentDetail.value = null;
     stopTtlTimer();
   }
 
   function refresh() {
-    if (currentDetail.value) loadDetail(currentDetail.value.key.key);
+    const key = currentDetail.value?.key.key ?? cascade.selectedKey;
+    if (key) loadDetail(key);
   }
 
   return {
@@ -150,9 +321,17 @@ export const useDetailStore = defineStore("detail", () => {
     ttlRemaining,
     ttlTotal,
     ttlPercent,
+    isExpired,
     loadDetail,
     clearDetail,
     setEditing,
     refresh,
+    saveStringValue,
+    saveHashField,
+    saveListItem,
+    saveSetMember,
+    saveZSetMember,
+    renameKey,
+    setTtl,
   };
 });
