@@ -11,23 +11,7 @@ const metricsStore = useMetricsStore();
 
 <template>
   <footer class="h-7 bg-white border-t border-border flex items-center px-4 text-[11px] text-text-muted shrink-0 gap-3 overflow-hidden">
-    <!-- Connection Status -->
-    <div class="flex items-center gap-1.5 min-w-0 shrink shrink-2">
-      <span
-        class="w-1.5 h-1.5 rounded-full shrink-0"
-        :class="{
-          'bg-success': connStore.activeConnection?.status === 'connected',
-          'bg-danger': connStore.activeConnection?.status === 'error',
-          'bg-warning animate-pulse': connStore.activeConnection?.status === 'connecting',
-          'bg-text-muted': !connStore.activeConnection || connStore.activeConnection?.status === 'disconnected',
-        }"
-      />
-      <span class="truncate" :title="connStore.activeConnection?.name">{{ connStore.activeConnection?.name || t("status.noConnection") }}</span>
-    </div>
-
     <template v-if="connStore.activeConnection?.status === 'connected'">
-      <div class="w-px h-3.5 bg-border shrink-0" />
-
       <!-- Memory -->
       <div class="flex items-center gap-1 shrink-0">
         <HardDrive :size="11" class="shrink-0" />

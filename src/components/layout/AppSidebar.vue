@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useConnectionStore } from "@/stores/connectionStore";
-import { Database, Server, Layers, FlaskConical, Plus, Unplug } from "lucide-vue-next";
+import { Database, Server, Layers, FlaskConical, Plus, Unplug, Pin, PinOff } from "lucide-vue-next";
 
 const router = useRouter();
 const route = useRoute();
@@ -68,7 +68,7 @@ function navigate(path: string) {
       </div>
       <div class="space-y-0.5 max-h-48 overflow-y-auto">
         <div
-          v-for="conn in connStore.connections"
+          v-for="conn in connStore.statusBarConnections"
           :key="conn.id"
           class="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs cursor-pointer hover:bg-bg-hover transition-colors"
           :class="connStore.activeConnectionId === conn.id ? 'bg-bg-active' : ''"
@@ -89,6 +89,14 @@ function navigate(path: string) {
             v-if="conn.status === 'connected'"
             class="text-[10px] font-mono font-semibold text-redis/70 bg-redis/8 px-1.5 py-0.5 rounded shrink-0"
           >DB{{ conn.db }}</span>
+          <button
+            @click.stop="connStore.togglePin(conn.id)"
+            class="w-5 h-5 rounded flex items-center justify-center hover:bg-bg-hover transition-colors shrink-0 group/pin"
+            :title="conn.pinned ? t('connection.unpin') : t('connection.pin')"
+          >
+            <PinOff v-if="conn.pinned" :size="11" class="text-redis" />
+            <Pin v-else :size="11" class="text-text-muted/50 group-hover/pin:text-text-muted" />
+          </button>
           <button
             v-if="conn.status === 'connected' || conn.status === 'connecting'"
             @click.stop="connStore.disconnect(conn.id)"

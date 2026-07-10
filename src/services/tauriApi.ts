@@ -11,6 +11,7 @@ export interface RustConnectionConfig {
   password: string;
   db: number;
   ssl: boolean;
+  pinned: boolean;
 }
 
 export interface RustConnectionInfo {
@@ -21,6 +22,7 @@ export interface RustConnectionInfo {
   db: number;
   ssl: boolean;
   status: string;
+  pinned: boolean;
 }
 
 export interface RustRedisKeyInfo {

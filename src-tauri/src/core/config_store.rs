@@ -20,6 +20,8 @@ pub struct StoredConnection {
     pub password: String,
     pub db: u8,
     pub ssl: bool,
+    #[serde(default)]
+    pub pinned: bool,
 }
 
 impl ConfigStore {

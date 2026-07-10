@@ -13,6 +13,7 @@ export interface RedisConnection {
   ssl: boolean;
   status: ConnectionStatus;
   lastUsed?: number;
+  pinned?: boolean;
 }
 
 export interface RedisKey {

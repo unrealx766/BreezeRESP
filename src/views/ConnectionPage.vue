@@ -8,7 +8,7 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
 import { toast } from "@/utils/toast";
 import {
   Plus, Server, Wifi, WifiOff, Trash2, Edit3, Zap, AlertCircle,
-  X, Loader2, Lock, Unlock,
+  X, Loader2, Lock, Unlock, Pin, PinOff,
 } from "lucide-vue-next";
 
 const router = useRouter();
@@ -209,6 +209,7 @@ function statusColor(status: string) {
               'bg-danger': conn.status === 'error',
             }"
           />
+          <Pin v-if="conn.pinned" :size="12" class="text-redis/50 mt-1 shrink-0" />
         </div>
 
         <!-- Info -->
@@ -253,6 +254,14 @@ function statusColor(status: string) {
             >
               {{ testResult.ok ? t("connection.testSuccess") : t("connection.error") }}
             </div>
+          </button>
+          <button
+            @click="connStore.togglePin(conn.id)"
+            class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-bg-hover transition-colors opacity-0 group-hover:opacity-100"
+            :title="conn.pinned ? t('connection.unpin') : t('connection.pin')"
+          >
+            <PinOff v-if="conn.pinned" :size="14" class="text-redis" />
+            <Pin v-else :size="14" class="text-text-muted" />
           </button>
           <button
             @click="openEdit(conn)"

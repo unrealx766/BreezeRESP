@@ -11,6 +11,8 @@ pub struct ConnectionConfig {
     pub password: String,
     pub db: u8,
     pub ssl: bool,
+    #[serde(default)]
+    pub pinned: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,6 +24,8 @@ pub struct ConnectionInfo {
     pub db: u8,
     pub ssl: bool,
     pub status: String,
+    #[serde(default)]
+    pub pinned: bool,
 }
 
 /// Connect to a Redis instance
@@ -62,6 +66,7 @@ pub async fn connect(
         db: config.db,
         ssl: config.ssl,
         status: "connected".to_string(),
+        pinned: config.pinned,
     })
 }
 
@@ -126,6 +131,7 @@ pub async fn get_connections(state: State<'_, AppState>) -> Result<Vec<Connectio
             db: c.db,
             ssl: c.ssl,
             status: "disconnected".to_string(),
+            pinned: c.pinned,
         })
         .collect())
 }
@@ -148,6 +154,7 @@ pub async fn save_connection(
         password: config.password,
         db: config.db,
         ssl: config.ssl,
+        pinned: config.pinned,
     };
 
     if let Some(idx) = connections.iter().position(|c| c.id == config.id) {

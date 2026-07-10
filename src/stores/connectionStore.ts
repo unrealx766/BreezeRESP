@@ -7,6 +7,8 @@ export const useConnectionStore = defineStore("connection", () => {
   const connections = ref<RedisConnection[]>([]);
   const activeConnectionId = ref<string | null>(null);
   const lastError = ref<string | null>(null);
+  /** IDs of connections that have been connected during this session (persists until app exit) */
+  const sessionConnectedIds = ref<Set<string>>(new Set());
 
   const activeConnection = computed(() =>
     connections.value.find((c) => c.id === activeConnectionId.value) ?? null
@@ -14,6 +16,13 @@ export const useConnectionStore = defineStore("connection", () => {
 
   const connectedCount = computed(
     () => connections.value.filter((c) => c.status === "connected").length
+  );
+
+  /** Connections visible in status bar: pinned (startup) + connected this session (stays until exit) */
+  const statusBarConnections = computed(() =>
+    connections.value.filter(
+      (c) => c.pinned || c.status === "connected" || sessionConnectedIds.value.has(c.id)
+    )
   );
 
   /** Load saved connections from encrypted local storage */
@@ -29,6 +38,7 @@ export const useConnectionStore = defineStore("connection", () => {
         db: info.db,
         ssl: info.ssl,
         status: "disconnected" as ConnectionStatus,
+        pinned: info.pinned ?? false,
       }));
     } catch (e) {
       console.error("Failed to load saved connections:", e);
@@ -45,6 +55,7 @@ export const useConnectionStore = defineStore("connection", () => {
       password: conn.password,
       db: conn.db,
       ssl: conn.ssl,
+      pinned: conn.pinned ?? false,
     };
   }
 
@@ -118,6 +129,7 @@ export const useConnectionStore = defineStore("connection", () => {
       setStatus(id, "connected");
       activeConnectionId.value = id;
       conn.lastUsed = Date.now();
+      sessionConnectedIds.value = new Set([...sessionConnectedIds.value, id]);
       return true;
     } catch (e) {
       console.error("Connect failed:", e);
@@ -165,6 +177,7 @@ export const useConnectionStore = defineStore("connection", () => {
       password: config.password,
       db: config.db,
       ssl: config.ssl,
+      pinned: false,
     };
     try {
       return await tauriApi.connection.testConnection(tempConfig);
@@ -189,6 +202,18 @@ export const useConnectionStore = defineStore("connection", () => {
     }
   }
 
+  /** Toggle pin status for a connection (persist to disk) */
+  async function togglePin(id: string) {
+    const conn = connections.value.find((c) => c.id === id);
+    if (!conn) return;
+    conn.pinned = !conn.pinned;
+    try {
+      await tauriApi.connection.saveConnection(toRustConfig(conn));
+    } catch (e) {
+      console.error("Failed to save pin state:", e);
+    }
+  }
+
   // Load saved connections on store init
   loadSavedConnections();
 
@@ -197,6 +222,7 @@ export const useConnectionStore = defineStore("connection", () => {
     activeConnectionId,
     activeConnection,
     connectedCount,
+    statusBarConnections,
     lastError,
     addConnection,
     updateConnection,
@@ -207,6 +233,7 @@ export const useConnectionStore = defineStore("connection", () => {
     testConnection,
     testFormConnection,
     switchDb,
+    togglePin,
     loadSavedConnections,
   };
 });

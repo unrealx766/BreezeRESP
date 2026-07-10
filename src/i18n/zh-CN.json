@@ -46,7 +46,9 @@
     "connectionLost": "连接已断开",
     "connectionLostDesc": "与 Redis 服务器的连接已中断，请检查网络或服务状态后重新连接。",
     "reconnect": "重新连接",
-    "summary": "{total} 个连接, {active} 个活跃"
+    "summary": "{total} 个连接, {active} 个活跃",
+    "pin": "固定到状态栏",
+    "unpin": "取消固定"
   },
   "browser": {
     "title": "数据浏览器",

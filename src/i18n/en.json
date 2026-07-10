@@ -46,7 +46,9 @@
     "connectionLost": "Connection Lost",
     "connectionLostDesc": "The connection to the Redis server has been interrupted. Please check the network or server status and reconnect.",
     "reconnect": "Reconnect",
-    "summary": "{total} connections, {active} active"
+    "summary": "{total} connections, {active} active",
+    "pin": "Pin to Status Bar",
+    "unpin": "Unpin from Status Bar"
   },
   "browser": {
     "title": "Data Browser",
