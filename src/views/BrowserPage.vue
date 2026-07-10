@@ -438,7 +438,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="h-full flex flex-col">
+  <div class="h-full flex flex-col min-w-[700px]">
     <!-- Connection Lost Banner -->
     <div
       v-if="connectionLost"
@@ -581,7 +581,7 @@ onMounted(() => {
             </template>
             <template v-else>
               <span
-                class="text-sm font-medium text-text-primary truncate max-w-[300px] cursor-pointer hover:text-redis transition-colors"
+                class="text-sm font-medium text-text-primary truncate max-w-[40%] cursor-pointer hover:text-redis transition-colors"
                 @dblclick="startEditKey"
                 :title="detail.currentKey!.key"
               >{{ detail.currentKey!.key }}</span>
@@ -771,7 +771,7 @@ onMounted(() => {
       <div v-else-if="detail.isExpired && cascade.selectedKey" class="flex-1 flex flex-col items-center justify-center text-danger">
         <AlertTriangle :size="36" class="mb-3 opacity-60" />
         <p class="text-sm font-semibold">{{ t("detail.expired") }}</p>
-        <p class="text-xs mt-1 opacity-60 font-mono truncate max-w-[300px]" :title="cascade.selectedKey">{{ cascade.selectedKey }}</p>
+        <p class="text-xs mt-1 opacity-60 font-mono truncate max-w-[300px] text-center" :title="cascade.selectedKey">{{ cascade.selectedKey }}</p>
         <button @click="detail.refresh()" class="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-text-secondary bg-bg-hover rounded-lg hover:bg-bg-active transition-colors">
           <RefreshCw :size="12" />{{ t("browser.refresh") }}
         </button>

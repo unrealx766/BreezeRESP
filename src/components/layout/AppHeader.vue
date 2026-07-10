@@ -28,8 +28,8 @@ function toggleLocale() {
             'bg-danger': connStore.activeConnection.status === 'error',
           }"
         />
-        <span class="text-sm font-medium text-text-primary truncate max-w-[180px]" :title="connStore.activeConnection.name">{{ connStore.activeConnection.name }}</span>
-        <span class="text-xs text-text-muted whitespace-nowrap hidden sm:block">{{ connStore.activeConnection.host }}:{{ connStore.activeConnection.port }}</span>
+        <span class="text-sm font-medium text-text-primary truncate max-w-[40%]" :title="connStore.activeConnection.name">{{ connStore.activeConnection.name }}</span>
+        <span class="text-xs text-text-muted whitespace-nowrap shrink-0">{{ connStore.activeConnection.host }}:{{ connStore.activeConnection.port }}</span>
         <span class="badge bg-redis-light text-redis text-[10px] shrink-0">DB{{ connStore.activeConnection.db }}</span>
       </template>
       <template v-else>

@@ -136,7 +136,7 @@ function onDrop(idx: number) {
 </script>
 
 <template>
-  <div class="h-full flex flex-col p-6 overflow-y-auto">
+  <div class="h-full flex flex-col p-6 overflow-auto min-w-[600px]">
     <!-- Error Banner -->
     <transition name="slide-down">
       <div
@@ -152,7 +152,7 @@ function onDrop(idx: number) {
     </transition>
 
     <!-- Header + QPS -->
-    <div class="flex items-start justify-between mb-4">
+    <div class="flex items-start justify-between gap-3 mb-4 flex-wrap">
       <div>
         <h2 class="text-xl font-semibold text-text-primary flex items-center gap-2">
           <Layers :size="20" class="text-redis" />
@@ -160,7 +160,7 @@ function onDrop(idx: number) {
         </h2>
         <p class="text-sm text-text-muted mt-1">{{ t("pipeline.commandsQueued", { count: pipeline.commandCount }) }}</p>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 flex-wrap">
         <button @click="openSaveDialog()" :disabled="pipeline.commandCount === 0"
           class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-text-secondary bg-bg-primary border border-border rounded-lg hover:bg-bg-hover transition-colors disabled:opacity-40">
           <Save :size="13" /> {{ t("pipeline.saveAs") }}
@@ -216,7 +216,7 @@ function onDrop(idx: number) {
       <p class="text-xs font-medium text-text-secondary mb-2 flex items-center gap-1.5">
         <Zap :size="12" class="text-redis" /> {{ t("status.qps") }}: {{ metrics.qps }}
       </p>
-      <QpsChart :data="metrics.qpsHistory" :width="900" :height="80" />
+      <QpsChart :data="metrics.qpsHistory" :height="80" />
     </div>
 
     <div class="flex gap-4 flex-1 min-h-0">
@@ -296,13 +296,13 @@ function onDrop(idx: number) {
       </div>
 
       <!-- Saved Pipelines Panel -->
-      <div class="w-64 shrink-0" v-if="showSavedList">
-        <div class="card p-4">
-          <div class="flex items-center justify-between mb-3">
+      <div class="w-64 shrink-0 flex flex-col min-h-0" v-if="showSavedList">
+        <div class="card p-4 flex flex-col min-h-0">
+          <div class="flex items-center justify-between mb-3 shrink-0">
             <h3 class="text-sm font-semibold text-text-primary">{{ t("pipeline.savedPipelines") }}</h3>
             <span class="text-[10px] text-text-muted">{{ pipeline.savedPipelines.length }}</span>
           </div>
-          <div class="space-y-2 max-h-[calc(100vh-280px)] overflow-y-auto">
+          <div class="space-y-2 flex-1 overflow-y-auto min-h-0">
             <p v-if="pipeline.savedPipelines.length === 0" class="text-xs text-text-muted text-center py-6">
               {{ t("pipeline.noSavedPipelines") }}
             </p>

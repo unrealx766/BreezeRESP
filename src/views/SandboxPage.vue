@@ -39,9 +39,9 @@ function truncateValue(val: string | null): string {
 </script>
 
 <template>
-  <div class="h-full flex flex-col p-6 overflow-y-auto">
+  <div class="h-full flex flex-col p-6 overflow-hidden min-w-[600px]">
     <!-- Header -->
-    <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center justify-between mb-4 shrink-0">
       <div>
         <h2 class="text-xl font-semibold text-text-primary flex items-center gap-2">
           <FlaskConical :size="20" class="text-redis" />
@@ -58,7 +58,7 @@ function truncateValue(val: string | null): string {
     <transition name="slide-down">
       <div
         v-if="sandbox.lastError"
-        class="flex items-center gap-3 px-4 py-2.5 bg-danger/5 border border-danger/20 rounded-lg mb-4"
+        class="flex items-center gap-3 px-4 py-2.5 bg-danger/5 border border-danger/20 rounded-lg mb-4 shrink-0"
       >
         <AlertTriangle :size="16" class="text-danger shrink-0" />
         <p class="flex-1 text-sm text-danger">{{ sandbox.lastError }}</p>
@@ -69,7 +69,7 @@ function truncateValue(val: string | null): string {
     </transition>
 
     <!-- Command Input Terminal -->
-    <div class="card overflow-hidden mb-4">
+    <div class="card overflow-hidden mb-4 shrink-0">
       <div class="bg-gray-900 px-4 py-2 flex items-center gap-2">
         <Terminal :size="14" class="text-green-400" />
         <span class="text-xs text-green-400 font-mono">redis&gt;</span>
@@ -85,8 +85,8 @@ function truncateValue(val: string | null): string {
         </button>
       </div>
       <div class="p-4 bg-bg-primary">
-        <div class="flex gap-3">
-          <div class="flex-1">
+        <div class="flex flex-col sm:flex-row gap-3">
+          <div class="flex-1 min-w-0">
             <textarea
               v-model="sandbox.commandInput"
               @keydown="handleKeydown"
@@ -95,11 +95,11 @@ function truncateValue(val: string | null): string {
               class="w-full px-3 py-2 text-sm font-mono bg-white border border-border rounded-lg focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20 resize-none"
             />
           </div>
-          <div class="flex flex-col gap-2 shrink-0">
+          <div class="flex flex-row sm:flex-col gap-2 shrink-0">
             <button
               @click="sandbox.executePreview()"
               :disabled="!sandbox.commandInput.trim() || sandbox.executing"
-              class="inline-flex items-center justify-center gap-1.5 w-36 h-10 text-sm font-medium text-white bg-redis rounded-lg hover:bg-redis-dark transition-colors disabled:opacity-50"
+              class="inline-flex items-center justify-center gap-1.5 w-full sm:w-36 h-10 text-sm font-medium text-white bg-redis rounded-lg hover:bg-redis-dark transition-colors disabled:opacity-50"
             >
               <Play :size="14" />
               <span>{{ sandbox.executing ? t("sandbox.executing") : t("sandbox.preview") }}</span>
@@ -107,7 +107,7 @@ function truncateValue(val: string | null): string {
             <button
               v-show="sandbox.showPreview"
               @click="sandbox.resetPreview()"
-              class="inline-flex items-center justify-center gap-1.5 w-36 h-9 text-xs text-text-secondary bg-bg-primary border border-border rounded-lg hover:bg-bg-hover transition-colors"
+              class="inline-flex items-center justify-center gap-1.5 w-full sm:w-36 h-9 text-xs text-text-secondary bg-bg-primary border border-border rounded-lg hover:bg-bg-hover transition-colors"
             >
               {{ t("common.cancel") }}
             </button>
@@ -118,12 +118,12 @@ function truncateValue(val: string | null): string {
 
     <!-- Diff Preview -->
     <transition name="slide-down">
-    <div v-if="sandbox.showPreview" class="card overflow-hidden mb-4">
+    <div v-if="sandbox.showPreview" class="card overflow-hidden mb-4 shrink-0">
       <!-- Diff Header -->
-      <div class="px-4 py-3 bg-bg-primary border-b border-border flex items-center justify-between">
-        <div class="flex items-center gap-3">
+      <div class="px-4 py-3 bg-bg-primary border-b border-border flex items-center justify-between flex-wrap gap-2">
+        <div class="flex items-center gap-3 flex-wrap">
           <h3 class="text-sm font-semibold text-text-primary">{{ t("sandbox.diff") }}</h3>
-          <div class="flex items-center gap-2 text-xs">
+          <div class="flex items-center gap-2 text-xs flex-wrap">
             <span class="flex items-center gap-1 text-success" v-if="sandbox.addedCount">
               <Plus :size="12" /> {{ sandbox.addedCount }}
             </span>
@@ -162,7 +162,7 @@ function truncateValue(val: string | null): string {
       </div>
 
       <!-- Diff Entries -->
-      <div v-if="sandbox.currentDiff.length > 0" class="divide-y divide-border-light">
+      <div v-if="sandbox.currentDiff.length > 0" class="divide-y divide-border-light overflow-y-auto max-h-[400px]">
         <div v-for="(entry, i) in sandbox.currentDiff" :key="i" class="p-4">
           <div class="flex items-center gap-2 mb-2 min-w-0">
             <span class="badge text-[10px] shrink-0"
@@ -180,7 +180,7 @@ function truncateValue(val: string | null): string {
             <span class="text-xs font-mono text-text-secondary truncate" :title="entry.path">{{ entry.path }}</span>
           </div>
 
-          <div class="grid grid-cols-2 gap-3 min-w-0">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 min-w-0">
             <!-- Before -->
             <div class="min-w-0">
               <p class="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-1">{{ t("sandbox.before") }}</p>
@@ -204,17 +204,17 @@ function truncateValue(val: string | null): string {
     </transition>
 
     <!-- History -->
-    <div class="card">
-      <div class="px-4 py-3 border-b border-border-light flex items-center gap-2">
+    <div class="card flex-1 min-h-0 flex flex-col">
+      <div class="px-4 py-3 border-b border-border-light flex items-center gap-2 shrink-0">
         <History :size="14" class="text-text-muted" />
         <h3 class="text-sm font-semibold text-text-primary">{{ t("sandbox.history") }}</h3>
       </div>
       <div v-if="sandbox.history.length === 0" class="p-8 text-center text-text-muted text-sm">
         {{ t("sandbox.noHistory") }}
       </div>
-      <div v-else class="divide-y divide-border-light max-h-64 overflow-y-auto">
+      <div v-else class="divide-y divide-border-light flex-1 min-h-0 overflow-y-auto">
         <div v-for="item in sandbox.history" :key="item.id"
-          class="px-4 py-3 flex items-center gap-3 hover:bg-bg-hover/50 transition-colors">
+          class="px-4 py-3 flex items-center gap-3 hover:bg-bg-hover/50 transition-colors flex-wrap">
           <span class="badge text-[10px] shrink-0"
             :class="{
               'bg-success/10 text-success': item.status === 'applied',
@@ -223,7 +223,7 @@ function truncateValue(val: string | null): string {
             }">
             {{ t(`sandbox.${item.status === 'rolled-back' ? 'rolledBack' : item.status}`) }}
           </span>
-          <span class="text-xs font-mono text-text-primary truncate flex-1">{{ item.command }}</span>
+          <span class="text-xs font-mono text-text-primary truncate flex-1 min-w-[120px]">{{ item.command }}</span>
           <span class="text-[10px] text-text-muted shrink-0">{{ item.diffCount }} changes</span>
           <span class="text-[10px] text-text-muted shrink-0">{{ formatTime(item.timestamp) }}</span>
           <button

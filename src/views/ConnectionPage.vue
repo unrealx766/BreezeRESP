@@ -142,7 +142,7 @@ function statusColor(status: string) {
 </script>
 
 <template>
-  <div class="h-full p-6 overflow-y-auto">
+  <div class="h-full p-6 overflow-auto min-w-[500px]">
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
       <div>
