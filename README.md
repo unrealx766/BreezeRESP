@@ -3,7 +3,7 @@
 > 一款轻量、快速的 Redis 桌面客户端，基于 Tauri v2 + Vue 3 构建。
 
 ![Version](https://img.shields.io/badge/version-0.1.0-blue)
-![License](https://img.shields.io/badge/license-GPL--3.0-blue)
+![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 
 ---
@@ -71,8 +71,8 @@ BreezeRESP/
 
 ### 环境要求
 
-- [Node.js](https://nodejs.org/) >= 18
-- [Rust](https://www.rust-lang.org/tools/install) >= 1.70
+- [Node.js](https://nodejs.org/) >= 24.11.1
+- [Rust](https://www.rust-lang.org/tools/install) >= 1.96.0
 - [Tauri Prerequisites](https://v2.tauri.app/start/prerequisites/)
 
 ### 安装依赖
@@ -119,11 +119,7 @@ npm run dev
 
 ## 📄 License
 
-[GPL-3.0](LICENSE) — 本项目采用 GNU General Public License v3 开源协议。
-
-- 你可以自由使用、修改和分发本软件
-- 分发修改版本时必须同样以 GPL v3 协议开源
-- 本软件不提供任何担保
+[Apache 2.0](LICENSE) — 本项目采用 Apache 2.0 开源协议。
 
 ---
 
