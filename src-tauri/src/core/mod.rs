@@ -4,3 +4,4 @@ pub mod metrics;
 pub mod config_store;
 pub mod pipeline_store;
 pub mod shadow_store;
+pub mod format;

@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
 import { useSandboxStore } from "@/stores/sandboxStore";
+import { useConnectionStore } from "@/stores/connectionStore";
 import { writeCommandTemplates } from "@/utils/commandTemplates";
+import { truncateValue } from "@/utils/format";
 import {
   FlaskConical, Play, Check, History,
-  Plus, Minus, Edit3, Terminal, AlertTriangle, X, Hash,
+  Plus, Minus, Edit3, Terminal, AlertTriangle, Hash,
 } from "lucide-vue-next";
 
 const { t } = useI18n();
 const sandbox = useSandboxStore();
+const connStore = useConnectionStore();
 
 function handleKeydown(e: KeyboardEvent) {
   if (e.key === "Enter" && !e.shiftKey) {
@@ -27,15 +30,6 @@ const commandTemplates = writeCommandTemplates;
 function useTemplate(tpl: typeof commandTemplates[0]) {
   sandbox.commandInput = [tpl.cmd, ...tpl.args].join(" ");
 }
-
-const MAX_DISPLAY_LENGTH = 2000;
-function truncateValue(val: string | null): string {
-  if (val == null) return "(empty)";
-  if (val.length > MAX_DISPLAY_LENGTH) {
-    return val.slice(0, MAX_DISPLAY_LENGTH) + `\n... (${val.length - MAX_DISPLAY_LENGTH} more characters)`;
-  }
-  return val;
-}
 </script>
 
 <template>
@@ -53,20 +47,6 @@ function truncateValue(val: string | null): string {
         </p>
       </div>
     </div>
-
-    <!-- Error Banner -->
-    <transition name="slide-down">
-      <div
-        v-if="sandbox.lastError"
-        class="flex items-center gap-3 px-4 py-2.5 bg-danger/5 border border-danger/20 rounded-lg mb-4 shrink-0"
-      >
-        <AlertTriangle :size="16" class="text-danger shrink-0" />
-        <p class="flex-1 text-sm text-danger">{{ sandbox.lastError }}</p>
-        <button @click="sandbox.lastError = null" class="text-text-muted hover:text-text-primary shrink-0">
-          <X :size="14" />
-        </button>
-      </div>
-    </transition>
 
     <!-- Command Input Terminal -->
     <div class="card overflow-hidden mb-4 shrink-0">
@@ -98,8 +78,9 @@ function truncateValue(val: string | null): string {
           <div class="flex flex-row sm:flex-col gap-2 shrink-0">
             <button
               @click="sandbox.executePreview()"
-              :disabled="!sandbox.commandInput.trim() || sandbox.executing"
+              :disabled="!sandbox.commandInput.trim() || sandbox.executing || !connStore.activeConnectionId"
               class="inline-flex items-center justify-center gap-1.5 w-full sm:w-36 h-10 text-sm font-medium text-white bg-redis rounded-lg hover:bg-redis-dark transition-colors disabled:opacity-50"
+              :title="!connStore.activeConnectionId ? t('status.noConnection') : ''"
             >
               <Play :size="14" />
               <span>{{ sandbox.executing ? t("sandbox.executing") : t("sandbox.preview") }}</span>
@@ -141,7 +122,7 @@ function truncateValue(val: string | null): string {
         <div class="flex items-center gap-2">
           <button v-if="!sandbox.isReadOnly"
             @click="sandbox.applyChange()"
-            :disabled="sandbox.applying"
+            :disabled="sandbox.applying || !connStore.activeConnectionId"
             class="inline-flex items-center justify-center gap-1.5 w-28 h-8 text-xs font-medium text-white bg-success rounded-lg hover:bg-success/90 transition-colors disabled:opacity-50">
             <Check :size="13" />
             <span>{{ sandbox.applying ? t("sandbox.applying") : t("sandbox.apply") }}</span>

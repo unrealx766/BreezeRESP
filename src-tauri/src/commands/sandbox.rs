@@ -1,4 +1,5 @@
 use crate::AppState;
+use crate::core::format::{format_redis_value, format_for_display, get_key_value_string};
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -22,91 +23,6 @@ pub struct SandboxPreview {
     pub snapshot_id: String,
 }
 
-/// Get the current canonical string representation of a key's value.
-/// Used for storage, comparison, and rollback — must be stable/deterministic.
-async fn get_key_value_string(
-    conn: &mut deadpool_redis::Connection,
-    key: &str,
-) -> Option<String> {
-    let type_str: String = redis::cmd("TYPE")
-        .arg(key)
-        .query_async(&mut **conn)
-        .await
-        .ok()?;
-
-    if type_str == "none" {
-        return None;
-    }
-
-    match type_str.as_str() {
-        "string" => {
-            let val: String = conn.get(key).await.ok()?;
-            Some(val)
-        }
-        "hash" => {
-            let fields: Vec<(String, String)> = conn.hgetall(key).await.ok()?;
-            Some(serde_json::to_string(&fields).unwrap_or_default())
-        }
-        "list" => {
-            let items: Vec<String> = conn.lrange(key, 0, -1).await.ok()?;
-            Some(serde_json::to_string(&items).unwrap_or_default())
-        }
-        "set" => {
-            let members: Vec<String> = conn.smembers(key).await.ok()?;
-            Some(serde_json::to_string(&members).unwrap_or_default())
-        }
-        "zset" => {
-            let members: Vec<(String, f64)> = redis::cmd("ZRANGE")
-                .arg(key)
-                .arg(0)
-                .arg(-1)
-                .arg("WITHSCORES")
-                .query_async(&mut **conn)
-                .await
-                .ok()?;
-            Some(serde_json::to_string(&members).unwrap_or_default())
-        }
-        _ => Some("(unsupported type)".to_string()),
-    }
-}
-
-/// Format a stored value string for human-readable display in the diff UI.
-/// Tries to parse JSON and pretty-print; falls back to raw string.
-fn format_for_display(raw: &str) -> String {
-    // Try parsing as array of tuples (hash/zset format)
-    if let Ok(pairs) = serde_json::from_str::<Vec<(String, serde_json::Value)>>(raw) {
-        if pairs.is_empty() {
-            return "(empty)".to_string();
-        }
-        let lines: Vec<String> = pairs
-            .iter()
-            .map(|(k, v)| {
-                let val_str = match v {
-                    serde_json::Value::String(s) => s.clone(),
-                    serde_json::Value::Number(n) => n.to_string(),
-                    other => other.to_string(),
-                };
-                format!("  {}: {}", k, val_str)
-            })
-            .collect();
-        return format!("{{\n{}\n}}", lines.join(",\n"));
-    }
-    // Try parsing as string array (list/set format)
-    if let Ok(items) = serde_json::from_str::<Vec<String>>(raw) {
-        if items.is_empty() {
-            return "(empty)".to_string();
-        }
-        let lines: Vec<String> = items
-            .iter()
-            .enumerate()
-            .map(|(i, v)| format!("  [{}] {}", i, v))
-            .collect();
-        return lines.join("\n");
-    }
-    // Fallback: return raw string as-is (simple string values)
-    raw.to_string()
-}
-
 /// Get the Redis type of a key (string, hash, list, set, zset, or "none" if missing)
 async fn get_key_type(
     conn: &mut deadpool_redis::Connection,
@@ -117,43 +33,6 @@ async fn get_key_type(
         .query_async::<String>(&mut **conn)
         .await
         .unwrap_or_else(|_| "none".to_string())
-}
-
-/// Format a redis::Value into a human-readable string (for read-only command results)
-fn format_redis_value(val: &redis::Value) -> String {
-    match val {
-        redis::Value::Nil => "(nil)".to_string(),
-        redis::Value::Int(n) => n.to_string(),
-        redis::Value::BulkString(data) => {
-            String::from_utf8_lossy(data).to_string()
-        }
-        redis::Value::Array(arr) => {
-            if arr.is_empty() {
-                "(empty array)".to_string()
-            } else {
-                let lines: Vec<String> = arr
-                    .iter()
-                    .enumerate()
-                    .map(|(i, v)| format!("  [{}] {}", i, format_redis_value(v)))
-                    .collect();
-                lines.join("\n")
-            }
-        }
-        redis::Value::Okay => "OK".to_string(),
-        redis::Value::SimpleString(s) => s.clone(),
-        redis::Value::Map(map) => {
-            if map.is_empty() {
-                "(empty map)".to_string()
-            } else {
-                let lines: Vec<String> = map
-                    .iter()
-                    .map(|(k, v)| format!("  {}: {}", format_redis_value(k), format_redis_value(v)))
-                    .collect();
-                format!("{{\n{}\n}}", lines.join(",\n"))
-            }
-        }
-        _ => format!("{:?}", val),
-    }
 }
 
 /// Read-only commands that don't modify data — show result directly
@@ -320,38 +199,42 @@ pub async fn sandbox_preview(
     let mut diff = Vec::new();
     if let Some(dr) = diff_result {
         for (key, val) in dr.added {
+            let kt = key_types.get(&key).cloned().unwrap_or_default();
             diff.push(DiffEntry {
                 path: key.clone(),
-                key_type: key_types.get(&key).cloned(),
+                key_type: Some(kt.clone()),
                 before: None,
-                after: Some(format_for_display(&val)),
+                after: Some(format_for_display(&val, &kt)),
                 change_type: "added".to_string(),
             });
         }
         for (key, before, after) in dr.modified {
+            let kt = key_types.get(&key).cloned().unwrap_or_default();
             diff.push(DiffEntry {
                 path: key.clone(),
-                key_type: key_types.get(&key).cloned(),
-                before: Some(format_for_display(&before)),
-                after: Some(format_for_display(&after)),
+                key_type: Some(kt.clone()),
+                before: Some(format_for_display(&before, &kt)),
+                after: Some(format_for_display(&after, &kt)),
                 change_type: "modified".to_string(),
             });
         }
         for (key, val) in dr.deleted {
+            let kt = key_types.get(&key).cloned().unwrap_or_default();
             diff.push(DiffEntry {
                 path: key.clone(),
-                key_type: key_types.get(&key).cloned(),
-                before: Some(format_for_display(&val)),
+                key_type: Some(kt.clone()),
+                before: Some(format_for_display(&val, &kt)),
                 after: None,
                 change_type: "deleted".to_string(),
             });
         }
         for (key, val) in dr.unchanged {
+            let kt = key_types.get(&key).cloned().unwrap_or_default();
             diff.push(DiffEntry {
                 path: key.clone(),
-                key_type: key_types.get(&key).cloned(),
-                before: Some(format_for_display(&val)),
-                after: Some(format_for_display(&val)),
+                key_type: Some(kt.clone()),
+                before: Some(format_for_display(&val, &kt)),
+                after: Some(format_for_display(&val, &kt)),
                 change_type: "unchanged".to_string(),
             });
         }

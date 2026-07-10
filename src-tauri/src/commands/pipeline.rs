@@ -1,4 +1,5 @@
 use crate::AppState;
+use crate::core::format::format_redis_value;
 use crate::core::pipeline_store::{StoredPipeline, StoredPipelineCommand};
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -24,42 +25,6 @@ pub struct PipelineResponse {
     pub results: Vec<PipelineResult>,
     pub total_latency_ms: f64,
     pub individual_sum_ms: f64,
-}
-
-fn format_redis_value(val: &redis::Value) -> String {
-    match val {
-        redis::Value::Nil => "(nil)".to_string(),
-        redis::Value::Int(i) => i.to_string(),
-        redis::Value::BulkString(data) => {
-            String::from_utf8(data.clone()).unwrap_or_else(|_| format!("{:?}", data))
-        }
-        redis::Value::SimpleString(s) => s.clone(),
-        redis::Value::Array(arr) => {
-            if arr.is_empty() {
-                "(empty array)".to_string()
-            } else {
-                let lines: Vec<String> = arr
-                    .iter()
-                    .enumerate()
-                    .map(|(i, v)| format!("  [{}] {}", i, format_redis_value(v)))
-                    .collect();
-                lines.join("\n")
-            }
-        }
-        redis::Value::Map(map) => {
-            if map.is_empty() {
-                "(empty map)".to_string()
-            } else {
-                let lines: Vec<String> = map
-                    .iter()
-                    .map(|(k, v)| format!("  {}: {}", format_redis_value(k), format_redis_value(v)))
-                    .collect();
-                format!("{{\n{}\n}}", lines.join(",\n"))
-            }
-        }
-        redis::Value::Okay => "OK".to_string(),
-        _ => format!("{:?}", val),
-    }
 }
 
 /// Execute a batch of Redis commands as a pipeline

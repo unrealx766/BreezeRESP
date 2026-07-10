@@ -8,6 +8,7 @@ import { allCommandTemplates } from "@/utils/commandTemplates";
 import QpsChart from "@/components/charts/QpsChart.vue";
 import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
 import { toast } from "@/utils/toast";
+import { truncateValue } from "@/utils/format";
 import {
   Plus, Play, Trash2, Eraser, GripVertical, CheckCircle, XCircle,
   Clock, Zap, Layers, ArrowUpDown, X,
@@ -28,6 +29,12 @@ const showSavedList = ref(false);
 
 onMounted(() => {
   pipeline.loadSavedPipelines();
+  // Restore argsText from store (survives page navigation)
+  const m = new Map<string, string>();
+  for (const cmd of pipeline.commands) {
+    if (cmd.args.length > 0) m.set(cmd.id, cmd.args.join(" "));
+  }
+  argsText.value = m;
 });
 
 function openSaveDialog() {
@@ -261,9 +268,11 @@ function onDrop(idx: number) {
                     <Clock :size="10" /> {{ cmd.result.latencyMs }}ms
                   </span>
                 </div>
-                <div class="px-2 py-1.5 text-xs font-mono rounded bg-bg-primary border border-border-light max-h-24 overflow-y-auto whitespace-pre-wrap break-all"
-                  :class="cmd.result.success ? 'text-text-primary' : 'text-danger'">
-                  {{ cmd.result.success ? cmd.result.value : cmd.result.error }}
+                <div class="px-3 py-2 text-xs font-mono rounded-lg max-h-64 overflow-y-auto break-all whitespace-pre-wrap min-w-0 border"
+                  :class="cmd.result.success
+                    ? 'bg-info/5 border-info/20 text-text-primary'
+                    : 'bg-danger/5 border-danger/20 text-danger'">
+                  {{ cmd.result.success ? truncateValue(cmd.result.value) : truncateValue(cmd.result.error) }}
                 </div>
               </div>
             </div>
