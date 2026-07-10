@@ -12,6 +12,7 @@ export const useSandboxStore = defineStore("sandbox", () => {
   const rollingBack = ref(false);
   const lastError = ref<string | null>(null);
   const currentDiff = ref<DiffEntry[]>([]);
+  const commandResult = ref<string | null>(null);
   const history = ref<SandboxHistoryItem[]>([]);
   const showPreview = ref(false);
   const currentSnapshotId = ref<string | null>(null);
@@ -21,6 +22,8 @@ export const useSandboxStore = defineStore("sandbox", () => {
   const addedCount = computed(() => currentDiff.value.filter((d) => d.changeType === "added").length);
   const modifiedCount = computed(() => currentDiff.value.filter((d) => d.changeType === "modified").length);
   const deletedCount = computed(() => currentDiff.value.filter((d) => d.changeType === "deleted").length);
+  const unchangedCount = computed(() => currentDiff.value.filter((d) => d.changeType === "unchanged").length);
+  const isReadOnly = computed(() => commandResult.value != null);
 
   async function executePreview() {
     if (!commandInput.value.trim()) return;
@@ -36,17 +39,20 @@ export const useSandboxStore = defineStore("sandbox", () => {
       // Map Rust diff to frontend DiffEntry
       currentDiff.value = result.diff.map((d) => ({
         path: d.path,
+        keyType: d.keyType,
         before: d.before,
         after: d.after,
-        changeType: d.changeType as "added" | "modified" | "deleted",
+        changeType: d.changeType as "added" | "modified" | "deleted" | "unchanged",
       }));
 
+      commandResult.value = result.commandResult;
       currentSnapshotId.value = result.snapshotId;
       currentCommand.value = commandInput.value.trim();
       showPreview.value = true;
     } catch (e) {
       console.error("Sandbox preview failed:", e);
       currentDiff.value = [];
+      commandResult.value = null;
       currentSnapshotId.value = null;
     } finally {
       executing.value = false;
@@ -110,6 +116,7 @@ export const useSandboxStore = defineStore("sandbox", () => {
 
   function resetPreview() {
     currentDiff.value = [];
+    commandResult.value = null;
     showPreview.value = false;
     commandInput.value = "";
     currentSnapshotId.value = null;
@@ -159,12 +166,15 @@ export const useSandboxStore = defineStore("sandbox", () => {
     rollingBack,
     lastError,
     currentDiff,
+    commandResult,
     history,
     showPreview,
     hasDiff,
     addedCount,
     modifiedCount,
     deletedCount,
+    unchangedCount,
+    isReadOnly,
     executePreview,
     applyChange,
     resetPreview,

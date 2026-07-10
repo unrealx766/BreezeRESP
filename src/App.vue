@@ -38,9 +38,9 @@ onMounted(async () => {
       <AppHeader />
 
       <!-- Content -->
-      <main class="flex-1 overflow-auto">
+      <main class="flex-1 overflow-auto relative">
         <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
+          <transition name="fade">
             <component :is="Component" v-if="Component" :key="$route.fullPath" />
           </transition>
         </router-view>
@@ -63,5 +63,10 @@ onMounted(async () => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+.fade-leave-active {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
 }
 </style>

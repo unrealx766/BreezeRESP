@@ -143,6 +143,7 @@
     "added": "新增",
     "modified": "修改",
     "deleted": "删除",
+    "unchanged": "未变更",
     "history": "操作历史",
     "noHistory": "暂无操作记录",
     "applied": "已应用",
@@ -153,7 +154,9 @@
     "rollingBack": "回滚中...",
     "changesSummary": "变更摘要: +{added} ~{modified} -{deleted}",
     "hint": "沙盒模式下命令不会直接执行，而是先预览变更影响",
-    "templates": "命令模板"
+    "templates": "命令模板",
+    "result": "查询结果",
+    "readOnly": "只读"
   },
   "status": {
     "memory": "内存",

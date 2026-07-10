@@ -3,6 +3,7 @@ import { ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { usePipelineStore } from "@/stores/pipelineStore";
 import { useMetricsStore } from "@/stores/metricsStore";
+import { allCommandTemplates } from "@/utils/commandTemplates";
 import QpsChart from "@/components/charts/QpsChart.vue";
 import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
 import {
@@ -108,22 +109,7 @@ function initArgsText(cmd: any) {
   }
 }
 
-const commandTemplates = [
-  { label: "GET", cmd: "GET", args: ["key"] },
-  { label: "SET", cmd: "SET", args: ["key", "value"] },
-  { label: "HGETALL", cmd: "HGETALL", args: ["key"] },
-  { label: "HSET", cmd: "HSET", args: ["key", "field", "value"] },
-  { label: "LPUSH", cmd: "LPUSH", args: ["key", "value"] },
-  { label: "LRANGE", cmd: "LRANGE", args: ["key", "0", "-1"] },
-  { label: "SADD", cmd: "SADD", args: ["key", "member"] },
-  { label: "SMEMBERS", cmd: "SMEMBERS", args: ["key"] },
-  { label: "ZADD", cmd: "ZADD", args: ["key", "1", "member"] },
-  { label: "ZRANGE", cmd: "ZRANGE", args: ["key", "0", "-1", "WITHSCORES"] },
-  { label: "TTL", cmd: "TTL", args: ["key"] },
-  { label: "DEL", cmd: "DEL", args: ["key"] },
-  { label: "EXISTS", cmd: "EXISTS", args: ["key"] },
-  { label: "INFO", cmd: "INFO", args: [] },
-];
+const commandTemplates = allCommandTemplates;
 
 function addFromTemplate(tpl: typeof commandTemplates[0]) {
   const argsStr = tpl.args.join(" ");
@@ -152,16 +138,18 @@ function onDrop(idx: number) {
 <template>
   <div class="h-full flex flex-col p-6 overflow-y-auto">
     <!-- Error Banner -->
-    <div
-      v-if="pipeline.lastError"
-      class="flex items-center gap-3 px-4 py-2.5 bg-danger/5 border border-danger/20 rounded-lg mb-4"
-    >
-      <AlertTriangle :size="16" class="text-danger shrink-0" />
-      <p class="flex-1 text-sm text-danger">{{ pipeline.lastError }}</p>
-      <button @click="pipeline.lastError = null" class="text-text-muted hover:text-text-primary shrink-0">
-        <X :size="14" />
-      </button>
-    </div>
+    <transition name="slide-down">
+      <div
+        v-if="pipeline.lastError"
+        class="flex items-center gap-3 px-4 py-2.5 bg-danger/5 border border-danger/20 rounded-lg mb-4"
+      >
+        <AlertTriangle :size="16" class="text-danger shrink-0" />
+        <p class="flex-1 text-sm text-danger">{{ pipeline.lastError }}</p>
+        <button @click="pipeline.lastError = null" class="text-text-muted hover:text-text-primary shrink-0">
+          <X :size="14" />
+        </button>
+      </div>
+    </transition>
 
     <!-- Header + QPS -->
     <div class="flex items-start justify-between mb-4">
@@ -192,8 +180,9 @@ function onDrop(idx: number) {
           <Trash2 :size="13" /> {{ t("pipeline.clearAll") }}
         </button>
         <button @click="pipeline.executeAll()" :disabled="pipeline.commandCount === 0 || pipeline.executing"
-          class="inline-flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium text-white bg-redis rounded-lg hover:bg-redis-dark transition-colors disabled:opacity-50 shadow-sm">
-          <Play :size="14" /> {{ pipeline.executing ? t("pipeline.executing") : t("pipeline.executeAll") }}
+          class="inline-flex items-center justify-center gap-1.5 w-36 h-9 text-sm font-medium text-white bg-redis rounded-lg hover:bg-redis-dark transition-colors disabled:opacity-50 shadow-sm">
+          <Play :size="14" />
+          <span>{{ pipeline.executing ? t("pipeline.executing") : t("pipeline.executeAll") }}</span>
         </button>
       </div>
     </div>
@@ -285,7 +274,7 @@ function onDrop(idx: number) {
                     <Clock :size="10" /> {{ cmd.result.latencyMs }}ms
                   </span>
                 </div>
-                <div class="px-2 py-1.5 text-xs font-mono rounded bg-bg-primary border border-border-light max-h-24 overflow-y-auto"
+                <div class="px-2 py-1.5 text-xs font-mono rounded bg-bg-primary border border-border-light max-h-24 overflow-y-auto whitespace-pre-wrap break-all"
                   :class="cmd.result.success ? 'text-text-primary' : 'text-danger'">
                   {{ cmd.result.success ? cmd.result.value : cmd.result.error }}
                 </div>

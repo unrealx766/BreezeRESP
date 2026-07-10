@@ -35,8 +35,27 @@ fn format_redis_value(val: &redis::Value) -> String {
         }
         redis::Value::SimpleString(s) => s.clone(),
         redis::Value::Array(arr) => {
-            let items: Vec<String> = arr.iter().map(format_redis_value).collect();
-            format!("[{}]", items.join(", "))
+            if arr.is_empty() {
+                "(empty array)".to_string()
+            } else {
+                let lines: Vec<String> = arr
+                    .iter()
+                    .enumerate()
+                    .map(|(i, v)| format!("  [{}] {}", i, format_redis_value(v)))
+                    .collect();
+                lines.join("\n")
+            }
+        }
+        redis::Value::Map(map) => {
+            if map.is_empty() {
+                "(empty map)".to_string()
+            } else {
+                let lines: Vec<String> = map
+                    .iter()
+                    .map(|(k, v)| format!("  {}: {}", format_redis_value(k), format_redis_value(v)))
+                    .collect();
+                format!("{{\n{}\n}}", lines.join(",\n"))
+            }
         }
         redis::Value::Okay => "OK".to_string(),
         _ => format!("{:?}", val),

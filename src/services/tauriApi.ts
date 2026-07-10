@@ -56,6 +56,7 @@ export interface RustPipelineResponse {
 
 export interface RustDiffEntry {
   path: string;
+  keyType: string | null;
   before: string | null;
   after: string | null;
   changeType: string;
@@ -64,6 +65,7 @@ export interface RustDiffEntry {
 export interface RustSandboxPreview {
   command: string;
   diff: RustDiffEntry[];
+  commandResult: string | null;
   snapshotId: string;
 }
 

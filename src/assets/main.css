@@ -106,3 +106,24 @@
     background: var(--color-border);
   }
 }
+
+/* Slide-down transition for conditional blocks */
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.2s ease;
+  overflow: hidden;
+}
+.slide-down-enter-from,
+.slide-down-leave-to {
+  opacity: 0;
+  max-height: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-width: 0;
+}
+.slide-down-enter-to,
+.slide-down-leave-from {
+  opacity: 1;
+  max-height: 500px;
+}

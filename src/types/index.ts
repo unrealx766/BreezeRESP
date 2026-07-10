@@ -82,10 +82,11 @@ export interface SavedPipeline {
 }
 
 // Sandbox
-export type DiffChangeType = "added" | "modified" | "deleted";
+export type DiffChangeType = "added" | "modified" | "deleted" | "unchanged";
 
 export interface DiffEntry {
   path: string;
+  keyType: string | null;
   before: string | null;
   after: string | null;
   changeType: DiffChangeType;

@@ -143,6 +143,7 @@
     "added": "Added",
     "modified": "Modified",
     "deleted": "Deleted",
+    "unchanged": "Unchanged",
     "history": "History",
     "noHistory": "No operation history",
     "applied": "Applied",
@@ -153,7 +154,9 @@
     "rollingBack": "Rolling back...",
     "changesSummary": "Summary: +{added} ~{modified} -{deleted}",
     "hint": "Commands are not executed directly in sandbox mode. Preview changes first.",
-    "templates": "Templates"
+    "templates": "Templates",
+    "result": "Query Result",
+    "readOnly": "Read-only"
   },
   "status": {
     "memory": "Memory",

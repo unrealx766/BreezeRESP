@@ -21,6 +21,7 @@ pub struct DiffResult {
     pub added: Vec<(String, String)>,
     pub modified: Vec<(String, String, String)>, // key, before, after
     pub deleted: Vec<(String, String)>,
+    pub unchanged: Vec<(String, String)>, // key, value
 }
 
 impl ShadowStore {
@@ -62,17 +63,20 @@ impl ShadowStore {
         let mut added = Vec::new();
         let mut modified = Vec::new();
         let mut deleted = Vec::new();
+        let mut unchanged = Vec::new();
 
-        // Check for added and modified
+        // Check for added, modified, and unchanged
         for (key, after_val) in &snap.after_state {
             match snap.before_state.get(key) {
                 Some(before_val) if before_val != after_val => {
                     modified.push((key.clone(), before_val.clone(), after_val.clone()));
                 }
+                Some(before_val) => {
+                    unchanged.push((key.clone(), before_val.clone()));
+                }
                 None => {
                     added.push((key.clone(), after_val.clone()));
                 }
-                _ => {} // unchanged
             }
         }
 
@@ -87,7 +91,13 @@ impl ShadowStore {
             added,
             modified,
             deleted,
+            unchanged,
         })
+    }
+
+    /// Alias for compute_diff that explicitly includes unchanged entries.
+    pub fn compute_diff_with_unchanged(&self, id: &str) -> Option<DiffResult> {
+        self.compute_diff(id)
     }
 
     /// Remove a snapshot.

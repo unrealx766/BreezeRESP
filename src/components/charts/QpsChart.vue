@@ -1,19 +1,40 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, computed } from "vue";
+import { ref, onMounted, onBeforeUnmount, watch, computed } from "vue";
 import type { QpsDataPoint } from "@/types";
 
 const props = defineProps<{
   data: QpsDataPoint[];
-  width?: number;
   height?: number;
 }>();
 
+const containerRef = ref<HTMLElement | null>(null);
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const tooltip = ref<{ x: number; y: number; value: number } | null>(null);
+const containerWidth = ref(400);
 
-const w = computed(() => props.width ?? 400);
 const h = computed(() => props.height ?? 120);
 const padding = { top: 10, right: 10, bottom: 20, left: 40 };
+
+let ro: ResizeObserver | null = null;
+
+onMounted(() => {
+  if (containerRef.value) {
+    containerWidth.value = containerRef.value.clientWidth;
+    ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        containerWidth.value = entry.contentRect.width;
+      }
+    });
+    ro.observe(containerRef.value);
+  }
+  draw();
+});
+
+onBeforeUnmount(() => {
+  ro?.disconnect();
+});
+
+const w = computed(() => containerWidth.value);
 
 function draw() {
   const canvas = canvasRef.value;
@@ -128,13 +149,12 @@ function handleMouseLeave() {
   tooltip.value = null;
 }
 
-onMounted(() => draw());
 watch(() => props.data, draw, { deep: true });
 watch([w, h], draw);
 </script>
 
 <template>
-  <div class="relative" :style="{ width: `${w}px`, height: `${h}px` }">
+  <div ref="containerRef" class="relative w-full" :style="{ height: `${h}px` }">
     <canvas
       ref="canvasRef"
       :style="{ width: `${w}px`, height: `${h}px` }"

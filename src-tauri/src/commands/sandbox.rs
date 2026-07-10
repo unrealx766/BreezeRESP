@@ -8,19 +8,22 @@ use tauri::State;
 #[serde(rename_all = "camelCase")]
 pub struct DiffEntry {
     pub path: String,
+    pub key_type: Option<String>,
     pub before: Option<String>,
     pub after: Option<String>,
-    pub change_type: String, // "added", "modified", "deleted"
+    pub change_type: String, // "added", "modified", "deleted", "unchanged"
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SandboxPreview {
     pub command: String,
     pub diff: Vec<DiffEntry>,
+    pub command_result: Option<String>,
     pub snapshot_id: String,
 }
 
-/// Get the current string representation of a key's value
+/// Get the current canonical string representation of a key's value.
+/// Used for storage, comparison, and rollback — must be stable/deterministic.
 async fn get_key_value_string(
     conn: &mut deadpool_redis::Connection,
     key: &str,
@@ -66,6 +69,102 @@ async fn get_key_value_string(
         _ => Some("(unsupported type)".to_string()),
     }
 }
+
+/// Format a stored value string for human-readable display in the diff UI.
+/// Tries to parse JSON and pretty-print; falls back to raw string.
+fn format_for_display(raw: &str) -> String {
+    // Try parsing as array of tuples (hash/zset format)
+    if let Ok(pairs) = serde_json::from_str::<Vec<(String, serde_json::Value)>>(raw) {
+        if pairs.is_empty() {
+            return "(empty)".to_string();
+        }
+        let lines: Vec<String> = pairs
+            .iter()
+            .map(|(k, v)| {
+                let val_str = match v {
+                    serde_json::Value::String(s) => s.clone(),
+                    serde_json::Value::Number(n) => n.to_string(),
+                    other => other.to_string(),
+                };
+                format!("  {}: {}", k, val_str)
+            })
+            .collect();
+        return format!("{{\n{}\n}}", lines.join(",\n"));
+    }
+    // Try parsing as string array (list/set format)
+    if let Ok(items) = serde_json::from_str::<Vec<String>>(raw) {
+        if items.is_empty() {
+            return "(empty)".to_string();
+        }
+        let lines: Vec<String> = items
+            .iter()
+            .enumerate()
+            .map(|(i, v)| format!("  [{}] {}", i, v))
+            .collect();
+        return lines.join("\n");
+    }
+    // Fallback: return raw string as-is (simple string values)
+    raw.to_string()
+}
+
+/// Get the Redis type of a key (string, hash, list, set, zset, or "none" if missing)
+async fn get_key_type(
+    conn: &mut deadpool_redis::Connection,
+    key: &str,
+) -> String {
+    redis::cmd("TYPE")
+        .arg(key)
+        .query_async::<String>(&mut **conn)
+        .await
+        .unwrap_or_else(|_| "none".to_string())
+}
+
+/// Format a redis::Value into a human-readable string (for read-only command results)
+fn format_redis_value(val: &redis::Value) -> String {
+    match val {
+        redis::Value::Nil => "(nil)".to_string(),
+        redis::Value::Int(n) => n.to_string(),
+        redis::Value::BulkString(data) => {
+            String::from_utf8_lossy(data).to_string()
+        }
+        redis::Value::Array(arr) => {
+            if arr.is_empty() {
+                "(empty array)".to_string()
+            } else {
+                let lines: Vec<String> = arr
+                    .iter()
+                    .enumerate()
+                    .map(|(i, v)| format!("  [{}] {}", i, format_redis_value(v)))
+                    .collect();
+                lines.join("\n")
+            }
+        }
+        redis::Value::Okay => "OK".to_string(),
+        redis::Value::SimpleString(s) => s.clone(),
+        redis::Value::Map(map) => {
+            if map.is_empty() {
+                "(empty map)".to_string()
+            } else {
+                let lines: Vec<String> = map
+                    .iter()
+                    .map(|(k, v)| format!("  {}: {}", format_redis_value(k), format_redis_value(v)))
+                    .collect();
+                format!("{{\n{}\n}}", lines.join(",\n"))
+            }
+        }
+        _ => format!("{:?}", val),
+    }
+}
+
+/// Read-only commands that don't modify data — show result directly
+const READ_ONLY_COMMANDS: &[&str] = &[
+    "GET", "MGET", "TYPE", "TTL", "PTTL", "EXISTS", "STRLEN",
+    "HGET", "HGETALL", "HMGET", "HLEN", "HEXISTS", "HKEYS", "HVALS",
+    "LRANGE", "LLEN", "LINDEX",
+    "SMEMBERS", "SCARD", "SISMEMBER", "SRANDMEMBER",
+    "ZRANGE", "ZCARD", "ZSCORE", "ZRANK", "ZRANGEBYSCORE",
+    "KEYS", "SCAN", "DBSIZE", "INFO", "PING", "ECHO",
+];
 
 /// Extract the key(s) affected by a Redis command
 fn extract_keys(parts: &[&str]) -> Vec<String> {
@@ -123,13 +222,41 @@ pub async fn sandbox_preview(
     if parts.is_empty() {
         return Err("Empty command".to_string());
     }
+    let cmd_name_upper = parts[0].to_uppercase();
+
+    // --- Read-only commands: execute directly and return result ---
+    if READ_ONLY_COMMANDS.contains(&cmd_name_upper.as_str()) {
+        let mut redis_cmd = redis::cmd(parts[0]);
+        for arg in &parts[1..] {
+            redis_cmd.arg(*arg);
+        }
+        let result: redis::Value = redis_cmd
+            .query_async(&mut *conn)
+            .await
+            .map_err(|e| format!("Command error: {}", e))?;
+
+        let formatted = format_redis_value(&result);
+        return Ok(SandboxPreview {
+            command,
+            diff: vec![],
+            command_result: Some(formatted),
+            snapshot_id: String::new(),
+        });
+    }
+
+    // --- Write commands: capture before/after, diff, rollback ---
     let affected_keys = extract_keys(&parts);
 
-    // Step 1: Capture before state
+    // Step 1: Capture before state + key types
     let mut before_state = HashMap::new();
+    let mut key_types: HashMap<String, String> = HashMap::new();
     for key in &affected_keys {
-        if let Some(val) = get_key_value_string(&mut conn, key).await {
-            before_state.insert(key.clone(), val);
+        let kt = get_key_type(&mut conn, key).await;
+        key_types.insert(key.clone(), kt.clone());
+        if kt != "none" {
+            if let Some(val) = get_key_value_string(&mut conn, key).await {
+                before_state.insert(key.clone(), val);
+            }
         }
     }
 
@@ -153,11 +280,16 @@ pub async fn sandbox_preview(
         .await
         .map_err(|e| format!("Command error: {}", e))?;
 
-    // Step 4: Capture after state
+    // Step 4: Capture after state + update key types
     let mut after_state = HashMap::new();
     for key in &affected_keys {
-        if let Some(val) = get_key_value_string(&mut conn, key).await {
-            after_state.insert(key.clone(), val);
+        let kt = get_key_type(&mut conn, key).await;
+        // Update key_type to reflect after-execution state
+        key_types.insert(key.clone(), kt.clone());
+        if kt != "none" {
+            if let Some(val) = get_key_value_string(&mut conn, key).await {
+                after_state.insert(key.clone(), val);
+            }
         }
     }
 
@@ -166,18 +298,16 @@ pub async fn sandbox_preview(
         let ss = state.shadow_store.lock().map_err(|e| e.to_string())?;
         let mut ss = ss;
         ss.set_after_state(&snap_id, after_state);
-        ss.compute_diff(&snap_id)
+        ss.compute_diff_with_unchanged(&snap_id)
     };
 
     // Step 6: Rollback - restore original state
     for key in &affected_keys {
         match before_state.get(key) {
             Some(val) => {
-                // Restore the original value (best effort - works for string type)
                 let _: Result<(), _> = conn.set(key, val).await;
             }
             None => {
-                // Key didn't exist before, delete it
                 let _: Result<i64, _> = redis::cmd("DEL")
                     .arg(key)
                     .query_async(&mut *conn)
@@ -186,38 +316,48 @@ pub async fn sandbox_preview(
         }
     }
 
-    // Step 7: Keep snapshot for later apply/rollback (don't clean up)
-
-    // Convert DiffResult to Vec<DiffEntry>
+    // Convert DiffResult to Vec<DiffEntry> (with key_type and display formatting)
     let mut diff = Vec::new();
     if let Some(dr) = diff_result {
         for (key, val) in dr.added {
             diff.push(DiffEntry {
-                path: key,
+                path: key.clone(),
+                key_type: key_types.get(&key).cloned(),
                 before: None,
-                after: Some(val),
+                after: Some(format_for_display(&val)),
                 change_type: "added".to_string(),
             });
         }
         for (key, before, after) in dr.modified {
             diff.push(DiffEntry {
-                path: key,
-                before: Some(before),
-                after: Some(after),
+                path: key.clone(),
+                key_type: key_types.get(&key).cloned(),
+                before: Some(format_for_display(&before)),
+                after: Some(format_for_display(&after)),
                 change_type: "modified".to_string(),
             });
         }
         for (key, val) in dr.deleted {
             diff.push(DiffEntry {
-                path: key,
-                before: Some(val),
+                path: key.clone(),
+                key_type: key_types.get(&key).cloned(),
+                before: Some(format_for_display(&val)),
                 after: None,
                 change_type: "deleted".to_string(),
             });
         }
+        for (key, val) in dr.unchanged {
+            diff.push(DiffEntry {
+                path: key.clone(),
+                key_type: key_types.get(&key).cloned(),
+                before: Some(format_for_display(&val)),
+                after: Some(format_for_display(&val)),
+                change_type: "unchanged".to_string(),
+            });
+        }
     }
 
-    Ok(SandboxPreview { command, diff, snapshot_id: snap_id })
+    Ok(SandboxPreview { command, diff, command_result: None, snapshot_id: snap_id })
 }
 
 /// Apply a sandboxed change to the actual Redis instance
