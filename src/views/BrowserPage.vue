@@ -10,9 +10,9 @@ import TtlGauge from "@/components/charts/TtlGauge.vue";
 import FloatingWindow from "@/components/shared/FloatingWindow.vue";
 import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
 import {
-  Search, RefreshCw, Trash2, Copy, Tag, Database,
+  Search, RefreshCw, Trash2, Copy, Tag,
   Type, Hash, List, CircleDot, BarChart3,
-  AlertTriangle, X, Wifi, ChevronDown, Check, Pencil, Save,
+  AlertTriangle, X, Wifi, Pencil, Save,
 } from "lucide-vue-next";
 
 const { t } = useI18n();
@@ -22,10 +22,7 @@ const connStore = useConnectionStore();
 
 const confirmDialog = ref<InstanceType<typeof ConfirmDialog>>();
 
-const currentDb = ref(0);
-const switchingDb = ref(false);
 const connectionLost = ref(false);
-const showDbDropdown = ref(false);
 
 // Debounce search input: wait 300ms after user stops typing before triggering filter/scan
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -99,28 +96,6 @@ function resetSearchImmediate() {
   cascade.debouncedSearchQuery = "";
 }
 
-function selectDb(db: number) {
-  currentDb.value = db;
-  showDbDropdown.value = false;
-  handleDbChange();
-}
-
-// Sync currentDb when active connection changes
-const activeConn = computed(() => connStore.activeConnection);
-watch(activeConn, (conn) => {
-  if (conn) currentDb.value = conn.db;
-}, { immediate: true });
-
-// Sync currentDb when DB is switched externally (e.g. from sidebar)
-watch(
-  () => connStore.activeConnection?.db,
-  (db) => {
-    if (db !== undefined && db !== currentDb.value) {
-      currentDb.value = db;
-    }
-  }
-);
-
 // Watch for connection loss
 watch(
   () => connStore.activeConnection?.status,
@@ -143,24 +118,6 @@ async function handleReconnect() {
     await cascade.refreshKeys(true);
   } else {
     connectionLost.value = true;
-  }
-}
-
-async function handleDbChange() {
-  if (switchingDb.value) return;
-  const db = currentDb.value;
-  switchingDb.value = true;
-  try {
-    await connStore.switchDb(db);
-    cascade.selectedKey = null;
-    resetSearchImmediate();
-    cascade.typeFilter = "all";
-    detail.clearDetail();
-    await cascade.refreshKeys(true);
-  } catch (e) {
-    console.error("DB switch failed:", e);
-  } finally {
-    switchingDb.value = false;
   }
 }
 
@@ -464,48 +421,7 @@ onMounted(() => {
     <div class="flex-1 flex min-h-0">
     <!-- Left Panel: Key Tree -->
     <div class="w-72 border-r border-border flex flex-col bg-white shrink-0">
-      <!-- DB Selector -->
-      <div class="px-3 pt-3 pb-2 border-b border-border-light">
-        <div class="flex items-center gap-2">
-          <Database :size="13" class="text-redis shrink-0" />
-          <div class="relative flex-1">
-            <button
-              @click="showDbDropdown = !showDbDropdown"
-              :disabled="switchingDb"
-              class="w-full flex items-center justify-between px-2 py-1.5 text-xs font-mono font-semibold bg-bg-primary border border-border rounded-lg hover:border-redis/40 focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20 transition-colors disabled:opacity-50"
-            >
-              <span>DB{{ currentDb }}</span>
-              <div class="flex items-center gap-1">
-                <RefreshCw v-if="switchingDb" :size="11" class="animate-spin text-text-muted" />
-                <ChevronDown :size="12" class="text-text-muted transition-transform" :class="showDbDropdown ? 'rotate-180' : ''" />
-              </div>
-            </button>
-            <!-- Backdrop -->
-            <div v-if="showDbDropdown" class="fixed inset-0 z-40" @click="showDbDropdown = false" />
-            <!-- Dropdown panel -->
-            <div
-              v-if="showDbDropdown"
-              class="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-lg py-1 z-50 max-h-52 overflow-y-auto"
-            >
-              <div class="px-2.5 py-1 border-b border-border-light mb-0.5">
-                <span class="text-[9px] font-semibold text-text-muted uppercase tracking-wider">Database</span>
-              </div>
-              <button
-                v-for="n in 16"
-                :key="n - 1"
-                @click="selectDb(n - 1)"
-                class="w-full flex items-center justify-between px-2.5 py-1.5 text-xs font-mono transition-colors"
-                :class="currentDb === n - 1
-                  ? 'text-redis font-semibold bg-redis/5'
-                  : 'text-text-secondary font-medium hover:bg-bg-hover hover:text-text-primary'"
-              >
-                <span>DB{{ n - 1 }}</span>
-                <Check v-if="currentDb === n - 1" :size="11" class="text-redis" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <!-- Search & Filter -->
       <div class="p-3 space-y-2 border-b border-border-light">
         <div class="relative">
           <Search :size="14" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />

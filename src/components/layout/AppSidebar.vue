@@ -1,65 +1,14 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useConnectionStore } from "@/stores/connectionStore";
-import { useCascadeStore } from "@/stores/cascadeStore";
-import { useDetailStore } from "@/stores/detailStore";
-import { Database, Server, Layers, FlaskConical, Plus, Unplug, ChevronDown, Check } from "lucide-vue-next";
+import { Database, Server, Layers, FlaskConical, Plus, Unplug } from "lucide-vue-next";
 
 const router = useRouter();
 const route = useRoute();
 const { t } = useI18n();
 const connStore = useConnectionStore();
-const cascade = useCascadeStore();
-const detail = useDetailStore();
-
-const switchingDb = ref(false);
-const showDbDropdown = ref(false);
-let triggerEl: HTMLElement | null = null;
-const dbDropdownPos = ref({ top: 0, left: 0 });
-
-function setTriggerRef(el: any) {
-  triggerEl = el as HTMLElement | null;
-}
-
-function toggleDbDropdown() {
-  if (showDbDropdown.value) {
-    showDbDropdown.value = false;
-    return;
-  }
-  if (triggerEl) {
-    const rect = triggerEl.getBoundingClientRect();
-    dbDropdownPos.value = {
-      top: rect.top,
-      left: rect.left + rect.width / 2,
-    };
-  }
-  showDbDropdown.value = true;
-}
-
-function closeDbDropdown() {
-  showDbDropdown.value = false;
-}
-
-async function handleDbSwitch(connId: string, db: number) {
-  if (switchingDb.value) return;
-  switchingDb.value = true;
-  try {
-    await connStore.switchDb(db);
-    if (connStore.activeConnectionId === connId) {
-      cascade.selectedKey = null;
-      cascade.searchQuery = "";
-      cascade.typeFilter = "all";
-      detail.clearDetail();
-      await cascade.refreshKeys(true);
-    }
-  } catch (e) {
-    console.error("Sidebar DB switch failed:", e);
-  } finally {
-    switchingDb.value = false;
-  }
-}
 
 const navItems = computed(() => [
   { name: "connections", icon: Server, label: t("nav.connections"), path: "/" },
@@ -67,14 +16,6 @@ const navItems = computed(() => [
   { name: "pipeline", icon: Layers, label: t("nav.pipeline"), path: "/pipeline" },
   { name: "sandbox", icon: FlaskConical, label: t("nav.sandbox"), path: "/sandbox" },
 ]);
-
-const activeConnDb = computed(() => connStore.activeConnection?.db ?? 0);
-
-const dbDropdownStyle = computed(() => ({
-  bottom: `${window.innerHeight - dbDropdownPos.value.top + 6}px`,
-  left: `${dbDropdownPos.value.left}px`,
-  transform: 'translateX(-50%)',
-}));
 
 function isActive(path: string) {
   return route.path === path;
@@ -143,24 +84,9 @@ function navigate(path: string) {
             }"
           />
           <span class="truncate text-text-secondary flex-1" :title="conn.name">{{ conn.name }}</span>
-          <!-- DB selector for active connected connection -->
-          <div
-            v-if="conn.status === 'connected' && connStore.activeConnectionId === conn.id"
-            class="shrink-0"
-          >
-            <button
-              :ref="setTriggerRef"
-              @click.stop="toggleDbDropdown"
-              :disabled="switchingDb"
-              class="inline-flex items-center gap-0.5 text-[10px] font-mono font-semibold text-redis bg-white border border-border rounded-md px-1.5 py-0.5 hover:border-redis/40 focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20 transition-colors disabled:opacity-50"
-            >
-              <span>DB{{ conn.db }}</span>
-              <ChevronDown :size="10" class="text-redis/50 transition-transform" :class="showDbDropdown ? 'rotate-180' : ''" />
-            </button>
-          </div>
-          <!-- DB badge for other connected connections -->
+          <!-- DB badge for connected connections -->
           <span
-            v-else-if="conn.status === 'connected'"
+            v-if="conn.status === 'connected'"
             class="text-[10px] font-mono font-semibold text-redis/70 bg-redis/8 px-1.5 py-0.5 rounded shrink-0"
           >DB{{ conn.db }}</span>
           <button
@@ -175,35 +101,4 @@ function navigate(path: string) {
       </div>
     </div>
   </aside>
-
-  <!-- Teleported DB dropdown + backdrop -->
-  <Teleport to="body">
-    <!-- Invisible backdrop to close dropdown on outside click -->
-    <div
-      v-if="showDbDropdown"
-      class="fixed inset-0 z-[9998]"
-      @click="closeDbDropdown"
-    />
-    <div
-      v-if="showDbDropdown"
-      class="fixed w-28 bg-white border border-border rounded-lg shadow-lg py-1 z-[9999] max-h-48 overflow-y-auto"
-      :style="dbDropdownStyle"
-    >
-      <div class="px-2 py-1 border-b border-border-light mb-0.5">
-        <span class="text-[9px] font-semibold text-text-muted uppercase tracking-wider">Database</span>
-      </div>
-      <button
-        v-for="n in 16"
-        :key="n - 1"
-        @click="handleDbSwitch(connStore.activeConnectionId!, n - 1); closeDbDropdown()"
-        class="w-full flex items-center justify-between px-2 py-1 text-[11px] font-mono transition-colors"
-        :class="activeConnDb === n - 1
-          ? 'text-redis font-semibold bg-redis/5'
-          : 'text-text-secondary font-medium hover:bg-bg-hover hover:text-text-primary'"
-      >
-        <span>DB{{ n - 1 }}</span>
-        <Check v-if="activeConnDb === n - 1" :size="10" class="text-redis" />
-      </button>
-    </div>
-  </Teleport>
 </template>
