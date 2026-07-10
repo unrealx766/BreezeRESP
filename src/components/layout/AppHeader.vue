@@ -5,7 +5,8 @@ import { useConnectionStore } from "@/stores/connectionStore";
 import { useCascadeStore } from "@/stores/cascadeStore";
 import { useDetailStore } from "@/stores/detailStore";
 import { availableLocales } from "@/i18n";
-import { Globe, Database, ChevronDown, Check, RefreshCw } from "lucide-vue-next";
+import { messageHistory, clearMessageHistory } from "@/utils/toast";
+import { Globe, Database, ChevronDown, Check, RefreshCw, Bell, BellDot, Trash2, CheckCircle, XCircle, AlertTriangle, Info } from "lucide-vue-next";
 
 const { t, locale } = useI18n();
 const connStore = useConnectionStore();
@@ -42,6 +43,31 @@ async function handleDbSwitch(db: number) {
     switchingDb.value = false;
   }
 }
+
+// Notification panel
+const showNotifications = ref(false);
+const unreadCount = computed(() => messageHistory.value.length);
+
+function toggleNotifications() {
+  showNotifications.value = !showNotifications.value;
+}
+
+function closeNotifications() {
+  showNotifications.value = false;
+}
+
+function formatTime(ts: number) {
+  const d = new Date(ts);
+  return d.toLocaleTimeString(locale.value === "zh-CN" ? "zh-CN" : "en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+const iconMap = { success: CheckCircle, error: XCircle, warning: AlertTriangle, info: Info };
+const colorMap = {
+  success: "text-success",
+  error: "text-danger",
+  warning: "text-warning",
+  info: "text-info",
+};
 </script>
 
 <template>
@@ -102,8 +128,69 @@ async function handleDbSwitch(db: number) {
       </template>
     </div>
 
-    <!-- Right: Language -->
-    <div class="flex items-center gap-2">
+    <!-- Right: Notifications + Language -->
+    <div class="flex items-center gap-1">
+      <!-- Notification bell -->
+      <div class="relative">
+        <button
+          @click="toggleNotifications"
+          class="relative flex items-center justify-center w-8 h-8 rounded-lg text-text-secondary hover:bg-bg-hover transition-colors"
+          :title="t('notifications.title')"
+        >
+          <BellDot v-if="unreadCount > 0" :size="15" />
+          <Bell v-else :size="15" />
+          <span
+            v-if="unreadCount > 0"
+            class="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 flex items-center justify-center bg-danger text-white text-[9px] font-bold rounded-full"
+          >{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
+        </button>
+        <!-- Backdrop -->
+        <div v-if="showNotifications" class="fixed inset-0 z-40" @click="closeNotifications" />
+        <!-- Notification panel -->
+        <div
+          v-if="showNotifications"
+          class="absolute top-full right-0 mt-1 w-80 bg-white border border-border rounded-xl shadow-xl z-50 overflow-hidden"
+        >
+          <!-- Header -->
+          <div class="flex items-center justify-between px-3 py-2 border-b border-border-light">
+            <span class="text-xs font-semibold text-text-primary">{{ t("notifications.title") }}</span>
+            <div class="flex items-center gap-1">
+              <button
+                v-if="messageHistory.length > 0"
+                @click="clearMessageHistory"
+                class="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-text-muted hover:text-danger hover:bg-danger/5 transition-colors"
+              >
+                <Trash2 :size="10" />
+                {{ t("notifications.clear") }}
+              </button>
+            </div>
+          </div>
+          <!-- List -->
+          <div class="max-h-72 overflow-y-auto">
+            <div
+              v-for="msg in messageHistory"
+              :key="msg.id"
+              class="flex items-start gap-2 px-3 py-2 border-b border-border-light/50 last:border-b-0 hover:bg-bg-hover/50 transition-colors"
+            >
+              <component :is="iconMap[msg.type]" :size="13" :class="colorMap[msg.type]" class="shrink-0 mt-0.5" />
+              <div class="flex-1 min-w-0">
+                <p class="text-xs text-text-primary break-all leading-relaxed">{{ msg.message }}</p>
+                <div class="flex items-center gap-2 mt-0.5">
+                  <span class="text-[10px] font-medium truncate" :title="msg.connectionName || t('notifications.noConnection')"
+                    :class="msg.connectionName ? 'text-redis/60' : 'text-text-muted/60'">{{ msg.connectionName || t('notifications.noConnection') }}</span>
+                  <span class="text-[10px] text-text-muted">{{ formatTime(msg.timestamp) }}</span>
+                </div>
+              </div>
+            </div>
+            <!-- Empty state -->
+            <div v-if="messageHistory.length === 0" class="px-3 py-8 text-center">
+              <p class="text-xs text-text-muted">{{ t("notifications.empty") }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Language -->
       <button
         @click="toggleLocale"
         class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-text-secondary hover:bg-bg-hover transition-colors"

@@ -3,25 +3,27 @@ import { ref, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { usePipelineStore } from "@/stores/pipelineStore";
 import { useMetricsStore } from "@/stores/metricsStore";
+import { useConnectionStore } from "@/stores/connectionStore";
 import { allCommandTemplates } from "@/utils/commandTemplates";
 import QpsChart from "@/components/charts/QpsChart.vue";
 import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
+import { toast } from "@/utils/toast";
 import {
   Plus, Play, Trash2, Eraser, GripVertical, CheckCircle, XCircle,
-  Clock, Zap, Layers, ArrowUpDown, AlertTriangle, X,
+  Clock, Zap, Layers, ArrowUpDown, X,
   Save, FolderOpen, Download,
 } from "lucide-vue-next";
 
 const { t } = useI18n();
 const pipeline = usePipelineStore();
 const metrics = useMetricsStore();
+const connStore = useConnectionStore();
 
 const confirmDialog = ref<InstanceType<typeof ConfirmDialog>>();
 
 // Save dialog state
 const showSaveDialog = ref(false);
 const saveName = ref("");
-const saveError = ref("");
 const showSavedList = ref(false);
 
 onMounted(() => {
@@ -30,26 +32,25 @@ onMounted(() => {
 
 function openSaveDialog() {
   saveName.value = "";
-  saveError.value = "";
   showSaveDialog.value = true;
 }
 
 function closeSaveDialog() {
   showSaveDialog.value = false;
-  saveError.value = "";
 }
 
 async function doSave() {
   const name = saveName.value.trim();
   if (!name) {
-    saveError.value = t("connection.nameRequired");
+    toast.warning(t("connection.nameRequired"));
     return;
   }
   try {
     await pipeline.saveCurrentPipeline(name);
+    toast.success(t("pipeline.saveSuccess"));
     closeSaveDialog();
   } catch (e) {
-    saveError.value = typeof e === "string" ? e : (e as Error)?.message || String(e);
+    toast.error(typeof e === "string" ? e : (e as Error)?.message || String(e));
   }
 }
 
@@ -137,20 +138,6 @@ function onDrop(idx: number) {
 
 <template>
   <div class="h-full flex flex-col p-6 overflow-auto min-w-[600px]">
-    <!-- Error Banner -->
-    <transition name="slide-down">
-      <div
-        v-if="pipeline.lastError"
-        class="flex items-center gap-3 px-4 py-2.5 bg-danger/5 border border-danger/20 rounded-lg mb-4"
-      >
-        <AlertTriangle :size="16" class="text-danger shrink-0" />
-        <p class="flex-1 text-sm text-danger">{{ pipeline.lastError }}</p>
-        <button @click="pipeline.lastError = null" class="text-text-muted hover:text-text-primary shrink-0">
-          <X :size="14" />
-        </button>
-      </div>
-    </transition>
-
     <!-- Header + QPS -->
     <div class="flex items-start justify-between gap-3 mb-4 flex-wrap">
       <div>
@@ -179,8 +166,9 @@ function onDrop(idx: number) {
           class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-danger bg-danger/5 border border-danger/20 rounded-lg hover:bg-danger/10 transition-colors disabled:opacity-40">
           <Trash2 :size="13" /> {{ t("pipeline.clearAll") }}
         </button>
-        <button @click="pipeline.executeAll()" :disabled="pipeline.commandCount === 0 || pipeline.executing"
-          class="inline-flex items-center justify-center gap-1.5 w-36 h-9 text-sm font-medium text-white bg-redis rounded-lg hover:bg-redis-dark transition-colors disabled:opacity-50 shadow-sm">
+        <button @click="pipeline.executeAll()" :disabled="pipeline.commandCount === 0 || pipeline.executing || !connStore.activeConnectionId"
+          class="inline-flex items-center justify-center gap-1.5 w-36 h-9 text-sm font-medium text-white bg-redis rounded-lg hover:bg-redis-dark transition-colors disabled:opacity-50 shadow-sm"
+          :title="!connStore.activeConnectionId ? t('status.noConnection') : ''">
           <Play :size="14" />
           <span>{{ pipeline.executing ? t("pipeline.executing") : t("pipeline.executeAll") }}</span>
         </button>
@@ -201,7 +189,6 @@ function onDrop(idx: number) {
         />
       </div>
       <div class="flex items-center gap-2 shrink-0">
-        <p v-if="saveError" class="text-xs text-danger whitespace-nowrap">{{ saveError }}</p>
         <button @click="doSave" class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-redis rounded-lg hover:bg-redis-dark transition-colors shadow-sm">
           <Save :size="14" /> {{ t("pipeline.savePipeline") }}
         </button>

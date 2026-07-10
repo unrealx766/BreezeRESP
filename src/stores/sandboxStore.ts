@@ -4,6 +4,7 @@ import type { DiffEntry, SandboxHistoryItem } from "@/types";
 import { tauriApi } from "@/services/tauriApi";
 import { useConnectionStore } from "./connectionStore";
 import { useCascadeStore } from "./cascadeStore";
+import { toast } from "@/utils/toast";
 
 export const useSandboxStore = defineStore("sandbox", () => {
   const commandInput = ref("");
@@ -30,7 +31,10 @@ export const useSandboxStore = defineStore("sandbox", () => {
 
     const connStore = useConnectionStore();
     const connId = connStore.activeConnectionId;
-    if (!connId) return;
+    if (!connId) {
+      toast.error("Not connected. Please connect first.");
+      return;
+    }
 
     executing.value = true;
     try {
@@ -63,15 +67,17 @@ export const useSandboxStore = defineStore("sandbox", () => {
     const connStore = useConnectionStore();
     const connId = connStore.activeConnectionId;
     const cmd = currentCommand.value;
-    if (!connId || !cmd) return;
+    if (!connId || !cmd) {
+      if (!connId) toast.error("Not connected. Please connect first.");
+      return;
+    }
 
     applying.value = true;
-    lastError.value = null;
 
     try {
       const ok = await tauriApi.sandbox.apply(connId, cmd);
       if (!ok) {
-        lastError.value = "Apply returned false.";
+        toast.error("Apply returned false.");
         return;
       }
 
@@ -107,7 +113,7 @@ export const useSandboxStore = defineStore("sandbox", () => {
       resetPreview();
     } catch (e) {
       const msg = typeof e === "string" ? e : (e as Error)?.message || String(e);
-      lastError.value = msg;
+      toast.error(msg);
       console.error("Sandbox apply failed:", e);
     } finally {
       applying.value = false;
@@ -130,17 +136,16 @@ export const useSandboxStore = defineStore("sandbox", () => {
     const connStore = useConnectionStore();
     const connId = connStore.activeConnectionId;
     if (!connId) {
-      lastError.value = "No active connection.";
+      toast.error("No active connection.");
       return;
     }
 
     rollingBack.value = true;
-    lastError.value = null;
 
     try {
       const ok = await tauriApi.sandbox.rollback(connId, item.beforeState, item.addedKeys);
       if (!ok) {
-        lastError.value = "Rollback returned false.";
+        toast.error("Rollback returned false.");
         return;
       }
       item.status = "rolled-back";
@@ -152,7 +157,7 @@ export const useSandboxStore = defineStore("sandbox", () => {
       } catch { /* best-effort */ }
     } catch (e) {
       const msg = typeof e === "string" ? e : (e as Error)?.message || String(e);
-      lastError.value = msg;
+      toast.error(msg);
       console.error("Sandbox history rollback failed:", e);
     } finally {
       rollingBack.value = false;

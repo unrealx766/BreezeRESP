@@ -4,6 +4,7 @@ import type { PipelineCommand, SavedPipeline } from "@/types";
 import { tauriApi } from "@/services/tauriApi";
 import { useConnectionStore } from "./connectionStore";
 import { useCascadeStore } from "./cascadeStore";
+import { toast } from "@/utils/toast";
 
 export const usePipelineStore = defineStore("pipeline", () => {
   const commands = ref<PipelineCommand[]>([]);
@@ -54,7 +55,7 @@ export const usePipelineStore = defineStore("pipeline", () => {
     const connStore = useConnectionStore();
     const connId = connStore.activeConnectionId;
     if (!connId) {
-      lastError.value = "No active connection. Please connect first.";
+      toast.error("Not connected. Please connect first.");
       return;
     }
 
@@ -63,7 +64,7 @@ export const usePipelineStore = defineStore("pipeline", () => {
       (cmd) => cmd.command.trim().length > 0
     );
     if (validCommands.length === 0) {
-      lastError.value = "No valid commands to execute.";
+      toast.error("No valid commands to execute.");
       return;
     }
 
@@ -103,7 +104,7 @@ export const usePipelineStore = defineStore("pipeline", () => {
       }
     } catch (e) {
       const msg = typeof e === "string" ? e : (e as Error)?.message || String(e);
-      lastError.value = msg;
+      toast.error(msg);
       console.error("Pipeline execution failed:", e);
     } finally {
       executing.value = false;

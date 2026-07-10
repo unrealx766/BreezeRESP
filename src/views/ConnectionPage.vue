@@ -7,7 +7,7 @@ import type { RedisConnection } from "@/types";
 import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
 import { toast } from "@/utils/toast";
 import {
-  Plus, Server, Wifi, WifiOff, Trash2, Edit3, Zap, AlertCircle,
+  Plus, Server, Wifi, WifiOff, Trash2, Edit3, Zap,
   X, Loader2, Lock, Unlock, Pin, PinOff,
 } from "lucide-vue-next";
 
@@ -20,10 +20,7 @@ const confirmDialog = ref<InstanceType<typeof ConfirmDialog>>();
 const showForm = ref(false);
 const editingId = ref<string | null>(null);
 const testing = ref<string | null>(null);
-const testResult = ref<{ id: string; ok: boolean } | null>(null);
 const formTesting = ref(false);
-const formTestResult = ref<{ ok: boolean } | null>(null);
-const formError = ref("");
 const usePassword = ref(false);
 const hadPassword = ref(false);
 
@@ -39,8 +36,6 @@ const form = ref({
 function openNew() {
   editingId.value = null;
   form.value = { name: "", host: "127.0.0.1", port: 6379, password: "", db: 0, ssl: false };
-  formError.value = "";
-  formTestResult.value = null;
   usePassword.value = false;
   hadPassword.value = false;
   showForm.value = true;
@@ -49,8 +44,6 @@ function openNew() {
 function openEdit(conn: RedisConnection) {
   editingId.value = conn.id;
   form.value = { name: conn.name, host: conn.host, port: conn.port, password: "", db: conn.db, ssl: conn.ssl };
-  formError.value = "";
-  formTestResult.value = null;
   usePassword.value = !!conn.password;
   hadPassword.value = !!conn.password;
   showForm.value = true;
@@ -58,7 +51,7 @@ function openEdit(conn: RedisConnection) {
 
 async function saveForm() {
   if (!form.value.name.trim()) {
-    formError.value = t("connection.nameRequired");
+    toast.warning(t("connection.nameRequired"));
     return;
   }
   const data = { ...form.value };
@@ -84,38 +77,44 @@ async function saveForm() {
 }
 
 function reconnectInBackground(id: string) {
+  const connName = connStore.connections.find((c) => c.id === id)?.name;
   connStore.disconnect(id).then(() => connStore.connect(id)).then((ok) => {
     if (!ok) {
-      toast.error(connStore.lastError || t("connection.connectFailed"));
+      toast.error(connStore.lastError || t("connection.connectFailed"), 5000, connName);
     }
   });
 }
 
 async function handleFormTest() {
   formTesting.value = true;
-  formTestResult.value = null;
   const ok = await connStore.testFormConnection(form.value);
   formTesting.value = false;
-  formTestResult.value = { ok };
-  setTimeout(() => { formTestResult.value = null; }, 3000);
+  if (ok) {
+    toast.success(t("connection.testSuccess"), form.value.name);
+  } else {
+    toast.error(t("connection.testFailed"), 5000, form.value.name);
+  }
 }
 
 async function handleConnect(id: string) {
+  const connName = connStore.connections.find((c) => c.id === id)?.name;
   const ok = await connStore.connect(id);
   if (ok) {
     router.push("/browser");
   } else {
-    toast.error(connStore.lastError || t("connection.connectFailed"));
+    toast.error(connStore.lastError || t("connection.connectFailed"), 5000, connName);
   }
 }
 
 async function handleTest(conn: RedisConnection) {
   testing.value = conn.id;
-  testResult.value = null;
   const ok = await connStore.testConnection(conn.id);
   testing.value = null;
-  testResult.value = { id: conn.id, ok };
-  setTimeout(() => { testResult.value = null; }, 2000);
+  if (ok) {
+    toast.success(t("connection.testSuccess"), conn.name);
+  } else {
+    toast.error(t("connection.testFailed"), 5000, conn.name);
+  }
 }
 
 async function handleDelete(conn: RedisConnection) {
@@ -209,7 +208,6 @@ function statusColor(status: string) {
               'bg-danger': conn.status === 'error',
             }"
           />
-          <Pin v-if="conn.pinned" :size="12" class="text-redis/50 mt-1 shrink-0" />
         </div>
 
         <!-- Info -->
@@ -246,18 +244,11 @@ function statusColor(status: string) {
           >
             <Loader2 v-if="testing === conn.id" :size="14" class="animate-spin text-text-muted" />
             <Zap v-else :size="14" class="text-text-muted" />
-            <!-- Test result tooltip -->
-            <div
-              v-if="testResult?.id === conn.id"
-              class="absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 rounded text-[10px] font-medium whitespace-nowrap z-10"
-              :class="testResult.ok ? 'bg-success text-white' : 'bg-danger text-white'"
-            >
-              {{ testResult.ok ? t("connection.testSuccess") : t("connection.error") }}
-            </div>
           </button>
           <button
             @click="connStore.togglePin(conn.id)"
-            class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-bg-hover transition-colors opacity-0 group-hover:opacity-100"
+            class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-bg-hover transition-colors"
+            :class="conn.pinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
             :title="conn.pinned ? t('connection.unpin') : t('connection.pin')"
           >
             <PinOff v-if="conn.pinned" :size="14" class="text-redis" />
@@ -355,9 +346,6 @@ function statusColor(status: string) {
               <Loader2 v-if="formTesting" :size="14" class="animate-spin" />
               <Zap v-else :size="14" />
               {{ t("connection.testFromForm") }}
-              <span v-if="formTestResult" class="ml-1" :class="formTestResult.ok ? 'text-success' : 'text-danger'">
-                {{ formTestResult.ok ? '✓' : '✗' }}
-              </span>
             </button>
             <div class="flex gap-2">
               <button @click="showForm = false" class="px-4 py-2 text-sm text-text-secondary hover:bg-bg-hover rounded-lg transition-colors">
@@ -370,12 +358,6 @@ function statusColor(status: string) {
                 {{ t("common.save") }}
               </button>
             </div>
-          </div>
-
-          <!-- Form error -->
-          <div v-if="formError" class="mt-3 flex items-center gap-1.5 text-xs text-danger">
-            <AlertCircle :size="12" />
-            {{ formError }}
           </div>
         </div>
       </div>

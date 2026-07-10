@@ -9,6 +9,7 @@ import KeyTreeItem from "@/components/cascade/KeyTreeItem.vue";
 import TtlGauge from "@/components/charts/TtlGauge.vue";
 import FloatingWindow from "@/components/shared/FloatingWindow.vue";
 import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
+import { toast } from "@/utils/toast";
 import {
   Search, RefreshCw, Trash2, Copy, Tag,
   Type, Hash, List, CircleDot, BarChart3,
@@ -102,6 +103,7 @@ watch(
   (newStatus, oldStatus) => {
     if (oldStatus === "connected" && newStatus !== "connected") {
       connectionLost.value = true;
+      toast.error(t("connection.connectionLost"), 5000, connStore.activeConnection?.name);
     }
     if (newStatus === "connected") {
       connectionLost.value = false;
