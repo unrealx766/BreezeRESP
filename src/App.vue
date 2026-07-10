@@ -5,11 +5,25 @@ import AppHeader from "@/components/layout/AppHeader.vue";
 import StatusBar from "@/components/layout/StatusBar.vue";
 import ToastContainer from "@/components/shared/ToastContainer.vue";
 import { useMetricsStore } from "@/stores/metricsStore";
+import { emit } from "@tauri-apps/api/event";
 
 const metricsStore = useMetricsStore();
 
-onMounted(() => {
+onMounted(async () => {
   metricsStore.startMonitoring();
+
+  // Show the window — splash is already rendered and visible at this point
+  await emit("app-ready").catch(() => {});
+
+  // Brief pause so the user sees the splash before it fades out
+  await new Promise((r) => setTimeout(r, 300));
+
+  // Dismiss splash screen with fade-out
+  const splash = document.getElementById("splash-screen");
+  if (splash) {
+    splash.classList.add("splash-hidden");
+    splash.addEventListener("transitionend", () => splash.remove());
+  }
 });
 </script>
 

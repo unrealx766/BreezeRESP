@@ -1,7 +1,7 @@
 {
   "app": {
     "title": "BreezeRESP",
-    "subtitle": "A Modern Desktop Client for Redis",
+    "subtitle": "Desktop Client for Redis",
     "copyright": "Copyright © 2026 unrealx766. All Rights Reserved.",
     "version": "v0.1.0"
   },

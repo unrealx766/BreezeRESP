@@ -1,25 +1,29 @@
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from "vue-router";
+import ConnectionPage from "@/views/ConnectionPage.vue";
+import BrowserPage from "@/views/BrowserPage.vue";
+import PipelinePage from "@/views/PipelinePage.vue";
+import SandboxPage from "@/views/SandboxPage.vue";
 
 const routes: RouteRecordRaw[] = [
   {
     path: "/",
     name: "connections",
-    component: () => import("@/views/ConnectionPage.vue"),
+    component: ConnectionPage,
   },
   {
     path: "/browser",
     name: "browser",
-    component: () => import("@/views/BrowserPage.vue"),
+    component: BrowserPage,
   },
   {
     path: "/pipeline",
     name: "pipeline",
-    component: () => import("@/views/PipelinePage.vue"),
+    component: PipelinePage,
   },
   {
     path: "/sandbox",
     name: "sandbox",
-    component: () => import("@/views/SandboxPage.vue"),
+    component: SandboxPage,
   },
 ];
 

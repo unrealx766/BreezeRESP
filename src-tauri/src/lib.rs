@@ -2,7 +2,7 @@ mod commands;
 mod core;
 
 use std::sync::Mutex;
-use tauri::Manager;
+use tauri::{Manager, Listener};
 
 pub struct AppState {
     pub pool_manager: Mutex<core::pool::ConnectionPoolManager>,
@@ -16,6 +16,26 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            // Listen for "app-ready" event from frontend to show the window
+            // This ensures the splash screen is rendered before the window appears
+            let handle = app.handle().clone();
+            app.listen("app-ready", move |_| {
+                if let Some(window) = handle.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            });
+
+            // Safety fallback: show the window after 3s even if frontend never emits "app-ready"
+            let fallback_handle = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(3));
+                if let Some(window) = fallback_handle.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            });
+
             let data_dir = app
                 .path()
                 .app_data_dir()
