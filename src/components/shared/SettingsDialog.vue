@@ -49,7 +49,7 @@ defineExpose({ open });
         <div class="absolute inset-0 bg-black/30 backdrop-blur-[1px]" @click="close" />
 
         <!-- Dialog -->
-        <div class="relative bg-bg-secondary rounded-xl shadow-2xl border border-border w-[500px] max-w-[90vw] animate-in overflow-hidden">
+        <div class="relative bg-bg-secondary rounded-xl shadow-2xl border border-border w-[520px] h-[380px] max-w-[90vw] animate-in overflow-hidden flex flex-col">
           <!-- Header -->
           <div class="flex items-center justify-between px-5 py-3.5 border-b border-border-light">
             <div class="flex items-center gap-2.5">
@@ -67,7 +67,7 @@ defineExpose({ open });
           </div>
 
           <!-- Body: Sidebar + Content -->
-          <div class="flex min-h-[260px]">
+          <div class="flex flex-1 min-h-0">
             <!-- Side Tabs -->
             <div class="w-[130px] shrink-0 bg-bg-primary/50 border-r border-border-light py-2 px-2 flex flex-col gap-0.5">
               <button
@@ -93,7 +93,7 @@ defineExpose({ open });
             </div>
 
             <!-- Content -->
-            <div class="flex-1 px-5 py-4 min-w-0">
+            <div class="flex-1 px-5 py-4 min-w-0 overflow-y-auto">
               <!-- General Tab -->
               <div v-if="activeTab === 'general'" class="space-y-5">
                 <!-- Theme Setting -->
