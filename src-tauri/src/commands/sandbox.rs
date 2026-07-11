@@ -1,3 +1,4 @@
+use crate::core::validate::{validate_command, validate_connection_id};
 use crate::AppState;
 use crate::core::format::{format_redis_value, format_for_display, get_key_value_string};
 use redis::AsyncCommands;
@@ -90,6 +91,9 @@ pub async fn sandbox_preview(
     connection_id: String,
     command: String,
 ) -> Result<SandboxPreview, String> {
+    validate_connection_id(&connection_id)?;
+    validate_command(&command)?;
+
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
         pm.get_pool(&connection_id)?
@@ -250,6 +254,9 @@ pub async fn sandbox_apply(
     connection_id: String,
     command: String,
 ) -> Result<bool, String> {
+    validate_connection_id(&connection_id)?;
+    validate_command(&command)?;
+
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
         pm.get_pool(&connection_id)?
@@ -281,6 +288,8 @@ pub async fn sandbox_rollback(
     before_state: HashMap<String, String>,
     added_keys: Vec<String>,
 ) -> Result<bool, String> {
+    validate_connection_id(&connection_id)?;
+
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
         pm.get_pool(&connection_id)?

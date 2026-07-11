@@ -41,7 +41,12 @@ pub fn run() {
                 .app_data_dir()
                 .unwrap_or_else(|_| std::path::PathBuf::from("./data"));
 
-            // Use a fixed 32-byte key derived from app name (in production, use system keychain)
+            // Derive a 32-byte key from app name (padded with zeros).
+            //
+            // TODO(production): Replace with a key stored in the OS credential
+            // manager (Windows Credential Manager / macOS Keychain / Linux
+            // Secret Service) via the `keyring` crate, so that the key cannot
+            // be trivially extracted from the binary.
             let mut key = [0u8; 32];
             let app_name = b"BreezeRESP";
             key[..app_name.len()].copy_from_slice(app_name);

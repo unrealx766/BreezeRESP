@@ -21,6 +21,8 @@ const showForm = ref(false);
 const editingId = ref<string | null>(null);
 const testing = ref<string | null>(null);
 const formTesting = ref(false);
+const savingForm = ref(false);
+const disconnectingIds = ref<Set<string>>(new Set());
 const usePassword = ref(false);
 const hadPassword = ref(false);
 
@@ -50,29 +52,35 @@ function openEdit(conn: RedisConnection) {
 }
 
 async function saveForm() {
+  if (savingForm.value) return;
   if (!form.value.name.trim()) {
     toast.warning(t("connection.nameRequired"));
     return;
   }
-  const data = { ...form.value };
-  if (!usePassword.value) {
-    data.password = "";
-  }
-  if (editingId.value) {
-    // Preserve old password only if toggle was on AND user didn't type a new one
-    if (usePassword.value && !data.password && hadPassword.value) {
-      data.password = undefined as any; // signal to keep old password
+  savingForm.value = true;
+  try {
+    const data = { ...form.value };
+    if (!usePassword.value) {
+      data.password = "";
     }
-    const wasConnected = connStore.connections.find((c) => c.id === editingId.value)?.status === "connected";
-    await connStore.updateConnection(editingId.value, { ...data });
-    showForm.value = false;
-    // Reconnect in background if was connected (card shows loading state)
-    if (wasConnected) {
-      reconnectInBackground(editingId.value);
+    if (editingId.value) {
+      // Preserve old password only if toggle was on AND user didn't type a new one
+      if (usePassword.value && !data.password && hadPassword.value) {
+        data.password = undefined as any; // signal to keep old password
+      }
+      const wasConnected = connStore.connections.find((c) => c.id === editingId.value)?.status === "connected";
+      await connStore.updateConnection(editingId.value, { ...data });
+      showForm.value = false;
+      // Reconnect in background if was connected (card shows loading state)
+      if (wasConnected) {
+        reconnectInBackground(editingId.value);
+      }
+    } else {
+      connStore.addConnection({ ...data, lastUsed: undefined });
+      showForm.value = false;
     }
-  } else {
-    connStore.addConnection({ ...data, lastUsed: undefined });
-    showForm.value = false;
+  } finally {
+    savingForm.value = false;
   }
 }
 
@@ -97,16 +105,18 @@ async function handleFormTest() {
 }
 
 async function handleConnect(id: string) {
-  const connName = connStore.connections.find((c) => c.id === id)?.name;
+  const conn = connStore.connections.find((c) => c.id === id);
+  if (!conn || conn.status === "connecting") return;
   const ok = await connStore.connect(id);
   if (ok) {
     router.push("/browser");
   } else {
-    toast.error(connStore.lastError || t("connection.connectFailed"), 5000, connName);
+    toast.error(connStore.lastError || t("connection.connectFailed"), 5000, conn.name);
   }
 }
 
 async function handleTest(conn: RedisConnection) {
+  if (testing.value === conn.id) return;
   testing.value = conn.id;
   const ok = await connStore.testConnection(conn.id);
   testing.value = null;
@@ -114,6 +124,16 @@ async function handleTest(conn: RedisConnection) {
     toast.success(t("connection.testSuccess"), conn.name);
   } else {
     toast.error(t("connection.testFailed"), 5000, conn.name);
+  }
+}
+
+async function handleCardDisconnect(id: string) {
+  if (disconnectingIds.value.has(id)) return;
+  disconnectingIds.value.add(id);
+  try {
+    await connStore.disconnect(id);
+  } finally {
+    disconnectingIds.value.delete(id);
   }
 }
 
@@ -230,7 +250,7 @@ function statusColor(status: string) {
           </button>
           <button
             v-else
-            @click="connStore.disconnect(conn.id)"
+            @click="handleCardDisconnect(conn.id)"
             class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-bg-primary text-text-secondary rounded-lg text-xs font-medium hover:bg-bg-hover transition-colors"
           >
             <WifiOff :size="12" />
@@ -353,8 +373,10 @@ function statusColor(status: string) {
               </button>
               <button
                 @click="saveForm"
-                class="px-4 py-2 bg-redis text-white text-sm font-medium rounded-lg hover:bg-redis-dark transition-colors"
+                :disabled="savingForm"
+                class="inline-flex items-center gap-1.5 px-4 py-2 bg-redis text-white text-sm font-medium rounded-lg hover:bg-redis-dark transition-colors disabled:opacity-60"
               >
+                <Loader2 v-if="savingForm" :size="14" class="animate-spin" />
                 {{ t("common.save") }}
               </button>
             </div>

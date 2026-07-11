@@ -31,3 +31,5 @@ ehthumbs_vista.db
 # Tauri build artifacts
 src-tauri/target/
 src-tauri/gen/schemas/
+
+logos

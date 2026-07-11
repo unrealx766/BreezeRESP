@@ -1,7 +1,4 @@
-use aes_gcm::{
-    aead::{Aead, KeyInit},
-    Aes256Gcm, Nonce,
-};
+use crate::core::crypto;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -39,18 +36,10 @@ impl ConfigStore {
     /// Encrypt and save connections to disk.
     pub fn save(&self, connections: &[StoredConnection]) -> Result<(), String> {
         let json = serde_json::to_string(connections).map_err(|e| e.to_string())?;
-        let cipher = Aes256Gcm::new_from_slice(&self.encryption_key)
-            .map_err(|e| format!("Cipher init error: {}", e))?;
-
-        let nonce_bytes = [0u8; 12]; // In production, use a random nonce
-        let nonce = Nonce::from_slice(&nonce_bytes);
-
-        let ciphertext = cipher
-            .encrypt(nonce, json.as_bytes())
-            .map_err(|e| format!("Encryption error: {}", e))?;
+        let encrypted = crypto::encrypt(&self.encryption_key, json.as_bytes())?;
 
         std::fs::create_dir_all(&self.data_dir).map_err(|e| e.to_string())?;
-        std::fs::write(self.config_path(), ciphertext).map_err(|e| e.to_string())?;
+        std::fs::write(self.config_path(), encrypted).map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -61,16 +50,8 @@ impl ConfigStore {
             return Ok(vec![]);
         }
 
-        let ciphertext = std::fs::read(&path).map_err(|e| e.to_string())?;
-        let cipher = Aes256Gcm::new_from_slice(&self.encryption_key)
-            .map_err(|e| format!("Cipher init error: {}", e))?;
-
-        let nonce_bytes = [0u8; 12];
-        let nonce = Nonce::from_slice(&nonce_bytes);
-
-        let plaintext = cipher
-            .decrypt(nonce, ciphertext.as_ref())
-            .map_err(|e| format!("Decryption error: {}", e))?;
+        let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+        let plaintext = crypto::decrypt(&self.encryption_key, &data)?;
 
         let json = String::from_utf8(plaintext).map_err(|e| e.to_string())?;
         serde_json::from_str(&json).map_err(|e| e.to_string())

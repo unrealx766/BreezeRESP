@@ -1,7 +1,4 @@
-use aes_gcm::{
-    aead::{Aead, KeyInit},
-    Aes256Gcm, Nonce,
-};
+use crate::core::crypto;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -39,23 +36,14 @@ impl PipelineStore {
         self.data_dir.join("pipelines.enc")
     }
 
-    fn cipher(&self) -> Result<Aes256Gcm, String> {
-        Aes256Gcm::new_from_slice(&self.encryption_key)
-            .map_err(|e| format!("Cipher init error: {}", e))
-    }
-
     /// Load all saved pipelines from encrypted storage.
     pub fn load_all(&self) -> Result<Vec<StoredPipeline>, String> {
         let path = self.storage_path();
         if !path.exists() {
             return Ok(vec![]);
         }
-        let ciphertext = std::fs::read(&path).map_err(|e| e.to_string())?;
-        let cipher = self.cipher()?;
-        let nonce = Nonce::from_slice(&[0u8; 12]);
-        let plaintext = cipher
-            .decrypt(nonce, ciphertext.as_ref())
-            .map_err(|e| format!("Decryption error: {}", e))?;
+        let data = std::fs::read(&path).map_err(|e| e.to_string())?;
+        let plaintext = crypto::decrypt(&self.encryption_key, &data)?;
         let json = String::from_utf8(plaintext).map_err(|e| e.to_string())?;
         serde_json::from_str(&json).map_err(|e| e.to_string())
     }
@@ -63,13 +51,9 @@ impl PipelineStore {
     /// Save all pipelines (full overwrite).
     fn save_all(&self, pipelines: &[StoredPipeline]) -> Result<(), String> {
         let json = serde_json::to_string(pipelines).map_err(|e| e.to_string())?;
-        let cipher = self.cipher()?;
-        let nonce = Nonce::from_slice(&[0u8; 12]);
-        let ciphertext = cipher
-            .encrypt(nonce, json.as_bytes())
-            .map_err(|e| format!("Encryption error: {}", e))?;
+        let encrypted = crypto::encrypt(&self.encryption_key, json.as_bytes())?;
         std::fs::create_dir_all(&self.data_dir).map_err(|e| e.to_string())?;
-        std::fs::write(self.storage_path(), ciphertext).map_err(|e| e.to_string())?;
+        std::fs::write(self.storage_path(), encrypted).map_err(|e| e.to_string())?;
         Ok(())
     }
 

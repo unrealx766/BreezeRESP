@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { Database, Server, Layers, FlaskConical, Plus, Unplug } from "lucide-vue-next";
+import { toast } from "@/utils/toast";
 
 const router = useRouter();
 const route = useRoute();
@@ -23,6 +24,27 @@ function isActive(path: string) {
 
 function navigate(path: string) {
   router.push(path);
+}
+
+async function handleSidebarConnect(id: string) {
+  const conn = connStore.connections.find((c) => c.id === id);
+  if (!conn || conn.status === "connecting") return;
+  const ok = await connStore.connect(id);
+  if (!ok) {
+    toast.error(connStore.lastError || t("connection.connectFailed"), 5000, conn.name);
+  }
+}
+
+const disconnectingIds = ref<Set<string>>(new Set());
+
+async function handleSidebarDisconnect(id: string) {
+  if (disconnectingIds.value.has(id)) return;
+  disconnectingIds.value.add(id);
+  try {
+    await connStore.disconnect(id);
+  } finally {
+    disconnectingIds.value.delete(id);
+  }
 }
 </script>
 
@@ -72,7 +94,7 @@ function navigate(path: string) {
           :key="conn.id"
           class="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs cursor-pointer hover:bg-bg-hover transition-colors"
           :class="connStore.activeConnectionId === conn.id ? 'bg-bg-active' : ''"
-          @click="conn.status === 'connected' ? (connStore.activeConnectionId = conn.id) : connStore.connect(conn.id)"
+          @click="conn.status === 'connected' ? (connStore.activeConnectionId = conn.id) : handleSidebarConnect(conn.id)"
         >
           <span
             class="w-2 h-2 rounded-full shrink-0"
@@ -86,13 +108,13 @@ function navigate(path: string) {
           <span class="truncate text-text-secondary flex-1" :title="conn.name">{{ conn.name }}</span>
           <!-- DB badge for connected connections -->
           <span
-            v-if="conn.status === 'connected'"
-            class="text-[10px] font-mono font-semibold text-redis/70 bg-redis/8 px-1.5 py-0.5 rounded shrink-0"
+            :class="conn.status === 'connected' ? 'opacity-100' : 'opacity-0 pointer-events-none'"
+            class="text-[10px] font-mono font-semibold text-redis/70 bg-redis/8 px-1.5 py-0.5 rounded shrink-0 transition-opacity"
           >DB{{ conn.db }}</span>
           <button
-            v-if="conn.status === 'connected' || conn.status === 'connecting'"
-            @click.stop="connStore.disconnect(conn.id)"
-            class="w-5 h-5 rounded flex items-center justify-center hover:bg-danger/10 transition-colors shrink-0 group/disconnect"
+            :class="conn.status === 'connected' || conn.status === 'connecting' ? 'opacity-100' : 'opacity-0 pointer-events-none'"
+            @click.stop="handleSidebarDisconnect(conn.id)"
+            class="w-5 h-5 rounded flex items-center justify-center hover:bg-danger/10 transition-opacity shrink-0 group/disconnect"
             :title="t('connection.disconnect')"
           >
             <Unplug :size="12" class="text-text-muted group-hover/disconnect:text-danger" />

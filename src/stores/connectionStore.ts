@@ -2,6 +2,8 @@ import { defineStore } from "pinia";
 import { ref, computed } from "vue";
 import type { RedisConnection, ConnectionStatus } from "@/types";
 import { tauriApi, type RustConnectionConfig } from "@/services/tauriApi";
+import { toast } from "@/utils/toast";
+import { i18n } from "@/i18n";
 
 export const useConnectionStore = defineStore("connection", () => {
   const connections = ref<RedisConnection[]>([]);
@@ -115,6 +117,8 @@ export const useConnectionStore = defineStore("connection", () => {
     if (conn && conn.status === "connected") {
       conn.status = "error";
       lastError.value = "Connection lost";
+      const msg = i18n.global.t("connection.connectionLost");
+      toast.error(msg, 5000, conn.name);
     }
   }
 

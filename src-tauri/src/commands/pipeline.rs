@@ -1,3 +1,4 @@
+use crate::core::validate::{validate_connection_id, validate_pipeline_commands};
 use crate::AppState;
 use crate::core::format::format_redis_value;
 use crate::core::pipeline_store::{StoredPipeline, StoredPipelineCommand};
@@ -34,6 +35,14 @@ pub async fn execute_pipeline(
     connection_id: String,
     commands: Vec<PipelineCommand>,
 ) -> Result<PipelineResponse, String> {
+    validate_connection_id(&connection_id)?;
+    // Build a vec of (cmd, args) for validation
+    let cmd_refs: Vec<(String, Vec<String>)> = commands
+        .iter()
+        .map(|c| (c.command.clone(), c.args.clone()))
+        .collect();
+    validate_pipeline_commands(&cmd_refs)?;
+
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
         pm.get_pool(&connection_id)?
@@ -106,6 +115,9 @@ pub async fn save_pipeline(
     commands: Vec<PipelineCommand>,
     created_at: u64,
 ) -> Result<(), String> {
+    crate::core::validate::validate_non_empty(&id, "pipeline id", 256)?;
+    crate::core::validate::validate_non_empty(&name, "pipeline name", 256)?;
+
     let store = state.pipeline_store.lock().map_err(|e| e.to_string())?;
     let stored = StoredPipeline {
         id,
@@ -137,6 +149,8 @@ pub async fn delete_pipeline(
     state: State<'_, AppState>,
     id: String,
 ) -> Result<(), String> {
+    crate::core::validate::validate_non_empty(&id, "pipeline id", 256)?;
+
     let store = state.pipeline_store.lock().map_err(|e| e.to_string())?;
     store.delete(&id)
 }

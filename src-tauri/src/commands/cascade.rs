@@ -1,3 +1,6 @@
+use crate::core::validate::{
+    validate_connection_id, validate_key, validate_pattern, validate_scan_count, validate_ttl,
+};
 use crate::AppState;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
@@ -28,6 +31,10 @@ pub async fn scan_keys(
     cursor: u64,
     count: u64,
 ) -> Result<(u64, Vec<RedisKeyInfo>), String> {
+    validate_connection_id(&connection_id)?;
+    validate_pattern(&pattern)?;
+    validate_scan_count(count)?;
+
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
         pm.get_pool(&connection_id)?
@@ -135,6 +142,9 @@ pub async fn get_key_detail(
     connection_id: String,
     key: String,
 ) -> Result<KeyDetail, String> {
+    validate_connection_id(&connection_id)?;
+    validate_key(&key)?;
+
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
         pm.get_pool(&connection_id)?
@@ -242,6 +252,9 @@ pub async fn delete_key(
     connection_id: String,
     key: String,
 ) -> Result<bool, String> {
+    validate_connection_id(&connection_id)?;
+    validate_key(&key)?;
+
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
         pm.get_pool(&connection_id)?
@@ -263,6 +276,10 @@ pub async fn set_key_ttl(
     key: String,
     ttl: i64,
 ) -> Result<bool, String> {
+    validate_connection_id(&connection_id)?;
+    validate_key(&key)?;
+    validate_ttl(ttl)?;
+
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
         pm.get_pool(&connection_id)?
@@ -297,6 +314,10 @@ pub async fn rename_key(
     old_key: String,
     new_key: String,
 ) -> Result<bool, String> {
+    validate_connection_id(&connection_id)?;
+    validate_key(&old_key)?;
+    validate_key(&new_key)?;
+
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
         pm.get_pool(&connection_id)?
@@ -317,6 +338,8 @@ pub async fn db_size(
     state: State<'_, AppState>,
     connection_id: String,
 ) -> Result<u64, String> {
+    validate_connection_id(&connection_id)?;
+
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
         pm.get_pool(&connection_id)?
@@ -348,6 +371,9 @@ pub async fn set_value(
     score: Option<f64>,
     old_value: Option<String>,
 ) -> Result<bool, String> {
+    validate_connection_id(&connection_id)?;
+    validate_key(&key)?;
+
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
         pm.get_pool(&connection_id)?

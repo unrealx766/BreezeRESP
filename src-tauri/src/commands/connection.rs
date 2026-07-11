@@ -1,3 +1,4 @@
+use crate::core::validate::{validate_connection_config, validate_connection_id};
 use crate::AppState;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -34,6 +35,9 @@ pub async fn connect(
     state: State<'_, AppState>,
     config: ConnectionConfig,
 ) -> Result<ConnectionInfo, String> {
+    validate_connection_id(&config.id)?;
+    validate_connection_config(&config.host, config.port, &config.name, &config.password)?;
+
     // Remove stale pool if exists (config may have changed)
     {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
@@ -73,6 +77,7 @@ pub async fn connect(
 /// Disconnect from a Redis instance
 #[tauri::command]
 pub async fn disconnect(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    validate_connection_id(&id)?;
     let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
     pm.remove(&id)
 }
@@ -83,6 +88,9 @@ pub async fn test_connection(
     state: State<'_, AppState>,
     config: ConnectionConfig,
 ) -> Result<bool, String> {
+    validate_connection_id(&config.id)?;
+    validate_connection_config(&config.host, config.port, &config.name, &config.password)?;
+
     let test_id = format!("__test_{}", config.id);
     let pw = if config.password.is_empty() {
         None
@@ -142,6 +150,9 @@ pub async fn save_connection(
     state: State<'_, AppState>,
     config: ConnectionConfig,
 ) -> Result<(), String> {
+    validate_connection_id(&config.id)?;
+    validate_connection_config(&config.host, config.port, &config.name, &config.password)?;
+
     let cs = state.config_store.lock().map_err(|e| e.to_string())?;
     let mut connections = cs.load()?;
 
@@ -173,6 +184,8 @@ pub async fn switch_db(
     id: String,
     db: u8,
 ) -> Result<(), String> {
+    validate_connection_id(&id)?;
+
     // Get current connection info from config store
     let (host, port, password) = {
         let cs = state.config_store.lock().map_err(|e| e.to_string())?;
@@ -210,6 +223,8 @@ pub async fn switch_db(
 /// Delete a saved connection
 #[tauri::command]
 pub async fn delete_connection(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    validate_connection_id(&id)?;
+
     // Also disconnect if connected
     {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
