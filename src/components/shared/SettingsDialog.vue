@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { availableLocales } from "@/i18n";
-import { Globe, Check, Settings, X, Info, SlidersHorizontal, Github } from "lucide-vue-next";
+import { Globe, Check, Settings, X, Info, SlidersHorizontal, Github, Sun, Moon } from "lucide-vue-next";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 const GITHUB_URL = "https://github.com/unrealx766/BreezeRESP";
@@ -11,6 +11,18 @@ const { t, locale } = useI18n();
 
 const visible = ref(false);
 const activeTab = ref<"general" | "about">("general");
+
+// Theme state
+const THEME_KEY = "breezeresp-theme";
+const currentTheme = ref<"light" | "dark">(
+  (localStorage.getItem(THEME_KEY) as "light" | "dark") || "light"
+);
+
+function setTheme(theme: "light" | "dark") {
+  currentTheme.value = theme;
+  localStorage.setItem(THEME_KEY, theme);
+  document.documentElement.classList.toggle("dark", theme === "dark");
+}
 
 function open() {
   visible.value = true;
@@ -37,7 +49,7 @@ defineExpose({ open });
         <div class="absolute inset-0 bg-black/30 backdrop-blur-[1px]" @click="close" />
 
         <!-- Dialog -->
-        <div class="relative bg-white rounded-xl shadow-2xl border border-border w-[500px] max-w-[90vw] animate-in overflow-hidden">
+        <div class="relative bg-bg-secondary rounded-xl shadow-2xl border border-border w-[500px] max-w-[90vw] animate-in overflow-hidden">
           <!-- Header -->
           <div class="flex items-center justify-between px-5 py-3.5 border-b border-border-light">
             <div class="flex items-center gap-2.5">
@@ -83,7 +95,44 @@ defineExpose({ open });
             <!-- Content -->
             <div class="flex-1 px-5 py-4 min-w-0">
               <!-- General Tab -->
-              <div v-if="activeTab === 'general'" class="space-y-4">
+              <div v-if="activeTab === 'general'" class="space-y-5">
+                <!-- Theme Setting -->
+                <div>
+                  <div class="flex items-center gap-2 mb-2.5">
+                    <component :is="currentTheme === 'dark' ? Moon : Sun" :size="13" class="text-text-muted" />
+                    <span class="text-xs font-medium text-text-primary">{{ t("settings.theme") }}</span>
+                  </div>
+                  <p class="text-[11px] text-text-muted mb-3 pl-[21px]">{{ t("settings.themeDesc") }}</p>
+                  <div class="flex gap-2 pl-[21px]">
+                    <button
+                      @click="setTheme('light')"
+                      class="flex items-center justify-between px-3 py-2 text-xs rounded-lg border transition-colors min-w-[100px]"
+                      :class="currentTheme === 'light'
+                        ? 'border-redis/40 bg-redis/5 text-redis font-medium'
+                        : 'border-border bg-bg-secondary text-text-secondary hover:border-border-hover hover:bg-bg-hover'"
+                    >
+                      <div class="flex items-center gap-1.5">
+                        <Sun :size="12" />
+                        <span>{{ t("settings.themeLight") }}</span>
+                      </div>
+                      <Check v-if="currentTheme === 'light'" :size="12" />
+                    </button>
+                    <button
+                      @click="setTheme('dark')"
+                      class="flex items-center justify-between px-3 py-2 text-xs rounded-lg border transition-colors min-w-[100px]"
+                      :class="currentTheme === 'dark'
+                        ? 'border-redis/40 bg-redis/5 text-redis font-medium'
+                        : 'border-border bg-bg-secondary text-text-secondary hover:border-border-hover hover:bg-bg-hover'"
+                    >
+                      <div class="flex items-center gap-1.5">
+                        <Moon :size="12" />
+                        <span>{{ t("settings.themeDark") }}</span>
+                      </div>
+                      <Check v-if="currentTheme === 'dark'" :size="12" />
+                    </button>
+                  </div>
+                </div>
+
                 <!-- Language Setting -->
                 <div>
                   <div class="flex items-center gap-2 mb-2.5">
@@ -99,7 +148,7 @@ defineExpose({ open });
                       class="flex items-center justify-between px-3 py-2 text-xs rounded-lg border transition-colors min-w-[120px]"
                       :class="locale === loc.code
                         ? 'border-redis/40 bg-redis/5 text-redis font-medium'
-                        : 'border-border bg-white text-text-secondary hover:border-border-hover hover:bg-bg-hover'"
+                        : 'border-border bg-bg-secondary text-text-secondary hover:border-border-hover hover:bg-bg-hover'"
                     >
                       <span>{{ loc.label }}</span>
                       <Check v-if="locale === loc.code" :size="12" />

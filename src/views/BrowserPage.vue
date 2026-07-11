@@ -389,7 +389,7 @@ onBeforeUnmount(() => {
   <div class="h-full flex flex-col min-w-[700px]">
     <div class="flex-1 flex min-h-0">
     <!-- Left Panel: Key Tree -->
-    <div class="w-72 border-r border-border flex flex-col bg-white shrink-0">
+    <div class="w-72 border-r border-border flex flex-col bg-bg-secondary shrink-0">
       <!-- Search & Filter -->
       <div class="p-3 space-y-2 border-b border-border-light">
         <div class="relative">
@@ -448,7 +448,7 @@ onBeforeUnmount(() => {
     <div class="flex-1 flex flex-col min-w-0">
       <template v-if="detail.currentDetail">
         <!-- Header with editable key name -->
-        <div class="px-4 py-3 border-b border-border-light flex items-center justify-between bg-white">
+        <div class="px-4 py-3 border-b border-border-light flex items-center justify-between bg-bg-secondary">
           <div class="flex items-center gap-2 min-w-0">
             <component :is="typeIcons[detail.currentKey!.type]" :size="16" :class="`text-type-${detail.currentKey!.type}`" />
             <!-- Inline key rename -->
@@ -518,7 +518,7 @@ onBeforeUnmount(() => {
               :class="[
                 'flex-1 w-full px-4 py-3 text-sm font-mono border rounded-lg resize-none focus:outline-none min-h-[200px]',
                 editingString
-                  ? 'bg-white border-redis focus:ring-1 focus:ring-redis/30'
+                  ? 'bg-bg-secondary border-redis focus:ring-1 focus:ring-redis/30'
                   : 'bg-bg-primary border-border'
               ]"
             />
@@ -541,7 +541,7 @@ onBeforeUnmount(() => {
                       <!-- Editing mode -->
                       <div v-if="editingHashField === f.field" class="flex items-center gap-1.5">
                         <input v-model="hashFieldTemp" @keyup.enter="saveEditHash" @keyup.escape="cancelEditHash"
-                          class="flex-1 text-xs font-mono px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-white" />
+                          class="flex-1 text-xs font-mono px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-bg-secondary" />
                         <button @click="saveEditHash" class="text-success hover:text-success/80"><Save :size="11" /></button>
                         <button @click="cancelEditHash" class="text-text-muted hover:text-text-primary"><X :size="11" /></button>
                       </div>
@@ -575,7 +575,7 @@ onBeforeUnmount(() => {
                     <td class="px-3 py-2 font-mono text-xs text-text-primary truncate max-w-0">
                       <div v-if="editingListIndex === i" class="flex items-center gap-1.5">
                         <input v-model="listItemTemp" @keyup.enter="saveEditList" @keyup.escape="cancelEditList"
-                          class="flex-1 text-xs font-mono px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-white" />
+                          class="flex-1 text-xs font-mono px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-bg-secondary" />
                         <button @click="saveEditList" class="text-success hover:text-success/80"><Save :size="11" /></button>
                         <button @click="cancelEditList" class="text-text-muted hover:text-text-primary"><X :size="11" /></button>
                       </div>
@@ -602,7 +602,7 @@ onBeforeUnmount(() => {
                 <!-- Editing -->
                 <div v-if="editingSetMember === m" class="flex items-center gap-1.5 flex-1 min-w-0">
                   <input v-model="setMemberTemp" @keyup.enter="saveEditSet" @keyup.escape="cancelEditSet"
-                    class="flex-1 text-xs font-mono px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-white min-w-0" />
+                    class="flex-1 text-xs font-mono px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-bg-secondary min-w-0" />
                   <button @click="saveEditSet" class="text-success hover:text-success/80 shrink-0"><Save :size="11" /></button>
                   <button @click="cancelEditSet" class="text-text-muted hover:text-text-primary shrink-0"><X :size="11" /></button>
                 </div>
@@ -632,9 +632,9 @@ onBeforeUnmount(() => {
                     <td class="px-3 py-2 font-mono text-xs text-text-primary truncate max-w-0">
                       <div v-if="editingZSetMember === m.member" class="flex items-center gap-1.5">
                         <input v-model.number="zsetScoreTemp" type="number" @keyup.enter="saveEditZSet" @keyup.escape="cancelEditZSet"
-                          class="w-16 text-xs font-mono px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-white" />
+                          class="w-16 text-xs font-mono px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-bg-secondary" />
                         <input v-model="zsetMemberTemp" @keyup.enter="saveEditZSet" @keyup.escape="cancelEditZSet"
-                          class="flex-1 text-xs font-mono px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-white min-w-0" />
+                          class="flex-1 text-xs font-mono px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-bg-secondary min-w-0" />
                         <button @click="saveEditZSet" class="text-success hover:text-success/80"><Save :size="11" /></button>
                         <button @click="cancelEditZSet" class="text-text-muted hover:text-text-primary"><X :size="11" /></button>
                       </div>
@@ -669,7 +669,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Right Panel: TTL Gauge + Meta -->
-    <div class="w-56 border-l border-border bg-white p-4 flex flex-col gap-4 shrink-0" v-if="detail.currentDetail">
+    <div class="w-56 border-l border-border bg-bg-secondary p-4 flex flex-col gap-4 shrink-0" v-if="detail.currentDetail">
       <div class="text-center">
         <div class="flex items-center justify-center gap-2 mb-3">
           <p class="text-xs font-medium text-text-secondary">{{ t("detail.ttl") }}</p>
@@ -680,7 +680,7 @@ onBeforeUnmount(() => {
           <div class="flex items-center gap-1.5 mt-2 justify-center">
             <input v-model="ttlTemp" @keyup.enter="saveEditTtl" @keyup.escape="cancelEditTtl"
               type="number"
-              class="w-20 text-xs font-mono px-2 py-1 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-white text-center"
+              class="w-20 text-xs font-mono px-2 py-1 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-bg-secondary text-center"
               :placeholder="t('detail.setTtlPlaceholder')"
             />
             <button @click="saveEditTtl" class="w-7 h-7 flex items-center justify-center rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors"><Save :size="13" /></button>

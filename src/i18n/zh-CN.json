@@ -159,7 +159,11 @@
     "hint": "沙盒模式下命令不会直接执行，而是先预览变更影响",
     "templates": "命令模板",
     "result": "查询结果",
-    "readOnly": "只读"
+    "readOnly": "只读",
+    "rollbackDetail": "回滚详情",
+    "previewRollback": "预览回滚命令",
+    "executedRollback": "已执行的回滚命令",
+    "willExecuteRollback": "将执行的回滚命令"
   },
   "status": {
     "memory": "内存",
@@ -178,6 +182,10 @@
     "title": "设置",
     "language": "语言",
     "languageDesc": "选择应用程序的显示语言",
+    "theme": "主题",
+    "themeDesc": "选择应用程序的外观主题",
+    "themeLight": "浅色",
+    "themeDark": "深色",
     "general": "通用",
     "about": "关于"
   },

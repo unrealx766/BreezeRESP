@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, onMounted, onBeforeUnmount } from "vue";
 
 const props = defineProps<{
   ttlRemaining: number;
@@ -9,6 +9,20 @@ const props = defineProps<{
 const radius = 48;
 const stroke = 8;
 const circumference = 2 * Math.PI * radius;
+
+const isDark = ref(document.documentElement.classList.contains("dark"));
+let observer: MutationObserver | null = null;
+
+onMounted(() => {
+  observer = new MutationObserver(() => {
+    isDark.value = document.documentElement.classList.contains("dark");
+  });
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+});
+
+onBeforeUnmount(() => {
+  observer?.disconnect();
+});
 
 const percent = computed(() => {
   if (props.ttlTotal <= 0) return -1; // no expiry
@@ -21,17 +35,17 @@ const dashOffset = computed(() => {
 });
 
 const color = computed(() => {
-  if (percent.value < 0) return "#8b92ad"; // muted
-  if (percent.value > 60) return "#10b981"; // green
-  if (percent.value > 30) return "#f59e0b"; // yellow
-  return "#ef4444"; // red
+  if (percent.value < 0) return isDark.value ? "#6b7194" : "#8b92ad";
+  if (percent.value > 60) return isDark.value ? "#34d399" : "#10b981";
+  if (percent.value > 30) return isDark.value ? "#fbbf24" : "#f59e0b";
+  return isDark.value ? "#f87171" : "#ef4444";
 });
 
 const bgColor = computed(() => {
-  if (percent.value < 0) return "#e2e6ef";
-  if (percent.value > 60) return "#d1fae5";
-  if (percent.value > 30) return "#fef3c7";
-  return "#fecaca";
+  if (percent.value < 0) return isDark.value ? "#1f2236" : "#e2e6ef";
+  if (percent.value > 60) return isDark.value ? "#0d3326" : "#d1fae5";
+  if (percent.value > 30) return isDark.value ? "#332b0e" : "#fef3c7";
+  return isDark.value ? "#331515" : "#fecaca";
 });
 
 const centerText = computed(() => {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref as vueRef } from "vue";
 import { useI18n } from "vue-i18n";
 import { useSandboxStore } from "@/stores/sandboxStore";
 import { useConnectionStore } from "@/stores/connectionStore";
@@ -8,12 +8,22 @@ import { truncateValue } from "@/utils/format";
 import {
   FlaskConical, Play, Check, History,
   Plus, Minus, Edit3, Terminal, AlertTriangle, Hash,
+  RotateCcw, ChevronDown, ChevronRight,
 } from "lucide-vue-next";
 
 const { t } = useI18n();
 const sandbox = useSandboxStore();
 const connStore = useConnectionStore();
 const isConnected = computed(() => connStore.activeConnection?.status === "connected");
+
+/** Track which history items have their rollback commands expanded */
+const expandedRollback = vueRef<Set<string>>(new Set());
+
+function toggleRollbackDetail(id: string) {
+  const s = new Set(expandedRollback.value);
+  if (s.has(id)) { s.delete(id); } else { s.add(id); }
+  expandedRollback.value = s;
+}
 
 function handleKeydown(e: KeyboardEvent) {
   if (e.key === "Enter" && !e.shiftKey) {
@@ -63,7 +73,7 @@ function useTemplate(tpl: typeof commandTemplates[0]) {
         <button v-for="tpl in commandTemplates" :key="tpl.label"
           @click="useTemplate(tpl)"
           :disabled="!isConnected"
-          class="px-2 py-0.5 text-[11px] font-mono bg-white border border-border rounded text-text-secondary hover:border-redis hover:text-redis transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+          class="px-2 py-0.5 text-[11px] font-mono bg-bg-secondary border border-border rounded text-text-secondary hover:border-redis hover:text-redis transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
           {{ tpl.label }}
         </button>
       </div>
@@ -78,7 +88,7 @@ function useTemplate(tpl: typeof commandTemplates[0]) {
               :disabled="!isConnected"
               rows="2"
               :class="[
-                'w-full px-3 py-2 text-sm font-mono bg-white border rounded-lg focus:outline-none focus:ring-1 resize-none disabled:opacity-50 disabled:cursor-not-allowed transition-colors',
+                'w-full px-3 py-2 text-sm font-mono bg-bg-secondary border rounded-lg focus:outline-none focus:ring-1 resize-none disabled:opacity-50 disabled:cursor-not-allowed transition-colors',
                 sandbox.commandError
                   ? 'border-danger focus:border-danger focus:ring-danger/20'
                   : 'border-border focus:border-redis focus:ring-redis/20'
@@ -207,28 +217,66 @@ function useTemplate(tpl: typeof commandTemplates[0]) {
       <div v-if="sandbox.history.length === 0" class="p-8 text-center text-text-muted text-sm">
         {{ t("sandbox.noHistory") }}
       </div>
-      <div v-else class="divide-y divide-border-light flex-1 min-h-0 overflow-y-auto">
+      <div v-else class="flex-1 min-h-0 overflow-y-auto">
         <div v-for="item in sandbox.history" :key="item.id"
-          class="px-4 py-3 flex items-center gap-3 hover:bg-bg-hover/50 transition-colors flex-wrap">
-          <span class="badge text-[10px] shrink-0"
-            :class="{
-              'bg-success/10 text-success': item.status === 'applied',
-              'bg-warning/10 text-warning': item.status === 'preview',
-              'bg-danger/10 text-danger': item.status === 'rolled-back',
-            }">
-            {{ t(`sandbox.${item.status === 'rolled-back' ? 'rolledBack' : item.status}`) }}
-          </span>
-          <span class="text-xs font-mono text-text-primary truncate flex-1 min-w-[120px]">{{ item.command }}</span>
-          <span class="text-[10px] text-text-muted shrink-0">{{ item.diffCount }} changes</span>
-          <span class="text-[10px] text-text-muted shrink-0">{{ formatTime(item.timestamp) }}</span>
-          <button
-            v-if="item.status === 'applied'"
-            @click="sandbox.rollbackHistoryItem(item.id)"
-            :disabled="sandbox.rollingBack || !isConnected"
-            class="text-[10px] text-danger hover:underline shrink-0 disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed min-w-14 text-center"
-          >
-            {{ sandbox.rollingBack ? t("sandbox.rollingBack") : t("sandbox.rollback") }}
-          </button>
+          class="hover:bg-bg-hover/50 transition-colors">
+          <!-- Main row -->
+          <div class="px-4 py-3 flex items-center gap-3 flex-wrap border-b border-border-light">
+            <span class="badge text-[10px] shrink-0"
+              :class="{
+                'bg-success/10 text-success': item.status === 'applied',
+                'bg-warning/10 text-warning': item.status === 'preview',
+                'bg-danger/10 text-danger': item.status === 'rolled-back',
+              }">
+              {{ t(`sandbox.${item.status === 'rolled-back' ? 'rolledBack' : item.status}`) }}
+            </span>
+            <span class="text-xs font-mono text-text-primary truncate flex-1 min-w-[120px]">{{ item.command }}</span>
+            <span class="text-[10px] text-text-muted shrink-0">{{ item.diffCount }} changes</span>
+            <span class="text-[10px] text-text-muted shrink-0">{{ formatTime(item.timestamp) }}</span>
+            <!-- Rollback / toggle detail -->
+            <button
+              v-if="item.status === 'applied' && item.rollbackCommands.length > 0"
+              @click="toggleRollbackDetail(item.id)"
+              class="text-[10px] text-text-muted hover:text-text-secondary shrink-0 flex items-center gap-0.5"
+              :title="t('sandbox.previewRollback')"
+            >
+              <component :is="expandedRollback.has(item.id) ? ChevronDown : ChevronRight" :size="11" />
+            </button>
+            <button
+              v-if="item.status === 'applied'"
+              @click="sandbox.rollbackHistoryItem(item.id)"
+              :disabled="sandbox.rollingBack || !isConnected"
+              class="text-[10px] text-danger hover:underline shrink-0 disabled:opacity-50 disabled:no-underline disabled:cursor-not-allowed min-w-14 text-center"
+            >
+              {{ sandbox.rollingBack ? t("sandbox.rollingBack") : t("sandbox.rollback") }}
+            </button>
+            <!-- Toggle detail for rolled-back items -->
+            <button
+              v-if="item.status === 'rolled-back' && item.rollbackCommands.length > 0"
+              @click="toggleRollbackDetail(item.id)"
+              class="text-[10px] text-text-muted hover:text-text-secondary shrink-0 flex items-center gap-0.5"
+            >
+              <component :is="expandedRollback.has(item.id) ? ChevronDown : ChevronRight" :size="11" />
+              <span>{{ t("sandbox.rollbackDetail") }}</span>
+            </button>
+          </div>
+          <!-- Rollback commands detail -->
+          <transition name="slide-down">
+          <div v-if="expandedRollback.has(item.id) && item.rollbackCommands.length > 0"
+            class="px-4 py-2 bg-bg-primary border-b border-border-light">
+            <p class="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-1.5 flex items-center gap-1">
+              <RotateCcw :size="10" />
+              {{ item.status === 'rolled-back' ? t("sandbox.executedRollback") : t("sandbox.willExecuteRollback") }}
+            </p>
+            <div class="space-y-1">
+              <div v-for="(cmd, idx) in item.rollbackCommands" :key="idx"
+                class="flex items-center gap-2 text-xs font-mono">
+                <span class="text-[10px] text-text-muted w-4 text-right shrink-0">{{ idx + 1 }}</span>
+                <span class="px-2 py-1 bg-bg-secondary border border-border-light rounded text-text-secondary break-all">{{ cmd }}</span>
+              </div>
+            </div>
+          </div>
+          </transition>
         </div>
       </div>
     </div>

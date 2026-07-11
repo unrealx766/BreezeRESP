@@ -202,7 +202,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div
-    class="fixed bg-white border rounded-xl shadow-2xl flex flex-col overflow-hidden select-none"
+    class="fixed bg-bg-secondary border rounded-xl shadow-2xl flex flex-col overflow-hidden select-none"
     :class="[isDragging ? 'border-info/50' : 'border-border']"
     :style="style"
     @mousedown="emit('focus', props.id)"

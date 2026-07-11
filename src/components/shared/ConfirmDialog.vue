@@ -53,7 +53,7 @@ defineExpose({ open });
         <div class="absolute inset-0 bg-black/30 backdrop-blur-[1px]" @click="onCancel" />
 
         <!-- Dialog -->
-        <div class="relative bg-white rounded-xl shadow-2xl border border-border w-[400px] max-w-[90vw] p-5 animate-in">
+        <div class="relative bg-bg-secondary rounded-xl shadow-2xl border border-border w-[400px] max-w-[90vw] p-5 animate-in">
           <!-- Icon + Title -->
           <div class="flex items-center gap-3 mb-3">
             <div

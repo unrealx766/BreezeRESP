@@ -159,7 +159,11 @@
     "hint": "Commands are not executed directly in sandbox mode. Preview changes first.",
     "templates": "Templates",
     "result": "Query Result",
-    "readOnly": "Read-only"
+    "readOnly": "Read-only",
+    "rollbackDetail": "Rollback Detail",
+    "previewRollback": "Preview rollback commands",
+    "executedRollback": "Executed Rollback Commands",
+    "willExecuteRollback": "Rollback Commands to Execute"
   },
   "status": {
     "memory": "Memory",
@@ -178,6 +182,10 @@
     "title": "Settings",
     "language": "Language",
     "languageDesc": "Choose the display language for the application",
+    "theme": "Theme",
+    "themeDesc": "Choose the appearance for the application",
+    "themeLight": "Light",
+    "themeDark": "Dark",
     "general": "General",
     "about": "About"
   },

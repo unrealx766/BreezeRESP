@@ -294,7 +294,7 @@ function statusColor(status: string) {
     <Teleport to="body">
       <div v-if="showForm" class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" @click="showForm = false" />
-        <div class="relative bg-white rounded-xl shadow-xl w-[440px] max-h-[90vh] overflow-y-auto p-6">
+        <div class="relative bg-bg-secondary rounded-xl shadow-xl w-[440px] max-h-[90vh] overflow-y-auto p-6">
           <div class="flex items-center justify-between mb-5">
             <h3 class="text-base font-semibold text-text-primary">
               {{ editingId ? t("connection.editConnection") : t("connection.newConnection") }}

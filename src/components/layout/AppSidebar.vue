@@ -67,7 +67,7 @@ async function handleSidebarDisconnect(id: string) {
         @click="navigate(item.path)"
         class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-150 border"
         :class="isActive(item.path)
-          ? 'bg-white text-redis shadow-sm border-border-light'
+          ? 'bg-bg-secondary text-redis shadow-sm border-border-light'
           : 'text-text-secondary border-transparent hover:bg-bg-hover hover:text-text-primary'"
       >
         <component :is="item.icon" :size="16" :stroke-width="2" />

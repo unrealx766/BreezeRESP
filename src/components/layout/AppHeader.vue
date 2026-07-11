@@ -71,7 +71,7 @@ const colorMap = {
 </script>
 
 <template>
-  <header class="h-12 bg-white border-b border-border flex items-center justify-between px-4 shrink-0 overflow-visible">
+  <header class="h-12 bg-bg-secondary border-b border-border flex items-center justify-between px-4 shrink-0 overflow-visible">
     <!-- Left: Connection info -->
     <div class="flex items-center gap-3 min-w-0">
       <template v-if="connStore.activeConnection">
@@ -103,7 +103,7 @@ const colorMap = {
           <!-- Dropdown -->
           <div
             v-if="showDbDropdown"
-            class="absolute top-full left-0 mt-1 w-28 bg-white border border-border rounded-lg shadow-lg py-1 z-50 max-h-52 overflow-y-auto"
+            class="absolute top-full left-0 mt-1 w-28 bg-bg-secondary border border-border rounded-lg shadow-lg py-1 z-50 max-h-52 overflow-y-auto"
           >
             <div class="px-2.5 py-1 border-b border-border-light mb-0.5">
               <span class="text-[9px] font-semibold text-text-muted uppercase tracking-wider">Database</span>
@@ -149,7 +149,7 @@ const colorMap = {
         <!-- Notification panel -->
         <div
           v-if="showNotifications"
-          class="absolute top-full right-0 mt-1 w-80 bg-white border border-border rounded-xl shadow-xl z-50 overflow-hidden"
+          class="absolute top-full right-0 mt-1 w-80 bg-bg-secondary border border-border rounded-xl shadow-xl z-50 overflow-hidden"
         >
           <!-- Header -->
           <div class="flex items-center justify-between px-3 py-2 border-b border-border-light">

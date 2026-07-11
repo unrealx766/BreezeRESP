@@ -16,6 +16,7 @@ const h = computed(() => props.height ?? 120);
 const padding = { top: 10, right: 10, bottom: 20, left: 40 };
 
 let ro: ResizeObserver | null = null;
+let themeObserver: MutationObserver | null = null;
 
 onMounted(() => {
   if (containerRef.value) {
@@ -27,14 +28,23 @@ onMounted(() => {
     });
     ro.observe(containerRef.value);
   }
+  // Redraw on theme change
+  themeObserver = new MutationObserver(() => draw());
+  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
   draw();
 });
 
 onBeforeUnmount(() => {
   ro?.disconnect();
+  themeObserver?.disconnect();
 });
 
 const w = computed(() => containerWidth.value);
+
+function getCssColor(varName: string, fallback: string): string {
+  const val = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+  return val || fallback;
+}
 
 function draw() {
   const canvas = canvasRef.value;
@@ -61,8 +71,12 @@ function draw() {
   const toX = (i: number) => padding.left + (i / (data.length - 1)) * chartW;
   const toY = (v: number) => padding.top + chartH - ((v - minVal) / range) * chartH;
 
+  const gridColor = getCssColor("--color-border", "#e2e6ef");
+  const labelColor = getCssColor("--color-text-muted", "#8b92ad");
+  const redisColor = getCssColor("--color-redis", "#DC382D");
+
   // Grid lines
-  ctx.strokeStyle = "#e2e6ef";
+  ctx.strokeStyle = gridColor;
   ctx.lineWidth = 0.5;
   for (let i = 0; i <= 4; i++) {
     const y = padding.top + (chartH / 4) * i;
@@ -72,7 +86,7 @@ function draw() {
     ctx.stroke();
 
     // Y labels
-    ctx.fillStyle = "#8b92ad";
+    ctx.fillStyle = labelColor;
     ctx.font = "10px Inter, sans-serif";
     ctx.textAlign = "right";
     ctx.fillText(Math.round(maxVal - ((maxVal - minVal) / 4) * i).toString(), padding.left - 6, y + 3);
@@ -80,8 +94,8 @@ function draw() {
 
   // Gradient fill
   const gradient = ctx.createLinearGradient(0, padding.top, 0, h.value - padding.bottom);
-  gradient.addColorStop(0, "rgba(220, 56, 45, 0.15)");
-  gradient.addColorStop(1, "rgba(220, 56, 45, 0.01)");
+  gradient.addColorStop(0, redisColor + "26");
+  gradient.addColorStop(1, redisColor + "03");
 
   ctx.beginPath();
   ctx.moveTo(toX(0), h.value - padding.bottom);
@@ -110,7 +124,7 @@ function draw() {
       ctx.bezierCurveTo(cpX, toY(data[i - 1].value), cpX, toY(data[i].value), currX, toY(data[i].value));
     }
   }
-  ctx.strokeStyle = "#DC382D";
+  ctx.strokeStyle = redisColor;
   ctx.lineWidth = 2;
   ctx.stroke();
 
@@ -119,11 +133,11 @@ function draw() {
   const lastY = toY(data[data.length - 1].value);
   ctx.beginPath();
   ctx.arc(lastX, lastY, 3, 0, Math.PI * 2);
-  ctx.fillStyle = "#DC382D";
+  ctx.fillStyle = redisColor;
   ctx.fill();
   ctx.beginPath();
   ctx.arc(lastX, lastY, 6, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(220, 56, 45, 0.2)";
+  ctx.fillStyle = redisColor + "33";
   ctx.fill();
 }
 

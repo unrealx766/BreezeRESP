@@ -11,7 +11,7 @@ const appVersion = __APP_VERSION__;
 </script>
 
 <template>
-  <footer class="h-7 bg-white border-t border-border flex items-center px-4 text-[11px] text-text-muted shrink-0 gap-3 overflow-hidden">
+  <footer class="h-7 bg-bg-secondary border-t border-border flex items-center px-4 text-[11px] text-text-muted shrink-0 gap-3 overflow-hidden">
     <template v-if="connStore.activeConnection?.status === 'connected'">
       <!-- Memory -->
       <div class="flex items-center gap-1 shrink-0">
