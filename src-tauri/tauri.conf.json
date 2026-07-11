@@ -39,7 +39,7 @@
     "windows": {
       "nsis": {
         "installMode": "currentUser",
-        "displayLanguageSelector": true
+        "displayLanguageSelector": false
       },
       "wix": null
     },
