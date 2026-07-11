@@ -18,6 +18,7 @@ pub struct DiffEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SandboxPreview {
     pub command: String,
     pub diff: Vec<DiffEntry>,
@@ -42,6 +43,67 @@ const READ_ONLY_COMMANDS: &[&str] = &[
     "ZRANGE", "ZCARD", "ZSCORE", "ZRANK", "ZRANGEBYSCORE",
     "KEYS", "SCAN", "DBSIZE", "INFO", "PING", "ECHO",
 ];
+
+/// Parse a command string into parts, respecting quoted strings.
+/// Supports double-quoted ("hello world") and single-quoted ('hello world') values.
+/// Backslash escapes within double quotes are supported (\\, \").
+fn parse_command_parts(input: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut chars = input.chars().peekable();
+
+    while let Some(&c) = chars.peek() {
+        match c {
+            ' ' | '\t' if current.is_empty() => {
+                chars.next();
+            }
+            '"' => {
+                chars.next();
+                while let Some(&inner) = chars.peek() {
+                    if inner == '"' {
+                        chars.next();
+                        break;
+                    }
+                    if inner == '\\' {
+                        chars.next();
+                        if let Some(&escaped) = chars.peek() {
+                            current.push(escaped);
+                            chars.next();
+                        }
+                    } else {
+                        current.push(inner);
+                        chars.next();
+                    }
+                }
+            }
+            '\'' => {
+                chars.next();
+                while let Some(&inner) = chars.peek() {
+                    if inner == '\'' {
+                        chars.next();
+                        break;
+                    }
+                    current.push(inner);
+                    chars.next();
+                }
+            }
+            ' ' | '\t' => {
+                parts.push(std::mem::take(&mut current));
+                chars.next();
+            }
+            _ => {
+                current.push(c);
+                chars.next();
+            }
+        }
+    }
+
+    if !current.is_empty() {
+        parts.push(current);
+    }
+
+    parts
+}
 
 fn extract_keys(parts: &[&str]) -> Vec<String> {
     if parts.len() < 2 {
@@ -91,7 +153,7 @@ fn simulate_write_command(
     args: &[&str],
     current_values: &HashMap<String, Option<String>>,
     current_types: &HashMap<String, String>,
-) -> HashMap<String, Option<String>> {
+) -> Result<HashMap<String, Option<String>>, String> {
     let cmd_upper = cmd.to_uppercase();
     let mut result: HashMap<String, Option<String>> = HashMap::new();
 
@@ -172,7 +234,7 @@ fn simulate_write_command(
 
             if kt != "hash" {
                 result.insert(key, cur);
-                return result;
+                return Ok(result);
             }
             let mut fields: Vec<(String, String)> = cur.as_deref()
                 .and_then(|s| serde_json::from_str(s).ok())
@@ -429,15 +491,18 @@ fn simulate_write_command(
             }
         }
 
-        // ── Fallback: return current values unchanged ──────────────
+        // ── Fallback: reject unsupported commands ─────────────────
         _ => {
-            for (key, val) in current_values {
-                result.insert(key.clone(), val.clone());
-            }
+            return Err(format!(
+                "Command '{}' is not supported in sandbox preview. \
+                 Only common write commands can be previewed; \
+                 use Pipeline for other commands.",
+                cmd_upper
+            ));
         }
     }
 
-    result
+    Ok(result)
 }
 
 /// Determine the key-type string that results from a simulated write.
@@ -494,16 +559,17 @@ pub async fn sandbox_preview(
     };
     let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
 
-    let parts: Vec<&str> = command.split_whitespace().collect();
+    let parts: Vec<String> = parse_command_parts(&command);
     if parts.is_empty() {
         return Err("Empty command".to_string());
     }
-    let cmd_name_upper = parts[0].to_uppercase();
+    let part_refs: Vec<&str> = parts.iter().map(|s| s.as_str()).collect();
+    let cmd_name_upper = part_refs[0].to_uppercase();
 
     // ── Read-only commands: execute directly ──
     if READ_ONLY_COMMANDS.contains(&cmd_name_upper.as_str()) {
-        let mut redis_cmd = redis::cmd(parts[0]);
-        for arg in &parts[1..] {
+        let mut redis_cmd = redis::cmd(part_refs[0]);
+        for arg in &part_refs[1..] {
             redis_cmd.arg(*arg);
         }
         let result: redis::Value = redis_cmd
@@ -522,7 +588,7 @@ pub async fn sandbox_preview(
     }
 
     // ── Write commands: local simulation ──
-    let affected_keys = extract_keys(&parts);
+    let affected_keys = extract_keys(&part_refs);
 
     // Step 1: Read current Redis state for affected keys
     let mut redis_state: HashMap<String, Option<String>> = HashMap::new();
@@ -595,11 +661,11 @@ pub async fn sandbox_preview(
 
     // Step 4: Locally simulate the command
     let simulated = simulate_write_command(
-        parts[0],
-        &parts[1..],
+        part_refs[0],
+        &part_refs[1..],
         &effective_values,
         &effective_types,
-    );
+    )?;
 
     // Build after_state & after_key_types from simulation result
     let mut after_state: HashMap<String, String> = HashMap::new();
@@ -610,7 +676,7 @@ pub async fn sandbox_preview(
                 after_state.insert(key.clone(), val.clone());
             }
             let before_kt = effective_types.get(key).map(|s| s.as_str()).unwrap_or("none");
-            let new_kt = simulated_key_type(parts[0], before_kt, sim_val);
+            let new_kt = simulated_key_type(part_refs[0], before_kt, sim_val);
             after_key_types.insert(key.clone(), new_kt);
         }
     }
@@ -642,6 +708,9 @@ pub async fn sandbox_preview(
     };
 
     // Convert DiffResult to Vec<DiffEntry>
+    // IMPORTANT: before_raw must always hold the ORIGINAL Redis state (not
+    // the pending/simulated state) so that rollback can faithfully restore
+    // keys to their pre-command condition.
     let mut diff = Vec::new();
     if let Some(dr) = diff_result {
         for (key, val) in dr.added {
@@ -651,7 +720,7 @@ pub async fn sandbox_preview(
                 key_type: Some(kt.clone()),
                 before: None,
                 after: Some(format_for_display(&val, &kt)),
-                before_raw: None,
+                before_raw: redis_state.get(&key).cloned().flatten(),
                 after_raw: Some(val),
                 change_type: "added".to_string(),
             });
@@ -663,7 +732,7 @@ pub async fn sandbox_preview(
                 key_type: Some(kt.clone()),
                 before: Some(format_for_display(&before, &kt)),
                 after: Some(format_for_display(&after, &after_key_types.get(&key).cloned().unwrap_or(kt.clone()))),
-                before_raw: Some(before),
+                before_raw: redis_state.get(&key).cloned().flatten(),
                 after_raw: Some(after),
                 change_type: "modified".to_string(),
             });
@@ -675,7 +744,7 @@ pub async fn sandbox_preview(
                 key_type: Some(kt.clone()),
                 before: Some(format_for_display(&val, &kt)),
                 after: None,
-                before_raw: Some(val),
+                before_raw: redis_state.get(&key).cloned().flatten(),
                 after_raw: None,
                 change_type: "deleted".to_string(),
             });
@@ -687,7 +756,7 @@ pub async fn sandbox_preview(
                 key_type: Some(kt.clone()),
                 before: Some(format_for_display(&val, &kt)),
                 after: Some(format_for_display(&val, &kt)),
-                before_raw: Some(val.clone()),
+                before_raw: redis_state.get(&key).cloned().flatten(),
                 after_raw: Some(val),
                 change_type: "unchanged".to_string(),
             });
@@ -719,14 +788,14 @@ pub async fn sandbox_apply(
     };
     let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
 
-    let parts: Vec<&str> = command.split_whitespace().collect();
+    let parts: Vec<String> = parse_command_parts(&command);
     if parts.is_empty() {
         return Err("Empty command".to_string());
     }
 
-    let mut redis_cmd = redis::cmd(parts[0]);
+    let mut redis_cmd = redis::cmd(&parts[0]);
     for arg in &parts[1..] {
-        redis_cmd.arg(*arg);
+        redis_cmd.arg(arg);
     }
     let _: redis::Value = redis_cmd
         .query_async(&mut *conn)

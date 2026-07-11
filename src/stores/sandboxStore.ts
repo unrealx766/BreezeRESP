@@ -30,21 +30,47 @@ export const useSandboxStore = defineStore("sandbox", () => {
 
   // --- Frontend command validation ---
   const BLOCKED_COMMANDS = new Set([
-    "CONFIG", "DEBUG", "MODULE", "SCRIPT", "EVAL", "EVALSHA",
-    "SLAVEOF", "REPLICAOF", "SHUTDOWN", "ACL",
+    // Server administration
+    "CONFIG", "DEBUG", "MODULE", "SHUTDOWN", "ACL",
+    "FLUSHDB", "FLUSHALL", "SWAPDB",
+    "BGSAVE", "BGREWRITEAOF", "SAVE",
+    "CLUSTER", "MIGRATE", "RESTORE", "SORT", "WAIT",
+    "OBJECT", "LATENCY", "SLOWLOG",
+    // Scripting / replication
+    "SCRIPT", "EVAL", "EVALSHA", "SLAVEOF", "REPLICAOF",
+    // Connection-breaking commands
+    "SUBSCRIBE", "PSUBSCRIBE", "UNSUBSCRIBE", "PUNSUBSCRIBE",
+    "MONITOR", "SELECT", "QUIT", "RESET",
+    // Blocking commands
+    "BLPOP", "BRPOP", "BLMOVE", "BRPOPLPUSH", "BZPOPMIN", "BZPOPMAX",
+    // Data movement
+    "COPY", "MOVE",
   ]);
 
   /** Minimum arguments (excluding the command name) for common commands */
   const MIN_ARGS: Record<string, number> = {
-    GET: 1, SET: 2, DEL: 1, HGET: 2, HSET: 3, HDEL: 2, HGETALL: 1,
-    HMSET: 3, HINCRBY: 3, LPUSH: 2, RPUSH: 2, LPOP: 1, RPOP: 1,
-    LRANGE: 3, LLEN: 1, LINDEX: 2, SADD: 2, SREM: 2, SMEMBERS: 1,
-    SCARD: 1, SISMEMBER: 2, ZADD: 3, ZREM: 2, ZRANGE: 3, ZCARD: 1,
-    ZSCORE: 2, ZRANK: 2, EXPIRE: 2, PERSIST: 1, RENAME: 2, RENAMENX: 2,
-    TTL: 1, PTTL: 1, TYPE: 1, EXISTS: 1, APPEND: 2, INCR: 1, DECR: 1,
-    SETNX: 2, GETSET: 2, SETEX: 3, PSETEX: 3, MSET: 2, MGET: 1,
-    INCRBY: 2, DECRBY: 2, STRLEN: 1, HLEN: 1, HKEYS: 1, HVALS: 1,
+    // String
+    GET: 1, SET: 2, APPEND: 2, INCR: 1, DECR: 1,
+    SETNX: 2, GETSET: 2, SETEX: 3, PSETEX: 3,
+    INCRBY: 2, DECRBY: 2, STRLEN: 1, MSET: 2, MGET: 1,
+    // Hash
+    HGET: 2, HSET: 3, HDEL: 2, HGETALL: 1,
+    HMSET: 3, HINCRBY: 3, HLEN: 1, HKEYS: 1, HVALS: 1,
     HEXISTS: 2, HMGET: 2,
+    // List
+    LPUSH: 2, RPUSH: 2, LPOP: 1, RPOP: 1,
+    LRANGE: 3, LLEN: 1, LINDEX: 2,
+    // Set
+    SADD: 2, SREM: 2, SMEMBERS: 1,
+    SCARD: 1, SISMEMBER: 2, SRANDMEMBER: 1,
+    // Sorted set
+    ZADD: 3, ZREM: 2, ZRANGE: 3, ZCARD: 1,
+    ZSCORE: 2, ZRANK: 2, ZRANGEBYSCORE: 3,
+    // Key-level
+    DEL: 1, EXPIRE: 2, PERSIST: 1, RENAME: 2, RENAMENX: 2,
+    TTL: 1, PTTL: 1, TYPE: 1, EXISTS: 1,
+    // Read-only
+    KEYS: 1, SCAN: 1, DBSIZE: 0, INFO: 0, PING: 0, ECHO: 1,
   };
 
   function validateCommand(input: string): string | null {
@@ -102,7 +128,9 @@ export const useSandboxStore = defineStore("sandbox", () => {
 
       commandResult.value = result.commandResult;
       currentCommand.value = commandInput.value.trim();
-      currentKeyTypes.value = result.keyTypes ?? {};
+      // Merge (not replace): cumulative previews return keyTypes for only
+      // the current command's affected keys; we need ALL original types for rollback.
+      currentKeyTypes.value = { ...currentKeyTypes.value, ...(result.keyTypes ?? {}) };
       showPreview.value = true;
     } catch (e) {
       const msg = typeof e === "string" ? e : (e as Error)?.message || String(e);

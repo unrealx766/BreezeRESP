@@ -27,17 +27,53 @@ const MAX_ARG_LEN: usize = 65_536; // 64 KB
 const MAX_ARGS_PER_CMD: usize = 64;
 
 /// Blocked Redis administrative commands that could compromise the host system
+/// or disrupt the connection pool.
 const BLOCKED_COMMANDS: &[&str] = &[
-    "CONFIG",   // CONFIG SET dir / CONFIG SET dbfilename → RCE
-    "DEBUG",    // DEBUG SEGFAULT, etc.
-    "MODULE",   // load arbitrary .so/.dll
-    "SCRIPT",   // arbitrary Lua execution
-    "EVAL",     // arbitrary Lua execution
-    "EVALSHA",  // arbitrary Lua execution
-    "SLAVEOF",  // replication hijack
-    "REPLICAOF",// replication hijack (newer alias)
-    "SHUTDOWN", // server shutdown
-    "ACL",      // tamper with ACL rules
+    // ── Server administration ──
+    "CONFIG",       // CONFIG SET dir / CONFIG SET dbfilename → RCE
+    "DEBUG",        // DEBUG SEGFAULT, etc.
+    "MODULE",       // load arbitrary .so/.dll
+    "SHUTDOWN",     // server shutdown
+    "ACL",          // tamper with ACL rules
+    "FLUSHDB",      // wipe current database
+    "FLUSHALL",     // wipe all databases
+    "SWAPDB",       // swap databases
+    "BGSAVE",       // trigger background save
+    "BGREWRITEAOF", // trigger AOF rewrite
+    "SAVE",         // blocking save
+    "CLUSTER",      // cluster management
+    "MIGRATE",      // migrate keys to another instance
+    "RESTORE",      // inject serialised RDB data
+    "SORT",         // SORT … STORE writes arbitrary keys
+    "WAIT",         // block until replication catches up
+    "OBJECT",       // internal object introspection
+    "LATENCY",      // latency monitoring
+    "SLOWLOG",      // slow-log management
+    // ── Scripting / replication ──
+    "SCRIPT",       // arbitrary Lua execution
+    "EVAL",         // arbitrary Lua execution
+    "EVALSHA",      // arbitrary Lua execution
+    "SLAVEOF",      // replication hijack
+    "REPLICAOF",    // replication hijack (newer alias)
+    // ── Connection-breaking commands ──
+    "SUBSCRIBE",    // enters subscription mode — breaks subsequent commands
+    "PSUBSCRIBE",   // enters subscription mode
+    "UNSUBSCRIBE",  // subscription mode commands
+    "PUNSUBSCRIBE", // subscription mode commands
+    "MONITOR",      // streams all commands (sensitive data leak)
+    "SELECT",       // changes DB on pooled connection → corrupts pool state
+    "QUIT",         // disconnects the pooled connection
+    "RESET",        // resets connection state
+    // ── Blocking commands (could hang the pool connection) ──
+    "BLPOP",        // blocking list pop
+    "BRPOP",        // blocking list pop
+    "BLMOVE",       // blocking list move
+    "BRPOPLPUSH",   // blocking rpop-lpush
+    "BZPOPMIN",     // blocking sorted-set pop
+    "BZPOPMAX",     // blocking sorted-set pop
+    // ── Data movement ──
+    "COPY",         // copy key (side effects)
+    "MOVE",         // move key to another DB
 ];
 
 // ---------------------------------------------------------------------------
