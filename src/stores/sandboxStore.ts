@@ -5,6 +5,7 @@ import { tauriApi } from "@/services/tauriApi";
 import { useConnectionStore } from "./connectionStore";
 import { useCascadeStore } from "./cascadeStore";
 import { toast } from "@/utils/toast";
+import { computeInverseCommands } from "@/utils/rollbackInverse";
 
 export const useSandboxStore = defineStore("sandbox", () => {
   const MAX_HISTORY = 50;
@@ -163,18 +164,12 @@ export const useSandboxStore = defineStore("sandbox", () => {
         return;
       }
 
-      // Build beforeState from the cumulative diff.
-      // beforeRaw holds the ORIGINAL Redis state (before any pending preview),
-      // which is exactly what we need for history-item rollback.
-      const beforeState: Record<string, string> = {};
-      const addedKeys: string[] = [];
-      for (const entry of currentDiff.value) {
-        if (entry.changeType === "added") {
-          addedKeys.push(entry.path);
-        } else if (entry.beforeRaw != null) {
-          beforeState[entry.path] = entry.beforeRaw;
-        }
-      }
+      // Compute precise inverse commands for rollback
+      const rollbackCommands = computeInverseCommands(
+        cmd,
+        currentDiff.value,
+        currentKeyTypes.value,
+      );
 
       history.value.unshift({
         id: `sb-${Date.now()}`,
@@ -183,9 +178,7 @@ export const useSandboxStore = defineStore("sandbox", () => {
         timestamp: Date.now(),
         status: "applied",
         diffCount: currentDiff.value.length,
-        beforeState,
-        addedKeys,
-        keyTypes: currentKeyTypes.value,
+        rollbackCommands,
       });
       // Cap history to prevent unbounded growth
       if (history.value.length > MAX_HISTORY) {
@@ -257,7 +250,7 @@ export const useSandboxStore = defineStore("sandbox", () => {
     rollingBack.value = true;
 
     try {
-      const ok = await tauriApi.sandbox.rollback(connId, item.beforeState, item.addedKeys, item.keyTypes);
+      const ok = await tauriApi.sandbox.rollback(connId, item.rollbackCommands);
       if (!ok) {
         toast.error("Rollback returned false.");
         return;

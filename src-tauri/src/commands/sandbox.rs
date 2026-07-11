@@ -1,6 +1,6 @@
-use crate::core::validate::{validate_command, validate_connection_id, validate_key};
+use crate::core::validate::{validate_command, validate_connection_id};
 use crate::AppState;
-use crate::core::format::{format_redis_value, format_for_display, get_key_value_string, restore_key_value};
+use crate::core::format::{format_redis_value, format_for_display, get_key_value_string};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use tauri::State;
@@ -824,18 +824,16 @@ pub async fn sandbox_cancel(
     Ok(true)
 }
 
-/// Rollback a previously-applied sandbox history item.
+/// Rollback a previously-applied sandbox history item by executing precise inverse commands.
 #[tauri::command]
 pub async fn sandbox_rollback(
     state: State<'_, AppState>,
     connection_id: String,
-    before_state: HashMap<String, String>,
-    added_keys: Vec<String>,
-    key_types: HashMap<String, String>,
+    commands: Vec<String>,
 ) -> Result<bool, String> {
     validate_connection_id(&connection_id)?;
-    for key in before_state.keys().chain(added_keys.iter()) {
-        validate_key(key)?;
+    for cmd in &commands {
+        validate_command(cmd)?;
     }
 
     let pool = {
@@ -844,15 +842,19 @@ pub async fn sandbox_rollback(
     };
     let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
 
-    for (key, val) in &before_state {
-        let restore_type = key_types.get(key).map(|s| s.as_str()).unwrap_or("string");
-        let _: Result<(), _> = restore_key_value(&mut conn, key, restore_type, val).await;
-    }
-    for key in &added_keys {
-        let _: Result<i64, _> = redis::cmd("DEL")
-            .arg(key)
+    for cmd_str in &commands {
+        let parts: Vec<String> = parse_command_parts(cmd_str);
+        if parts.is_empty() {
+            continue;
+        }
+        let mut redis_cmd = redis::cmd(&parts[0]);
+        for arg in &parts[1..] {
+            redis_cmd.arg(arg);
+        }
+        let _: redis::Value = redis_cmd
             .query_async(&mut *conn)
-            .await;
+            .await
+            .map_err(|e| format!("Rollback cmd '{}' error: {}", cmd_str, e))?;
     }
 
     Ok(true)

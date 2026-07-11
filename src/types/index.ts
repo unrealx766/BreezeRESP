@@ -112,10 +112,8 @@ export interface SandboxHistoryItem {
   timestamp: number;
   status: "preview" | "applied" | "rolled-back";
   diffCount: number;
-  beforeState: Record<string, string>;
-  addedKeys: string[];
-  /** Original key types BEFORE command — needed for type-safe rollback */
-  keyTypes: Record<string, string>;
+  /** Precise inverse Redis commands for rollback */
+  rollbackCommands: string[];
 }
 
 // Metrics

@@ -190,8 +190,8 @@ export const tauriApi = {
     cancel: (connectionId: string) =>
       withConn(connectionId, () => invoke<boolean>("sandbox_cancel", { connectionId })),
 
-    rollback: (connectionId: string, beforeState: Record<string, string>, addedKeys: string[], keyTypes: Record<string, string>) =>
-      withConn(connectionId, () => invoke<boolean>("sandbox_rollback", { connectionId, beforeState, addedKeys, keyTypes })),
+    rollback: (connectionId: string, commands: string[]) =>
+      withConn(connectionId, () => invoke<boolean>("sandbox_rollback", { connectionId, commands })),
   },
 
   metrics: {
