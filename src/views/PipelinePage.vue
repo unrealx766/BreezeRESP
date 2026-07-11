@@ -134,13 +134,47 @@ function addFromTemplate(tpl: typeof commandTemplates[0]) {
 
 // Drag and drop
 let dragIdx: number | null = null;
-function onDragStart(idx: number) { dragIdx = idx; }
-function onDragOver(e: DragEvent) { e.preventDefault(); }
+const dragging = ref(false);
+const dragOverIdx = ref<number | null>(null);
+const dropBefore = ref(true);
+
+function onDragStart(idx: number) {
+  dragIdx = idx;
+  dragging.value = true;
+}
+
+function onDragOver(e: DragEvent, idx: number) {
+  e.preventDefault();
+  if (dragIdx === null || dragIdx === idx) {
+    dragOverIdx.value = null;
+    return;
+  }
+  const el = e.currentTarget as HTMLElement;
+  const rect = el.getBoundingClientRect();
+  const before = (e.clientY - rect.top) < rect.height / 2;
+  dragOverIdx.value = idx;
+  dropBefore.value = before;
+}
+
 function onDrop(idx: number) {
   if (dragIdx !== null && dragIdx !== idx) {
-    pipeline.reorderCommands(dragIdx, idx);
+    const toIdx = dropBefore.value ? idx : idx + 1;
+    const from = dragIdx;
+    // Adjust target index when moving downward (splice removes source first)
+    const adjusted = from < toIdx ? toIdx - 1 : toIdx;
+    pipeline.reorderCommands(from, adjusted);
   }
+  resetDrag();
+}
+
+function onDragEnd() {
+  resetDrag();
+}
+
+function resetDrag() {
   dragIdx = null;
+  dragging.value = false;
+  dragOverIdx.value = null;
 }
 </script>
 
@@ -236,14 +270,27 @@ function onDrop(idx: number) {
           </div>
 
           <div v-for="(cmd, idx) in pipeline.commands" :key="cmd.id"
-            class="card p-3 flex items-start gap-3 group"
+            class="card p-3 flex items-start gap-3 group relative"
             draggable="true"
             @dragstart="onDragStart(idx)"
-            @dragover="onDragOver"
+            @dragover="(e: DragEvent) => onDragOver(e, idx)"
             @drop="onDrop(idx)"
+            @dragend="onDragEnd"
+            :class="[
+              dragIdx === idx ? 'opacity-30' : '',
+              dragging ? 'cursor-grabbing' : '',
+            ]"
           >
+            <!-- Drop position indicator -->
+            <div
+              v-if="dragOverIdx === idx && dragIdx !== idx"
+              class="absolute left-0 right-0 h-[2px] bg-redis z-10 rounded-full pointer-events-none"
+              :class="dropBefore ? 'top-0' : 'bottom-0'"
+              :style="{ boxShadow: '0 0 6px rgba(220,56,45,0.5)' }"
+            />
+
             <!-- Drag handle -->
-            <div class="cursor-grab pt-1 text-text-muted hover:text-text-secondary">
+            <div class="cursor-grab active:cursor-grabbing pt-1 text-text-muted hover:text-text-secondary">
               <GripVertical :size="14" />
             </div>
 
@@ -254,9 +301,9 @@ function onDrop(idx: number) {
             <div class="flex-1 min-w-0">
               <div class="flex gap-2">
                 <input v-model="cmd.command" :placeholder="t('pipeline.command')" :disabled="!isConnected"
-                  class="w-28 px-2 py-1.5 text-xs font-mono font-semibold bg-bg-primary border border-border rounded focus:outline-none focus:border-redis uppercase disabled:opacity-50 disabled:cursor-not-allowed" />
+                  :class="['w-28 px-2 py-1.5 text-xs font-mono font-semibold bg-bg-primary border border-border rounded focus:outline-none focus:border-redis uppercase disabled:opacity-50 disabled:cursor-not-allowed', dragging ? 'pointer-events-none' : '']" />
                 <input :value="getArgsText(cmd.id)" @input="(e: any) => { setArgsText(cmd.id, e.target.value); cmd.args = (e.target.value as string).split(/\s+/).filter(Boolean); }" @focus="() => initArgsText(cmd)" :placeholder="t('pipeline.arguments')" :disabled="!isConnected"
-                  class="flex-1 px-2 py-1.5 text-xs font-mono bg-bg-primary border border-border rounded focus:outline-none focus:border-redis disabled:opacity-50 disabled:cursor-not-allowed" />
+                  :class="['flex-1 px-2 py-1.5 text-xs font-mono bg-bg-primary border border-border rounded focus:outline-none focus:border-redis disabled:opacity-50 disabled:cursor-not-allowed', dragging ? 'pointer-events-none' : '']" />
               </div>
               <!-- Result -->
               <div v-if="cmd.result" class="mt-2">
@@ -281,7 +328,7 @@ function onDrop(idx: number) {
 
             <!-- Delete -->
             <button @click="pipeline.removeCommand(cmd.id)" :disabled="!isConnected"
-              class="w-6 h-6 flex items-center justify-center rounded hover:bg-danger/10 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5 disabled:opacity-50 disabled:cursor-not-allowed">
+              :class="['w-6 h-6 flex items-center justify-center rounded hover:bg-danger/10 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5 disabled:opacity-50 disabled:cursor-not-allowed', dragging ? 'pointer-events-none' : '']">
               <Trash2 :size="12" class="text-danger" />
             </button>
           </div>
