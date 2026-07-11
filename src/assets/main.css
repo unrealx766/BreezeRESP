@@ -127,3 +127,26 @@
   opacity: 1;
   max-height: 500px;
 }
+
+/* Lightweight floating copy tip */
+.copy-tip-float {
+  position: fixed;
+  transform: translate(-50%, -100%);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-success);
+  background: rgba(16, 185, 129, 0.1);
+  padding: 2px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 99999;
+  animation: copy-tip-fade 0.9s ease forwards;
+}
+
+@keyframes copy-tip-fade {
+  0%   { opacity: 0; transform: translate(-50%, -100%) translateY(4px); }
+  15%  { opacity: 1; transform: translate(-50%, -100%) translateY(0); }
+  60%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -100%) translateY(-6px); }
+}

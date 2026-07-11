@@ -173,6 +173,13 @@
     "pin": "Pin Window",
     "unpin": "Unpin Window"
   },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "languageDesc": "Choose the display language for the application",
+    "general": "General",
+    "about": "About"
+  },
   "notifications": {
     "title": "Notifications",
     "clear": "Clear",

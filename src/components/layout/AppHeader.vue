@@ -4,19 +4,19 @@ import { ref, computed } from "vue";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useCascadeStore } from "@/stores/cascadeStore";
 import { useDetailStore } from "@/stores/detailStore";
-import { availableLocales } from "@/i18n";
 import { messageHistory, clearMessageHistory } from "@/utils/toast";
-import { Globe, Database, ChevronDown, Check, RefreshCw, Bell, BellDot, Trash2, CheckCircle, XCircle, AlertTriangle, Info } from "lucide-vue-next";
+import SettingsDialog from "@/components/shared/SettingsDialog.vue";
+import { Database, ChevronDown, Check, RefreshCw, Bell, BellDot, Trash2, CheckCircle, XCircle, AlertTriangle, Info, Settings } from "lucide-vue-next";
 
 const { t, locale } = useI18n();
 const connStore = useConnectionStore();
 const cascade = useCascadeStore();
 const detail = useDetailStore();
 
-function toggleLocale() {
-  const codes = availableLocales.map((l) => l.code);
-  const idx = codes.indexOf(locale.value);
-  locale.value = codes[(idx + 1) % codes.length];
+const settingsDialog = ref<InstanceType<typeof SettingsDialog> | null>(null);
+
+function openSettings() {
+  settingsDialog.value?.open();
 }
 
 // DB switching
@@ -190,14 +190,15 @@ const colorMap = {
         </div>
       </div>
 
-      <!-- Language -->
+      <!-- Settings -->
       <button
-        @click="toggleLocale"
-        class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-text-secondary hover:bg-bg-hover transition-colors"
+        @click="openSettings"
+        class="flex items-center justify-center w-8 h-8 rounded-lg text-text-secondary hover:bg-bg-hover transition-colors"
+        :title="t('settings.title')"
       >
-        <Globe :size="14" />
-        <span>{{ availableLocales.find((l) => l.code === locale)?.label }}</span>
+        <Settings :size="15" />
       </button>
     </div>
   </header>
+  <SettingsDialog ref="settingsDialog" />
 </template>

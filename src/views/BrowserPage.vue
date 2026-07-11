@@ -9,7 +9,7 @@ import KeyTreeItem from "@/components/cascade/KeyTreeItem.vue";
 import TtlGauge from "@/components/charts/TtlGauge.vue";
 import FloatingWindow from "@/components/shared/FloatingWindow.vue";
 import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
-import { toast } from "@/utils/toast";
+import { useCopyTip } from "@/utils/copyTip";
 import {
   Search, RefreshCw, Trash2, Copy, Tag,
   Type, Hash, List, CircleDot, BarChart3,
@@ -103,7 +103,7 @@ watch(
   (newStatus, oldStatus) => {
     if (oldStatus === "connected" && newStatus !== "connected") {
       connectionLost.value = true;
-      toast.error(t("connection.connectionLost"), 5000, connStore.activeConnection?.name);
+      // toast already shown by connectionStore.markConnectionLost
     }
     if (newStatus === "connected") {
       connectionLost.value = false;
@@ -139,9 +139,7 @@ function formatTtl(ttl: number): string {
   if (ttl === -1) return t("detail.noExpiry");
   if (ttl === -2) return "N/A";
   if (ttl < 60) return `${ttl}s`;
-  if (ttl < 3600) return `${Math.floor(ttl / 60)}m`;
-  if (ttl < 86400) return `${Math.floor(ttl / 3600)}h`;
-  return `${Math.floor(ttl / 86400)}d`;
+  return `${ttl}s`;
 }
 
 function formatSize(bytes: number): string {
@@ -155,8 +153,10 @@ function handleSelect(node: any) {
   else cascade.toggleNode(node);
 }
 
-function copyKey(key: string) {
-  navigator.clipboard.writeText(key);
+const { copyWithTip } = useCopyTip();
+
+async function copyKey(key: string, e: Event) {
+  await copyWithTip(key, e);
 }
 
 async function deleteKey() {
@@ -513,7 +513,7 @@ onMounted(() => {
             </span>
           </div>
           <div class="flex items-center gap-1.5 shrink-0">
-            <button @click="copyKey(detail.currentKey!.key)" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-bg-hover" :title="t('browser.copyKey')">
+            <button @click="copyKey(detail.currentKey!.key, $event)" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-bg-hover" :title="t('browser.copyKey')">
               <Copy :size="13" class="text-text-muted" />
             </button>
             <button @click="detail.refresh()" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-bg-hover" :title="t('browser.refresh')">
@@ -706,28 +706,25 @@ onMounted(() => {
       <div class="text-center">
         <div class="flex items-center justify-center gap-2 mb-3">
           <p class="text-xs font-medium text-text-secondary">{{ t("detail.ttl") }}</p>
-          <button
-            v-if="!editingTtl"
-            @click="startEditTtl"
-            class="text-text-muted hover:text-text-primary transition-colors"
-            :title="t('detail.setTtl')"
-          ><Pencil :size="10" /></button>
         </div>
         <TtlGauge :ttl-remaining="detail.ttlRemaining" :ttl-total="detail.ttlTotal" />
         <!-- TTL display / edit -->
         <template v-if="editingTtl">
-          <div class="flex items-center gap-1 mt-2 justify-center">
+          <div class="flex items-center gap-1.5 mt-2 justify-center">
             <input v-model="ttlTemp" @keyup.enter="saveEditTtl" @keyup.escape="cancelEditTtl"
               type="number"
-              class="w-20 text-xs font-mono px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-white text-center"
+              class="w-20 text-xs font-mono px-2 py-1 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-white text-center"
               :placeholder="t('detail.setTtlPlaceholder')"
             />
-            <button @click="saveEditTtl" class="text-success hover:text-success/80"><Save :size="11" /></button>
-            <button @click="cancelEditTtl" class="text-text-muted hover:text-text-primary"><X :size="11" /></button>
+            <button @click="saveEditTtl" class="w-7 h-7 flex items-center justify-center rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors"><Save :size="13" /></button>
+            <button @click="cancelEditTtl" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-bg-hover text-text-muted hover:text-text-primary transition-colors"><X :size="13" /></button>
           </div>
           <p class="text-[10px] text-text-muted mt-1">{{ t("detail.setTtlPlaceholder") }}</p>
         </template>
-        <p v-else class="text-xs text-text-muted mt-2" :class="detail.isExpired ? 'text-danger font-semibold' : ''">{{ formatTtl(detail.ttlRemaining) }}</p>
+        <div v-else class="flex items-center justify-center gap-1.5 mt-2">
+          <p class="text-xs text-text-muted" :class="detail.isExpired ? 'text-danger font-semibold' : ''">{{ formatTtl(detail.ttlRemaining) }}</p>
+          <button @click="startEditTtl" class="text-text-muted hover:text-text-primary transition-colors" :title="t('detail.setTtl')"><Pencil :size="10" /></button>
+        </div>
         <div v-if="detail.isExpired" class="mt-2 px-2 py-1.5 bg-danger/5 border border-danger/20 rounded-lg">
           <p class="text-[11px] text-danger font-medium flex items-center gap-1 justify-center">
             <AlertTriangle :size="11" /> {{ t("detail.expired") }}

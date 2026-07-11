@@ -26,13 +26,6 @@ const typeIcons: Record<RedisDataType, any> = {
   zset: BarChart3,
 };
 
-function formatTtl(ttl: number): string {
-  if (ttl === -1) return "∞";
-  if (ttl < 60) return `${ttl}s`;
-  if (ttl < 3600) return `${Math.floor(ttl / 60)}m`;
-  return `${Math.floor(ttl / 3600)}h`;
-}
-
 const isLeaf = computed(() => !!props.node.key);
 const isSelected = computed(() => !!props.node.key && cascade.selectedKey === props.node.key.key);
 const isExpanded = computed(() => cascade.expandedPaths.has(props.node.fullPath));
@@ -56,9 +49,5 @@ const isExpanded = computed(() => cascade.expandedPaths.has(props.node.fullPath)
     </template>
 
     <span class="truncate">{{ node.label }}</span>
-
-    <span v-if="isLeaf && node.key && node.key.ttl > 0" class="ml-auto text-[10px] text-text-muted shrink-0">
-      {{ formatTtl(node.key.ttl) }}
-    </span>
   </div>
 </template>

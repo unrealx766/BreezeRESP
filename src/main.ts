@@ -10,3 +10,6 @@ app.use(createPinia());
 app.use(router);
 app.use(i18n);
 app.mount("#app");
+
+// Disable default context menu (custom context menu may be added later)
+document.addEventListener("contextmenu", (e) => e.preventDefault());

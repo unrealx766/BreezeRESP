@@ -39,9 +39,34 @@ const centerText = computed(() => {
   const s = props.ttlRemaining;
   if (s <= 0) return "0s";
   if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  return `${Math.floor(s / 86400)}d`;
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const parts: string[] = [];
+  if (d > 0) parts.push(`${d}d`);
+  if (h > 0) parts.push(`${h}h`);
+  if (m > 0) parts.push(`${m}m`);
+  if (sec > 0) parts.push(`${sec}s`);
+  // Keep at most 2 units so text fits inside the circle
+  return parts.slice(0, 2).join(" ");
+});
+
+const fullText = computed(() => {
+  if (percent.value < 0) return "";
+  const s = props.ttlRemaining;
+  if (s <= 0) return "0s";
+  if (s < 60) return `${s}s`;
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const parts: string[] = [];
+  if (d > 0) parts.push(`${d}d`);
+  if (h > 0) parts.push(`${h}h`);
+  if (m > 0) parts.push(`${m}m`);
+  if (sec > 0) parts.push(`${sec}s`);
+  return parts.join(" ");
 });
 </script>
 
@@ -73,8 +98,8 @@ const centerText = computed(() => {
       />
     </svg>
     <!-- Center text -->
-    <div class="absolute inset-0 flex items-center justify-center">
-      <span class="text-lg font-semibold" :style="{ color }">{{ centerText }}</span>
+    <div class="absolute inset-0 flex items-center justify-center overflow-hidden px-3">
+      <span class="text-base font-semibold leading-tight text-center truncate block w-full" :title="fullText" :style="{ color }">{{ centerText }}</span>
     </div>
   </div>
 </template>
