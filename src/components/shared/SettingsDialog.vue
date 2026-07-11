@@ -32,8 +32,11 @@ function close() {
   visible.value = false;
 }
 
+const LOCALE_KEY = "breezeresp-locale";
+
 function setLocale(code: string) {
   locale.value = code;
+  localStorage.setItem(LOCALE_KEY, code);
 }
 
 const appVersion = __APP_VERSION__;
