@@ -90,6 +90,10 @@ export interface DiffEntry {
   keyType: string | null;
   before: string | null;
   after: string | null;
+  /** Raw JSON-serialized value for rollback (not display-formatted) */
+  beforeRaw: string | null;
+  /** Raw JSON-serialized value for rollback (not display-formatted) */
+  afterRaw: string | null;
   changeType: DiffChangeType;
 }
 
@@ -110,6 +114,8 @@ export interface SandboxHistoryItem {
   diffCount: number;
   beforeState: Record<string, string>;
   addedKeys: string[];
+  /** Original key types BEFORE command — needed for type-safe rollback */
+  keyTypes: Record<string, string>;
 }
 
 // Metrics

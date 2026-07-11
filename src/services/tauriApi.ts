@@ -76,6 +76,8 @@ export interface RustDiffEntry {
   keyType: string | null;
   before: string | null;
   after: string | null;
+  beforeRaw: string | null;
+  afterRaw: string | null;
   changeType: string;
 }
 
@@ -84,6 +86,8 @@ export interface RustSandboxPreview {
   diff: RustDiffEntry[];
   commandResult: string | null;
   snapshotId: string;
+  /** Original key types BEFORE command execution — for type-safe rollback */
+  keyTypes: Record<string, string>;
 }
 
 export interface RustServerMetrics {
@@ -183,8 +187,11 @@ export const tauriApi = {
     apply: (connectionId: string, command: string) =>
       withConn(connectionId, () => invoke<boolean>("sandbox_apply", { connectionId, command })),
 
-    rollback: (connectionId: string, beforeState: Record<string, string>, addedKeys: string[]) =>
-      withConn(connectionId, () => invoke<boolean>("sandbox_rollback", { connectionId, beforeState, addedKeys })),
+    cancel: (connectionId: string) =>
+      withConn(connectionId, () => invoke<boolean>("sandbox_cancel", { connectionId })),
+
+    rollback: (connectionId: string, beforeState: Record<string, string>, addedKeys: string[], keyTypes: Record<string, string>) =>
+      withConn(connectionId, () => invoke<boolean>("sandbox_rollback", { connectionId, beforeState, addedKeys, keyTypes })),
   },
 
   metrics: {

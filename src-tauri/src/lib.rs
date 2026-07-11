@@ -82,6 +82,7 @@ pub fn run() {
             // Sandbox commands
             commands::sandbox::sandbox_preview,
             commands::sandbox::sandbox_apply,
+            commands::sandbox::sandbox_cancel,
             commands::sandbox::sandbox_rollback,
             // Metrics commands
             commands::metrics::get_metrics,

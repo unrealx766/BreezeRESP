@@ -189,10 +189,10 @@ export const mockPipelineCommands: PipelineCommand[] = [
 
 // --- Sandbox ---
 export const mockSandboxHistory: SandboxHistoryItem[] = [
-  { id: "sb-1", snapshotId: "snap-1", command: "SET user:1001:name \"Jane Doe\"", timestamp: Date.now() - 120_000, status: "applied", diffCount: 1, beforeState: { "user:1001:name": "John Doe" }, addedKeys: [] },
-  { id: "sb-2", snapshotId: "snap-2", command: "HSET user:1001:profile city \"New York\"", timestamp: Date.now() - 60_000, status: "preview", diffCount: 1, beforeState: {}, addedKeys: [] },
-  { id: "sb-3", snapshotId: "snap-3", command: "DEL cache:product:detail:1001", timestamp: Date.now() - 30_000, status: "rolled-back", diffCount: 1, beforeState: { "cache:product:detail:1001": "cached_data" }, addedKeys: [] },
-  { id: "sb-4", snapshotId: "snap-4", command: "LPUSH queue:email:pending \"new_job\"", timestamp: Date.now() - 10_000, status: "preview", diffCount: 2, beforeState: {}, addedKeys: ["queue:email:pending"] },
+  { id: "sb-1", snapshotId: "snap-1", command: "SET user:1001:name \"Jane Doe\"", timestamp: Date.now() - 120_000, status: "applied", diffCount: 1, beforeState: { "user:1001:name": "John Doe" }, addedKeys: [], keyTypes: { "user:1001:name": "string" } },
+  { id: "sb-2", snapshotId: "snap-2", command: "HSET user:1001:profile city \"New York\"", timestamp: Date.now() - 60_000, status: "preview", diffCount: 1, beforeState: {}, addedKeys: [], keyTypes: {} },
+  { id: "sb-3", snapshotId: "snap-3", command: "DEL cache:product:detail:1001", timestamp: Date.now() - 30_000, status: "rolled-back", diffCount: 1, beforeState: { "cache:product:detail:1001": "cached_data" }, addedKeys: [], keyTypes: { "cache:product:detail:1001": "string" } },
+  { id: "sb-4", snapshotId: "snap-4", command: "LPUSH queue:email:pending \"new_job\"", timestamp: Date.now() - 10_000, status: "preview", diffCount: 2, beforeState: {}, addedKeys: ["queue:email:pending"], keyTypes: {} },
 ];
 
 // --- Metrics ---

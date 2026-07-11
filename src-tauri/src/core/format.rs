@@ -1,5 +1,90 @@
 use redis::AsyncCommands;
 
+/// Restore a key to its original type and value in Redis.
+/// Uses the key_type to determine the correct Redis command, avoiding
+/// type corruption that would occur if we simply SET a JSON string.
+pub async fn restore_key_value(
+    conn: &mut deadpool_redis::Connection,
+    key: &str,
+    key_type: &str,
+    serialized_value: &str,
+) -> Result<(), String> {
+    match key_type {
+        "string" => {
+            let _: () = conn.set(key, serialized_value).await
+                .map_err(|e| format!("SET error: {}", e))?;
+        }
+        "hash" => {
+            let pairs = serde_json::from_str::<Vec<(String, String)>>(serialized_value)
+                .unwrap_or_default();
+            // DEL then rebuild — must DEL first to remove any extra fields
+            let _: i64 = redis::cmd("DEL").arg(key).query_async(&mut **conn).await
+                .map_err(|e| format!("DEL error: {}", e))?;
+            if !pairs.is_empty() {
+                let mut cmd = redis::cmd("HSET");
+                cmd.arg(key);
+                for (f, v) in &pairs {
+                    cmd.arg(f).arg(v);
+                }
+                let _: () = cmd.query_async(&mut **conn).await
+                    .map_err(|e| format!("HSET error: {}", e))?;
+            }
+            // If pairs is empty, key remains deleted (empty hash ≈ no key in Redis)
+        }
+        "list" => {
+            let items = serde_json::from_str::<Vec<String>>(serialized_value)
+                .unwrap_or_default();
+            let _: i64 = redis::cmd("DEL").arg(key).query_async(&mut **conn).await
+                .map_err(|e| format!("DEL error: {}", e))?;
+            if !items.is_empty() {
+                let mut cmd = redis::cmd("RPUSH");
+                cmd.arg(key);
+                for item in &items {
+                    cmd.arg(item);
+                }
+                let _: () = cmd.query_async(&mut **conn).await
+                    .map_err(|e| format!("RPUSH error: {}", e))?;
+            }
+        }
+        "set" => {
+            let members = serde_json::from_str::<Vec<String>>(serialized_value)
+                .unwrap_or_default();
+            let _: i64 = redis::cmd("DEL").arg(key).query_async(&mut **conn).await
+                .map_err(|e| format!("DEL error: {}", e))?;
+            if !members.is_empty() {
+                let mut cmd = redis::cmd("SADD");
+                cmd.arg(key);
+                for m in &members {
+                    cmd.arg(m);
+                }
+                let _: () = cmd.query_async(&mut **conn).await
+                    .map_err(|e| format!("SADD error: {}", e))?;
+            }
+        }
+        "zset" => {
+            let members = serde_json::from_str::<Vec<(String, f64)>>(serialized_value)
+                .unwrap_or_default();
+            let _: i64 = redis::cmd("DEL").arg(key).query_async(&mut **conn).await
+                .map_err(|e| format!("DEL error: {}", e))?;
+            if !members.is_empty() {
+                let mut cmd = redis::cmd("ZADD");
+                cmd.arg(key);
+                for (m, s) in &members {
+                    cmd.arg(s).arg(m);
+                }
+                let _: () = cmd.query_async(&mut **conn).await
+                    .map_err(|e| format!("ZADD error: {}", e))?;
+            }
+        }
+        _ => {
+            // Fallback: treat as string
+            let _: () = conn.set(key, serialized_value).await
+                .map_err(|e| format!("SET error: {}", e))?;
+        }
+    }
+    Ok(())
+}
+
 /// Format a redis::Value into a human-readable string.
 /// Shared by pipeline and sandbox modules.
 pub fn format_redis_value(val: &redis::Value) -> String {
@@ -100,7 +185,9 @@ pub async fn get_key_value_string(
             Some(val)
         }
         "hash" => {
-            let fields: Vec<(String, String)> = conn.hgetall(key).await.ok()?;
+            let mut fields: Vec<(String, String)> = conn.hgetall(key).await.ok()?;
+            // Sort by field name for deterministic serialization
+            fields.sort_by(|a, b| a.0.cmp(&b.0));
             Some(serde_json::to_string(&fields).unwrap_or_default())
         }
         "list" => {
@@ -108,11 +195,13 @@ pub async fn get_key_value_string(
             Some(serde_json::to_string(&items).unwrap_or_default())
         }
         "set" => {
-            let members: Vec<String> = conn.smembers(key).await.ok()?;
+            let mut members: Vec<String> = conn.smembers(key).await.ok()?;
+            // Sort for deterministic serialization
+            members.sort();
             Some(serde_json::to_string(&members).unwrap_or_default())
         }
         "zset" => {
-            let members: Vec<(String, f64)> = redis::cmd("ZRANGE")
+            let mut members: Vec<(String, f64)> = redis::cmd("ZRANGE")
                 .arg(key)
                 .arg(0)
                 .arg(-1)
@@ -120,6 +209,8 @@ pub async fn get_key_value_string(
                 .query_async(&mut **conn)
                 .await
                 .ok()?;
+            // Sort by score then by member name for deterministic order
+            members.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal).then(a.0.cmp(&b.0)));
             Some(serde_json::to_string(&members).unwrap_or_default())
         }
         _ => Some("(unsupported type)".to_string()),

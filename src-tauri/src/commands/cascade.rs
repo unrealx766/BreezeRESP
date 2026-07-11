@@ -1,5 +1,6 @@
 use crate::core::validate::{
     validate_connection_id, validate_key, validate_pattern, validate_scan_count, validate_ttl,
+    reject_null_bytes,
 };
 use crate::AppState;
 use redis::AsyncCommands;
@@ -374,6 +375,17 @@ pub async fn set_value(
 ) -> Result<bool, String> {
     validate_connection_id(&connection_id)?;
     validate_key(&key)?;
+
+    // Validate optional parameters for injection/null-byte attacks
+    if let Some(ref f) = field {
+        reject_null_bytes(f, "field")?;
+    }
+    if let Some(ref v) = value {
+        reject_null_bytes(v, "value")?;
+    }
+    if let Some(ref ov) = old_value {
+        reject_null_bytes(ov, "old_value")?;
+    }
 
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;

@@ -175,7 +175,10 @@ export const useCascadeStore = defineStore("cascade", () => {
     loading.value = true;
     try {
       const result = await scanBatch(connId, scanCursor);
-      keys.value = [...keys.value, ...result.keys];
+      // Deduplicate: filter out keys already present
+      const existingKeys = new Set(keys.value.map((k) => k.key));
+      const newKeys = result.keys.filter((k) => !existingKeys.has(k.key));
+      keys.value = [...keys.value, ...newKeys];
       scanCursor = result.nextCursor;
     } catch (e) {
       console.error("Failed to load more keys:", e);

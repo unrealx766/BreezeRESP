@@ -130,7 +130,8 @@
     "noSavedPipelines": "No saved pipelines",
     "overwritePipeline": "Overwrite",
     "saveSuccess": "Pipeline saved successfully",
-    "loadSuccess": "Pipeline loaded successfully"
+    "loadSuccess": "Pipeline loaded successfully",
+    "resultsSummary": "Results Summary"
   },
   "sandbox": {
     "title": "Command Sandbox",

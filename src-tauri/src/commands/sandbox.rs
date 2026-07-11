@@ -1,9 +1,8 @@
-use crate::core::validate::{validate_command, validate_connection_id};
+use crate::core::validate::{validate_command, validate_connection_id, validate_key};
 use crate::AppState;
-use crate::core::format::{format_redis_value, format_for_display, get_key_value_string};
-use redis::AsyncCommands;
+use crate::core::format::{format_redis_value, format_for_display, get_key_value_string, restore_key_value};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use tauri::State;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -13,7 +12,9 @@ pub struct DiffEntry {
     pub key_type: Option<String>,
     pub before: Option<String>,
     pub after: Option<String>,
-    pub change_type: String, // "added", "modified", "deleted", "unchanged"
+    pub before_raw: Option<String>,
+    pub after_raw: Option<String>,
+    pub change_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,13 +23,10 @@ pub struct SandboxPreview {
     pub diff: Vec<DiffEntry>,
     pub command_result: Option<String>,
     pub snapshot_id: String,
+    pub key_types: HashMap<String, String>,
 }
 
-/// Get the Redis type of a key (string, hash, list, set, zset, or "none" if missing)
-async fn get_key_type(
-    conn: &mut deadpool_redis::Connection,
-    key: &str,
-) -> String {
+async fn get_key_type(conn: &mut deadpool_redis::Connection, key: &str) -> String {
     redis::cmd("TYPE")
         .arg(key)
         .query_async::<String>(&mut **conn)
@@ -36,7 +34,6 @@ async fn get_key_type(
         .unwrap_or_else(|_| "none".to_string())
 }
 
-/// Read-only commands that don't modify data — show result directly
 const READ_ONLY_COMMANDS: &[&str] = &[
     "GET", "MGET", "TYPE", "TTL", "PTTL", "EXISTS", "STRLEN",
     "HGET", "HGETALL", "HMGET", "HLEN", "HEXISTS", "HKEYS", "HVALS",
@@ -46,16 +43,22 @@ const READ_ONLY_COMMANDS: &[&str] = &[
     "KEYS", "SCAN", "DBSIZE", "INFO", "PING", "ECHO",
 ];
 
-/// Extract the key(s) affected by a Redis command
 fn extract_keys(parts: &[&str]) -> Vec<String> {
     if parts.len() < 2 {
         return vec![];
     }
     let cmd = parts[0].to_uppercase();
     match cmd.as_str() {
-        "SET" | "GET" | "DEL" | "EXPIRE" | "PERSIST" | "RENAME" | "TTL" | "TYPE"
+        "SET" | "GET" | "DEL" | "EXPIRE" | "PERSIST" | "TTL" | "TYPE"
         | "APPEND" | "INCR" | "DECR" | "SETNX" | "GETSET" | "SETEX" | "PSETEX" => {
             vec![parts[1].to_string()]
+        }
+        "RENAME" | "RENAMENX" => {
+            if parts.len() >= 3 {
+                vec![parts[1].to_string(), parts[2].to_string()]
+            } else {
+                vec![parts[1].to_string()]
+            }
         }
         "HSET" | "HGET" | "HDEL" | "HGETALL" | "HMSET" | "HINCRBY" | "HLEN" => {
             vec![parts[1].to_string()]
@@ -69,22 +72,413 @@ fn extract_keys(parts: &[&str]) -> Vec<String> {
         "ZADD" | "ZREM" | "ZRANGE" | "ZCARD" | "ZSCORE" | "ZRANK" => {
             vec![parts[1].to_string()]
         }
-        "MSET" => {
-            // MSET key value key value ...
-            parts[1..].iter().step_by(2).map(|s| s.to_string()).collect()
-        }
-        "MGET" => {
-            // MGET key key key ...
-            parts[1..].iter().map(|s| s.to_string()).collect()
-        }
-        _ => {
-            // Default: assume second token is key
-            vec![parts[1].to_string()]
-        }
+        "MSET" => parts[1..].iter().step_by(2).map(|s| s.to_string()).collect(),
+        "MGET" => parts[1..].iter().map(|s| s.to_string()).collect(),
+        _ => vec![parts[1].to_string()],
     }
 }
 
-/// Execute a command in sandbox mode and return the diff preview
+// ───────────────────────────────────────────────────────────────────────────
+// Local command simulation — compute after-state without touching Redis
+// ───────────────────────────────────────────────────────────────────────────
+
+/// Simulate a write command locally.
+/// Returns the resulting state for every affected key.
+/// • `Some(value)` = key exists with this serialised value
+/// • `None`        = key was deleted / doesn't exist
+fn simulate_write_command(
+    cmd: &str,
+    args: &[&str],
+    current_values: &HashMap<String, Option<String>>,
+    current_types: &HashMap<String, String>,
+) -> HashMap<String, Option<String>> {
+    let cmd_upper = cmd.to_uppercase();
+    let mut result: HashMap<String, Option<String>> = HashMap::new();
+
+    match cmd_upper.as_str() {
+        // ── String commands ────────────────────────────────────────
+        "SET" | "SETNX" | "GETSET" | "SETEX" | "PSETEX" => {
+            let key = args[0].to_string();
+            let cur = current_values.get(&key).cloned().flatten();
+
+            let new_val = match cmd_upper.as_str() {
+                "SETNX" => {
+                    if cur.is_some() { cur.clone() } else { Some(args[1].to_string()) }
+                }
+                "GETSET" => args.get(1).map(|s| s.to_string()),
+                "SETEX" => args.get(2).map(|s| s.to_string()),
+                "PSETEX" => args.get(2).map(|s| s.to_string()),
+                _ => Some(args[1].to_string()), // SET
+            };
+            result.insert(key, new_val);
+        }
+
+        "APPEND" => {
+            let key = args[0].to_string();
+            let cur = current_values.get(&key).cloned().flatten();
+            let new_val = format!("{}{}", cur.unwrap_or_default(), args[1]);
+            result.insert(key, Some(new_val));
+        }
+
+        "INCR" | "DECR" | "INCRBY" | "DECRBY" => {
+            let key = args[0].to_string();
+            let cur = current_values.get(&key).cloned().flatten();
+            let base: i64 = cur.as_deref().unwrap_or("0").parse().unwrap_or(0);
+            let delta: i64 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(1);
+            let new_val = match cmd_upper.as_str() {
+                "INCR" => base + 1,
+                "DECR" => base - 1,
+                "INCRBY" => base + delta,
+                "DECRBY" => base - delta,
+                _ => base,
+            };
+            result.insert(key, Some(new_val.to_string()));
+        }
+
+        // ── Hash commands ──────────────────────────────────────────
+        "HSET" | "HMSET" => {
+            let key = args[0].to_string();
+            let cur = current_values.get(&key).cloned().flatten();
+            let kt = current_types.get(&key).map(|s| s.as_str()).unwrap_or("none");
+
+            let mut fields: Vec<(String, String)> = if kt == "hash" {
+                cur.as_deref()
+                    .and_then(|s| serde_json::from_str(s).ok())
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+
+            // args[1..] = field, value, field, value, ...
+            let field_args = &args[1..];
+            let mut i = 0;
+            while i + 1 < field_args.len() {
+                let field = field_args[i].to_string();
+                let value = field_args[i + 1].to_string();
+                if let Some(pos) = fields.iter().position(|(f, _)| f == &field) {
+                    fields[pos].1 = value;
+                } else {
+                    fields.push((field, value));
+                }
+                i += 2;
+            }
+            result.insert(key, Some(serde_json::to_string(&fields).unwrap_or_default()));
+        }
+
+        "HDEL" => {
+            let key = args[0].to_string();
+            let cur = current_values.get(&key).cloned().flatten();
+            let kt = current_types.get(&key).map(|s| s.as_str()).unwrap_or("none");
+
+            if kt != "hash" {
+                result.insert(key, cur);
+                return result;
+            }
+            let mut fields: Vec<(String, String)> = cur.as_deref()
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or_default();
+            for &field in &args[1..] {
+                fields.retain(|(f, _)| f != field);
+            }
+            if fields.is_empty() {
+                result.insert(key, None);
+            } else {
+                result.insert(key, Some(serde_json::to_string(&fields).unwrap_or_default()));
+            }
+        }
+
+        "HINCRBY" => {
+            let key = args[0].to_string();
+            let cur = current_values.get(&key).cloned().flatten();
+            let kt = current_types.get(&key).map(|s| s.as_str()).unwrap_or("none");
+
+            let mut fields: Vec<(String, String)> = if kt == "hash" {
+                cur.as_deref()
+                    .and_then(|s| serde_json::from_str(s).ok())
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+
+            let field = args[1].to_string();
+            let increment: i64 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
+            let current: i64 = fields
+                .iter()
+                .find(|(f, _)| f == &field)
+                .map(|(_, v)| v.parse().unwrap_or(0))
+                .unwrap_or(0);
+            let new_val = (current + increment).to_string();
+
+            if let Some(pos) = fields.iter().position(|(f, _)| f == &field) {
+                fields[pos].1 = new_val;
+            } else {
+                fields.push((field, new_val));
+            }
+            result.insert(key, Some(serde_json::to_string(&fields).unwrap_or_default()));
+        }
+
+        // ── List commands ──────────────────────────────────────────
+        "LPUSH" => {
+            let key = args[0].to_string();
+            let cur = current_values.get(&key).cloned().flatten();
+            let kt = current_types.get(&key).map(|s| s.as_str()).unwrap_or("none");
+
+            let mut items: Vec<String> = if kt == "list" {
+                cur.as_deref()
+                    .and_then(|s| serde_json::from_str(s).ok())
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            // LPUSH prepends each value (first arg ends up deepest)
+            for &val in args[1..].iter().rev() {
+                items.insert(0, val.to_string());
+            }
+            result.insert(key, Some(serde_json::to_string(&items).unwrap_or_default()));
+        }
+
+        "RPUSH" => {
+            let key = args[0].to_string();
+            let cur = current_values.get(&key).cloned().flatten();
+            let kt = current_types.get(&key).map(|s| s.as_str()).unwrap_or("none");
+
+            let mut items: Vec<String> = if kt == "list" {
+                cur.as_deref()
+                    .and_then(|s| serde_json::from_str(s).ok())
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            for &val in &args[1..] {
+                items.push(val.to_string());
+            }
+            result.insert(key, Some(serde_json::to_string(&items).unwrap_or_default()));
+        }
+
+        "LPOP" => {
+            let key = args[0].to_string();
+            let cur = current_values.get(&key).cloned().flatten();
+            let kt = current_types.get(&key).map(|s| s.as_str()).unwrap_or("none");
+
+            let mut items: Vec<String> = if kt == "list" {
+                cur.as_deref()
+                    .and_then(|s| serde_json::from_str(s).ok())
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            let count: usize = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(1);
+            for _ in 0..count.min(items.len()) {
+                items.remove(0);
+            }
+            if items.is_empty() {
+                result.insert(key, None);
+            } else {
+                result.insert(key, Some(serde_json::to_string(&items).unwrap_or_default()));
+            }
+        }
+
+        "RPOP" => {
+            let key = args[0].to_string();
+            let cur = current_values.get(&key).cloned().flatten();
+            let kt = current_types.get(&key).map(|s| s.as_str()).unwrap_or("none");
+
+            let mut items: Vec<String> = if kt == "list" {
+                cur.as_deref()
+                    .and_then(|s| serde_json::from_str(s).ok())
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            let count: usize = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(1);
+            for _ in 0..count.min(items.len()) {
+                items.pop();
+            }
+            if items.is_empty() {
+                result.insert(key, None);
+            } else {
+                result.insert(key, Some(serde_json::to_string(&items).unwrap_or_default()));
+            }
+        }
+
+        // ── Set commands ───────────────────────────────────────────
+        "SADD" => {
+            let key = args[0].to_string();
+            let cur = current_values.get(&key).cloned().flatten();
+            let kt = current_types.get(&key).map(|s| s.as_str()).unwrap_or("none");
+
+            let mut members: Vec<String> = if kt == "set" {
+                cur.as_deref()
+                    .and_then(|s| serde_json::from_str(s).ok())
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            let existing: HashSet<String> = members.iter().cloned().collect();
+            for &m in &args[1..] {
+                if !existing.contains(m) {
+                    members.push(m.to_string());
+                }
+            }
+            result.insert(key, Some(serde_json::to_string(&members).unwrap_or_default()));
+        }
+
+        "SREM" => {
+            let key = args[0].to_string();
+            let cur = current_values.get(&key).cloned().flatten();
+            let kt = current_types.get(&key).map(|s| s.as_str()).unwrap_or("none");
+
+            let mut members: Vec<String> = if kt == "set" {
+                cur.as_deref()
+                    .and_then(|s| serde_json::from_str(s).ok())
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            let to_remove: HashSet<&str> = args[1..].iter().copied().collect();
+            members.retain(|m| !to_remove.contains(m.as_str()));
+            if members.is_empty() {
+                result.insert(key, None);
+            } else {
+                result.insert(key, Some(serde_json::to_string(&members).unwrap_or_default()));
+            }
+        }
+
+        // ── Sorted-set commands ────────────────────────────────────
+        "ZADD" => {
+            let key = args[0].to_string();
+            let cur = current_values.get(&key).cloned().flatten();
+            let kt = current_types.get(&key).map(|s| s.as_str()).unwrap_or("none");
+
+            let mut members: Vec<(String, f64)> = if kt == "zset" {
+                cur.as_deref()
+                    .and_then(|s| serde_json::from_str(s).ok())
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            // args: score, member, score, member, ...
+            let score_args = &args[1..];
+            let mut i = 0;
+            while i + 1 < score_args.len() {
+                let score: f64 = score_args[i].parse().unwrap_or(0.0);
+                let member = score_args[i + 1].to_string();
+                if let Some(pos) = members.iter().position(|(m, _)| m == &member) {
+                    members[pos].1 = score;
+                } else {
+                    members.push((member, score));
+                }
+                i += 2;
+            }
+            result.insert(key, Some(serde_json::to_string(&members).unwrap_or_default()));
+        }
+
+        "ZREM" => {
+            let key = args[0].to_string();
+            let cur = current_values.get(&key).cloned().flatten();
+            let kt = current_types.get(&key).map(|s| s.as_str()).unwrap_or("none");
+
+            let mut members: Vec<(String, f64)> = if kt == "zset" {
+                cur.as_deref()
+                    .and_then(|s| serde_json::from_str(s).ok())
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            let to_remove: HashSet<&str> = args[1..].iter().copied().collect();
+            members.retain(|(m, _)| !to_remove.contains(m.as_str()));
+            if members.is_empty() {
+                result.insert(key, None);
+            } else {
+                result.insert(key, Some(serde_json::to_string(&members).unwrap_or_default()));
+            }
+        }
+
+        // ── Key-level commands ─────────────────────────────────────
+        "DEL" => {
+            for &key in args {
+                result.insert(key.to_string(), None);
+            }
+        }
+
+        "EXPIRE" | "PERSIST" | "TTL" | "PTTL" => {
+            // These don't change the serialised value
+            for &key in args {
+                result.insert(
+                    key.to_string(),
+                    current_values.get(key).cloned().flatten(),
+                );
+            }
+        }
+
+        "RENAME" | "RENAMENX" => {
+            if args.len() >= 2 {
+                let src = args[0].to_string();
+                let dst = args[1].to_string();
+                let val = current_values.get(&src).cloned().flatten();
+                result.insert(src, None);
+                result.insert(dst, val);
+            }
+        }
+
+        "MSET" => {
+            let mut i = 0;
+            while i + 1 < args.len() {
+                result.insert(args[i].to_string(), Some(args[i + 1].to_string()));
+                i += 2;
+            }
+        }
+
+        // ── Fallback: return current values unchanged ──────────────
+        _ => {
+            for (key, val) in current_values {
+                result.insert(key.clone(), val.clone());
+            }
+        }
+    }
+
+    result
+}
+
+/// Determine the key-type string that results from a simulated write.
+fn simulated_key_type(
+    cmd: &str,
+    before_type: &str,
+    after_value: &Option<String>,
+) -> String {
+    if after_value.is_none() {
+        return "none".to_string();
+    }
+    let cmd_upper = cmd.to_uppercase();
+    match cmd_upper.as_str() {
+        "SET" | "SETNX" | "GETSET" | "SETEX" | "PSETEX"
+        | "APPEND" | "INCR" | "DECR" | "INCRBY" | "DECRBY" => "string".to_string(),
+        "HSET" | "HMSET" | "HDEL" | "HINCRBY" => "hash".to_string(),
+        "LPUSH" | "RPUSH" | "LPOP" | "RPOP" => "list".to_string(),
+        "SADD" | "SREM" => "set".to_string(),
+        "ZADD" | "ZREM" => "zset".to_string(),
+        "RENAME" | "RENAMENX" => before_type.to_string(),
+        _ => before_type.to_string(),
+    }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// IPC commands
+// ───────────────────────────────────────────────────────────────────────────
+
+/// Execute a command in sandbox mode and return the diff preview.
+///
+/// ## Cumulative preview model (pure local simulation)
+///
+/// Preview never modifies Redis:
+/// 1. Read current key data from Redis
+/// 2. Use pending_state as baseline if available (cumulative)
+/// 3. Locally simulate the command → compute after-state
+/// 4. Update pending_state with the after-state
+/// 5. Compute diff between baseline and after-state
+///
+/// * **Apply**  → execute the command in Redis for real, clear pending.
+/// * **Cancel** → just clear pending (Redis was never touched).
 #[tauri::command]
 pub async fn sandbox_preview(
     state: State<'_, AppState>,
@@ -100,14 +494,13 @@ pub async fn sandbox_preview(
     };
     let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
 
-    // Parse command
     let parts: Vec<&str> = command.split_whitespace().collect();
     if parts.is_empty() {
         return Err("Empty command".to_string());
     }
     let cmd_name_upper = parts[0].to_uppercase();
 
-    // --- Read-only commands: execute directly and return result ---
+    // ── Read-only commands: execute directly ──
     if READ_ONLY_COMMANDS.contains(&cmd_name_upper.as_str()) {
         let mut redis_cmd = redis::cmd(parts[0]);
         for arg in &parts[1..] {
@@ -124,130 +517,193 @@ pub async fn sandbox_preview(
             diff: vec![],
             command_result: Some(formatted),
             snapshot_id: String::new(),
+            key_types: HashMap::new(),
         });
     }
 
-    // --- Write commands: capture before/after, diff, rollback ---
+    // ── Write commands: local simulation ──
     let affected_keys = extract_keys(&parts);
 
-    // Step 1: Capture before state + key types
-    let mut before_state = HashMap::new();
-    let mut key_types: HashMap<String, String> = HashMap::new();
+    // Step 1: Read current Redis state for affected keys
+    let mut redis_state: HashMap<String, Option<String>> = HashMap::new();
+    let mut redis_key_types: HashMap<String, String> = HashMap::new();
     for key in &affected_keys {
         let kt = get_key_type(&mut conn, key).await;
-        key_types.insert(key.clone(), kt.clone());
-        if kt != "none"
-            && let Some(val) = get_key_value_string(&mut conn, key).await
-        {
-            before_state.insert(key.clone(), val);
+        redis_key_types.insert(key.clone(), kt.clone());
+        if kt != "none" {
+            let val = get_key_value_string(&mut conn, key).await;
+            redis_state.insert(key.clone(), val);
+        } else {
+            redis_state.insert(key.clone(), None);
         }
     }
 
-    // Step 2: Create snapshot
+    // Step 2: Build diff baseline (pending_state or redis_state)
+    let has_pending = {
+        let ss = state.shadow_store.lock().map_err(|e| e.to_string())?;
+        ss.has_pending()
+    };
+
+    let mut before_for_diff: HashMap<String, String> = HashMap::new();
+    let mut before_key_types: HashMap<String, String> = HashMap::new();
+    // effective_state = what the key looks like right now (for simulation input)
+    let mut effective_values: HashMap<String, Option<String>> = HashMap::new();
+    let mut effective_types: HashMap<String, String> = HashMap::new();
+    {
+        let ss = state.shadow_store.lock().map_err(|e| e.to_string())?;
+        for key in &affected_keys {
+            if let Some(pending_val) = ss.pending_state.get(key) {
+                effective_values.insert(key.clone(), pending_val.clone());
+                if let Some(kt) = ss.pending_key_types.get(key) {
+                    effective_types.insert(key.clone(), kt.clone());
+                }
+                if let Some(val) = pending_val {
+                    before_for_diff.insert(key.clone(), val.clone());
+                }
+                if let Some(kt) = ss.pending_key_types.get(key) {
+                    before_key_types.insert(key.clone(), kt.clone());
+                }
+            } else {
+                let rv = redis_state.get(key).cloned().flatten();
+                effective_values.insert(key.clone(), rv.clone());
+                if let Some(kt) = redis_key_types.get(key) {
+                    effective_types.insert(key.clone(), kt.clone());
+                }
+                if let Some(val) = &rv {
+                    before_for_diff.insert(key.clone(), val.clone());
+                }
+                if let Some(kt) = redis_key_types.get(key) {
+                    before_key_types.insert(key.clone(), kt.clone());
+                }
+            }
+        }
+    }
+
+    // Step 3: Save original state on first pending preview
+    if !has_pending {
+        let ss = state.shadow_store.lock().map_err(|e| e.to_string())?;
+        let mut ss = ss;
+        for key in &affected_keys {
+            if let Some(val) = redis_state.get(key).cloned().flatten() {
+                ss.original_state.insert(key.clone(), val);
+            }
+            if let Some(kt) = redis_key_types.get(key) {
+                ss.original_key_types.insert(key.clone(), kt.clone());
+            }
+        }
+    }
+
+    // Step 4: Locally simulate the command
+    let simulated = simulate_write_command(
+        parts[0],
+        &parts[1..],
+        &effective_values,
+        &effective_types,
+    );
+
+    // Build after_state & after_key_types from simulation result
+    let mut after_state: HashMap<String, String> = HashMap::new();
+    let mut after_key_types: HashMap<String, String> = HashMap::new();
+    for key in &affected_keys {
+        if let Some(sim_val) = simulated.get(key) {
+            if let Some(val) = sim_val {
+                after_state.insert(key.clone(), val.clone());
+            }
+            let before_kt = effective_types.get(key).map(|s| s.as_str()).unwrap_or("none");
+            let new_kt = simulated_key_type(parts[0], before_kt, sim_val);
+            after_key_types.insert(key.clone(), new_kt);
+        }
+    }
+
+    // Step 5: Create snapshot
     let snap_id = uuid::Uuid::new_v4().to_string();
     {
         let ss = state.shadow_store.lock().map_err(|e| e.to_string())?;
         let mut ss = ss;
-        ss.create_snapshot(&snap_id, &command, before_state.clone());
+        ss.create_snapshot(&snap_id, before_for_diff.clone());
     }
 
-    // Step 3: Execute command
-    let cmd_name = parts[0];
-    let cmd_args = &parts[1..];
-    let mut redis_cmd = redis::cmd(cmd_name);
-    for arg in cmd_args {
-        redis_cmd.arg(*arg);
-    }
-    let _: redis::Value = redis_cmd
-        .query_async(&mut *conn)
-        .await
-        .map_err(|e| format!("Command error: {}", e))?;
-
-    // Step 4: Capture after state + update key types
-    let mut after_state = HashMap::new();
-    for key in &affected_keys {
-        let kt = get_key_type(&mut conn, key).await;
-        // Update key_type to reflect after-execution state
-        key_types.insert(key.clone(), kt.clone());
-        if kt != "none"
-            && let Some(val) = get_key_value_string(&mut conn, key).await
-        {
-            after_state.insert(key.clone(), val);
-        }
-    }
-
-    // Step 5: Set after state and compute diff
+    // Step 6: Update pending state & compute diff
     let diff_result = {
         let ss = state.shadow_store.lock().map_err(|e| e.to_string())?;
         let mut ss = ss;
-        ss.set_after_state(&snap_id, after_state);
-        ss.compute_diff_with_unchanged(&snap_id)
-    };
 
-    // Step 6: Rollback - restore original state
-    for key in &affected_keys {
-        match before_state.get(key) {
-            Some(val) => {
-                let _: Result<(), _> = conn.set(key, val).await;
+        for key in &affected_keys {
+            if let Some(sim_val) = simulated.get(key) {
+                ss.pending_state.insert(key.clone(), sim_val.clone());
             }
-            None => {
-                let _: Result<i64, _> = redis::cmd("DEL")
-                    .arg(key)
-                    .query_async(&mut *conn)
-                    .await;
+            if let Some(kt) = after_key_types.get(key) {
+                ss.pending_key_types.insert(key.clone(), kt.clone());
             }
         }
-    }
 
-    // Convert DiffResult to Vec<DiffEntry> (with key_type and display formatting)
+        ss.set_after_state(&snap_id, after_state);
+        ss.compute_diff(&snap_id)
+    };
+
+    // Convert DiffResult to Vec<DiffEntry>
     let mut diff = Vec::new();
     if let Some(dr) = diff_result {
         for (key, val) in dr.added {
-            let kt = key_types.get(&key).cloned().unwrap_or_default();
+            let kt = after_key_types.get(&key).cloned().unwrap_or_default();
             diff.push(DiffEntry {
                 path: key.clone(),
                 key_type: Some(kt.clone()),
                 before: None,
                 after: Some(format_for_display(&val, &kt)),
+                before_raw: None,
+                after_raw: Some(val),
                 change_type: "added".to_string(),
             });
         }
         for (key, before, after) in dr.modified {
-            let kt = key_types.get(&key).cloned().unwrap_or_default();
+            let kt = before_key_types.get(&key).cloned().unwrap_or_default();
             diff.push(DiffEntry {
                 path: key.clone(),
                 key_type: Some(kt.clone()),
                 before: Some(format_for_display(&before, &kt)),
-                after: Some(format_for_display(&after, &kt)),
+                after: Some(format_for_display(&after, &after_key_types.get(&key).cloned().unwrap_or(kt.clone()))),
+                before_raw: Some(before),
+                after_raw: Some(after),
                 change_type: "modified".to_string(),
             });
         }
         for (key, val) in dr.deleted {
-            let kt = key_types.get(&key).cloned().unwrap_or_default();
+            let kt = before_key_types.get(&key).cloned().unwrap_or_default();
             diff.push(DiffEntry {
                 path: key.clone(),
                 key_type: Some(kt.clone()),
                 before: Some(format_for_display(&val, &kt)),
                 after: None,
+                before_raw: Some(val),
+                after_raw: None,
                 change_type: "deleted".to_string(),
             });
         }
         for (key, val) in dr.unchanged {
-            let kt = key_types.get(&key).cloned().unwrap_or_default();
+            let kt = before_key_types.get(&key).cloned().unwrap_or_default();
             diff.push(DiffEntry {
                 path: key.clone(),
                 key_type: Some(kt.clone()),
                 before: Some(format_for_display(&val, &kt)),
                 after: Some(format_for_display(&val, &kt)),
+                before_raw: Some(val.clone()),
+                after_raw: Some(val),
                 change_type: "unchanged".to_string(),
             });
         }
     }
 
-    Ok(SandboxPreview { command, diff, command_result: None, snapshot_id: snap_id })
+    Ok(SandboxPreview {
+        command,
+        diff,
+        command_result: None,
+        snapshot_id: snap_id,
+        key_types: before_key_types,
+    })
 }
 
-/// Apply a sandboxed change to the actual Redis instance
+/// Apply the current sandbox command to Redis for real.
 #[tauri::command]
 pub async fn sandbox_apply(
     state: State<'_, AppState>,
@@ -277,18 +733,41 @@ pub async fn sandbox_apply(
         .await
         .map_err(|e| format!("Apply error: {}", e))?;
 
+    {
+        let ss = state.shadow_store.lock().map_err(|e| e.to_string())?;
+        let mut ss = ss;
+        ss.clear_pending();
+    }
+
     Ok(true)
 }
 
-/// Rollback a sandboxed change by restoring the before-state
+/// Cancel all pending sandbox previews.
+/// Redis was never modified during preview, so this only clears shadow state.
+#[tauri::command]
+pub async fn sandbox_cancel(
+    state: State<'_, AppState>,
+    _connection_id: String,
+) -> Result<bool, String> {
+    let ss = state.shadow_store.lock().map_err(|e| e.to_string())?;
+    let mut ss = ss;
+    ss.clear_pending();
+    Ok(true)
+}
+
+/// Rollback a previously-applied sandbox history item.
 #[tauri::command]
 pub async fn sandbox_rollback(
     state: State<'_, AppState>,
     connection_id: String,
     before_state: HashMap<String, String>,
     added_keys: Vec<String>,
+    key_types: HashMap<String, String>,
 ) -> Result<bool, String> {
     validate_connection_id(&connection_id)?;
+    for key in before_state.keys().chain(added_keys.iter()) {
+        validate_key(key)?;
+    }
 
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
@@ -296,16 +775,10 @@ pub async fn sandbox_rollback(
     };
     let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
 
-    // Restore each key to its before-state
     for (key, val) in &before_state {
-        let _: Result<(), _> = redis::cmd("SET")
-            .arg(key)
-            .arg(val)
-            .query_async(&mut *conn)
-            .await;
+        let restore_type = key_types.get(key).map(|s| s.as_str()).unwrap_or("string");
+        let _: Result<(), _> = restore_key_value(&mut conn, key, restore_type, val).await;
     }
-
-    // Delete keys that were added by the command (didn't exist before)
     for key in &added_keys {
         let _: Result<i64, _> = redis::cmd("DEL")
             .arg(key)

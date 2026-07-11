@@ -4,6 +4,8 @@ import type { RedisConnection, ConnectionStatus } from "@/types";
 import { tauriApi, type RustConnectionConfig } from "@/services/tauriApi";
 import { toast } from "@/utils/toast";
 import { i18n } from "@/i18n";
+import { useCascadeStore } from "@/stores/cascadeStore";
+import { useDetailStore } from "@/stores/detailStore";
 
 export const useConnectionStore = defineStore("connection", () => {
   const connections = ref<RedisConnection[]>([]);
@@ -121,9 +123,7 @@ export const useConnectionStore = defineStore("connection", () => {
       toast.error(msg, 5000, conn.name);
 
       // Clear data browser content regardless of current page
-      // Lazy store access to avoid circular dependencies
-      const { useCascadeStore } = require("@/stores/cascadeStore");
-      const { useDetailStore } = require("@/stores/detailStore");
+      // Lazy store calls (inside function body) break the circular dependency safely
       const cascade = useCascadeStore();
       const detail = useDetailStore();
       cascade.keys = [];
@@ -132,6 +132,7 @@ export const useConnectionStore = defineStore("connection", () => {
       cascade.debouncedSearchQuery = "";
       cascade.typeFilter = "all";
       cascade.expandedPaths = new Set<string>();
+      cascade.totalKeyCount = 0;
       detail.clearDetail();
     }
   }
@@ -164,7 +165,21 @@ export const useConnectionStore = defineStore("connection", () => {
       console.error("Disconnect failed:", e);
     }
     setStatus(id, "disconnected");
-    if (activeConnectionId.value === id) activeConnectionId.value = null;
+    if (activeConnectionId.value === id) {
+      activeConnectionId.value = null;
+
+      // Clear data browser content on active disconnect
+      const cascade = useCascadeStore();
+      const detail = useDetailStore();
+      cascade.keys = [];
+      cascade.selectedKey = null;
+      cascade.searchQuery = "";
+      cascade.debouncedSearchQuery = "";
+      cascade.typeFilter = "all";
+      cascade.expandedPaths = new Set<string>();
+      cascade.totalKeyCount = 0;
+      detail.clearDetail();
+    }
   }
 
   async function testConnection(id: string): Promise<boolean> {

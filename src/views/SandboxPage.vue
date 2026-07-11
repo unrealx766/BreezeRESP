@@ -73,11 +73,21 @@ function useTemplate(tpl: typeof commandTemplates[0]) {
             <textarea
               v-model="sandbox.commandInput"
               @keydown="handleKeydown"
+              @input="sandbox.commandError = null"
               :placeholder="t('sandbox.placeholder')"
               :disabled="!isConnected"
               rows="2"
-              class="w-full px-3 py-2 text-sm font-mono bg-white border border-border rounded-lg focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20 resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+              :class="[
+                'w-full px-3 py-2 text-sm font-mono bg-white border rounded-lg focus:outline-none focus:ring-1 resize-none disabled:opacity-50 disabled:cursor-not-allowed transition-colors',
+                sandbox.commandError
+                  ? 'border-danger focus:border-danger focus:ring-danger/20'
+                  : 'border-border focus:border-redis focus:ring-redis/20'
+              ]"
             />
+            <p v-if="sandbox.commandError" class="mt-1.5 text-xs text-danger flex items-center gap-1">
+              <AlertTriangle :size="12" />
+              {{ sandbox.commandError }}
+            </p>
           </div>
           <div class="flex flex-row sm:flex-col gap-2 shrink-0">
             <button

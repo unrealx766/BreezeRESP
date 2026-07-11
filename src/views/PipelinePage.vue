@@ -331,7 +331,7 @@ function onDrop(idx: number) {
       <!-- Results Summary Panel -->
       <div class="w-64 shrink-0" v-if="pipeline.hasResults">
         <div class="card p-4 space-y-4">
-          <h3 class="text-sm font-semibold text-text-primary">Results Summary</h3>
+          <h3 class="text-sm font-semibold text-text-primary">{{ t("pipeline.resultsSummary") }}</h3>
 
           <div class="space-y-3">
             <div class="flex justify-between text-xs">

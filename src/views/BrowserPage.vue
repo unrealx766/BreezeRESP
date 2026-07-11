@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import { watch, onMounted, ref, reactive, computed, nextTick } from "vue";
+import { watch, onMounted, onBeforeUnmount, ref, reactive, computed, nextTick } from "vue";
 import { useCascadeStore } from "@/stores/cascadeStore";
 import { useDetailStore } from "@/stores/detailStore";
 import { useConnectionStore } from "@/stores/connectionStore";
@@ -13,7 +13,7 @@ import { useCopyTip } from "@/utils/copyTip";
 import {
   Search, RefreshCw, Trash2, Copy, Tag,
   Type, Hash, List, CircleDot, BarChart3,
-  AlertTriangle, X, Wifi, Pencil, Save,
+  AlertTriangle, X, Pencil, Save,
 } from "lucide-vue-next";
 
 const { t } = useI18n();
@@ -23,7 +23,6 @@ const connStore = useConnectionStore();
 
 const confirmDialog = ref<InstanceType<typeof ConfirmDialog>>();
 
-const connectionLost = ref(false);
 const isConnected = computed(() => connStore.activeConnection?.status === "connected");
 
 // Debounce search input: wait 300ms after user stops typing before triggering filter/scan
@@ -98,31 +97,6 @@ function resetSearchImmediate() {
   cascade.debouncedSearchQuery = "";
 }
 
-// Watch for connection loss
-watch(
-  () => connStore.activeConnection?.status,
-  (newStatus, oldStatus) => {
-    if (oldStatus === "connected" && newStatus !== "connected") {
-      connectionLost.value = true;
-      // Data clearing & toast already handled by connectionStore.markConnectionLost
-    }
-    if (newStatus === "connected") {
-      connectionLost.value = false;
-    }
-  }
-);
-
-async function handleReconnect() {
-  const id = connStore.activeConnectionId;
-  if (!id) return;
-  connectionLost.value = false;
-  const ok = await connStore.connect(id);
-  if (ok) {
-    await cascade.refreshKeys(true);
-  } else {
-    connectionLost.value = true;
-  }
-}
 
 const typeColors: Record<RedisDataType, string> = {
   string: "bg-type-string/10 text-type-string",
@@ -150,8 +124,15 @@ function formatSize(bytes: number): string {
 }
 
 function handleSelect(node: any) {
-  if (node.key) cascade.selectKey(node.key.key);
-  else cascade.toggleNode(node);
+  if (node.key) {
+    cascade.selectKey(node.key.key);
+    // Close non-pinned floating windows on key switch
+    for (let i = floatingWindows.length - 1; i >= 0; i--) {
+      if (!floatingWindows[i].pinned) floatingWindows.splice(i, 1);
+    }
+  } else {
+    cascade.toggleNode(node);
+  }
 }
 
 const { copyWithTip } = useCopyTip();
@@ -395,32 +376,17 @@ onMounted(() => {
     cascade.refreshKeys();
   }
 });
+
+onBeforeUnmount(() => {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = null;
+  }
+});
 </script>
 
 <template>
   <div class="h-full flex flex-col min-w-[700px]">
-    <!-- Connection Lost Banner -->
-    <div
-      v-if="connectionLost"
-      class="px-4 py-2.5 bg-danger/5 border-b border-danger/20 flex items-center gap-3 shrink-0"
-    >
-      <AlertTriangle :size="16" class="text-danger shrink-0" />
-      <div class="flex-1 min-w-0">
-        <p class="text-sm font-medium text-danger">{{ t("connection.connectionLost") }}</p>
-        <p class="text-xs text-text-muted mt-0.5">{{ t("connection.connectionLostDesc") }}</p>
-      </div>
-      <button
-        @click="handleReconnect"
-        class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-danger/10 text-danger rounded-lg text-xs font-medium hover:bg-danger/20 transition-colors shrink-0"
-      >
-        <Wifi :size="12" />
-        {{ t("connection.reconnect") }}
-      </button>
-      <button @click="connectionLost = false" class="shrink-0 text-text-muted hover:text-text-primary">
-        <X :size="14" />
-      </button>
-    </div>
-
     <div class="flex-1 flex min-h-0">
     <!-- Left Panel: Key Tree -->
     <div class="w-72 border-r border-border flex flex-col bg-white shrink-0">

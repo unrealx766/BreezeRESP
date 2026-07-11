@@ -93,14 +93,16 @@ export const useDetailStore = defineStore("detail", () => {
         ttlRemaining.value--;
         if (ttlRemaining.value <= 0 && ttlTotal.value > 0) {
           isExpired.value = true;
+          stopTtlTimer();
         }
+      } else {
+        stopTtlTimer();
       }
     }, 1000);
   }
   function stopTtlTimer() {
     if (ttlTimer) { clearInterval(ttlTimer); ttlTimer = null; }
   }
-  startTtlTimer();
 
   async function loadDetail(key: string) {
     const connStore = useConnectionStore();

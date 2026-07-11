@@ -30,7 +30,10 @@ impl ConnectionPoolManager {
         }
 
         let url = match password {
-            Some(pw) if !pw.is_empty() => format!("redis://:{}@{}:{}/{}", pw, host, port, db),
+            Some(pw) if !pw.is_empty() => {
+                let encoded_pw = urlencoding::encode(pw);
+                format!("redis://:{}@{}:{}/{}", encoded_pw, host, port, db)
+            }
             _ => format!("redis://{}:{}/{}", host, port, db),
         };
 

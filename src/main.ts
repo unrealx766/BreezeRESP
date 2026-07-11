@@ -11,9 +11,8 @@ const pinia = createPinia();
 app.use(pinia);
 app.use(router);
 app.use(i18n);
-app.mount("#app");
 
-// Register connection guard for centralized IPC validation
+// Register connection guard for centralized IPC validation (before mount)
 import { useConnectionStore } from "./stores/connectionStore";
 registerConnectionGuard(() => {
   const connStore = useConnectionStore();
@@ -22,6 +21,8 @@ registerConnectionGuard(() => {
     throw new Error("Not connected");
   }
 });
+
+app.mount("#app");
 
 // Disable default context menu (custom context menu may be added later)
 document.addEventListener("contextmenu", (e) => e.preventDefault());

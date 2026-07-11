@@ -20,6 +20,26 @@ const MAX_CONNECTION_NAME_LEN: usize = 128;
 /// Maximum host name length
 const MAX_HOST_LEN: usize = 253;
 
+/// Maximum length of a single pipeline argument
+const MAX_ARG_LEN: usize = 65_536; // 64 KB
+
+/// Maximum number of arguments per pipeline command
+const MAX_ARGS_PER_CMD: usize = 64;
+
+/// Blocked Redis administrative commands that could compromise the host system
+const BLOCKED_COMMANDS: &[&str] = &[
+    "CONFIG",   // CONFIG SET dir / CONFIG SET dbfilename → RCE
+    "DEBUG",    // DEBUG SEGFAULT, etc.
+    "MODULE",   // load arbitrary .so/.dll
+    "SCRIPT",   // arbitrary Lua execution
+    "EVAL",     // arbitrary Lua execution
+    "EVALSHA",  // arbitrary Lua execution
+    "SLAVEOF",  // replication hijack
+    "REPLICAOF",// replication hijack (newer alias)
+    "SHUTDOWN", // server shutdown
+    "ACL",      // tamper with ACL rules
+];
+
 // ---------------------------------------------------------------------------
 // Generic string guards
 // ---------------------------------------------------------------------------
@@ -87,19 +107,6 @@ pub fn validate_command(cmd: &str) -> Result<(), String> {
         .unwrap_or("")
         .to_uppercase();
 
-    const BLOCKED_COMMANDS: &[&str] = &[
-        "CONFIG",   // CONFIG SET dir / CONFIG SET dbfilename → RCE
-        "DEBUG",    // DEBUG SEGFAULT, etc.
-        "MODULE",   // load arbitrary .so/.dll
-        "SCRIPT",   // arbitrary Lua execution
-        "EVAL",     // arbitrary Lua execution
-        "EVALSHA",  // arbitrary Lua execution
-        "SLAVEOF",  // replication hijack
-        "REPLICAOF",// replication hijack (newer alias)
-        "SHUTDOWN", // server shutdown
-        "ACL",      // tamper with ACL rules
-    ];
-
     if BLOCKED_COMMANDS.contains(&first_token.as_str()) {
         return Err(format!(
             "Command '{}' is blocked for security reasons",
@@ -110,7 +117,7 @@ pub fn validate_command(cmd: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Validate a pipeline command list (size + per-command checks).
+/// Validate a pipeline command list (size + per-command checks including blocked commands).
 pub fn validate_pipeline_commands(commands: &[(String, Vec<String>)]) -> Result<(), String> {
     if commands.len() > MAX_PIPELINE_COMMANDS {
         return Err(format!(
@@ -119,9 +126,37 @@ pub fn validate_pipeline_commands(commands: &[(String, Vec<String>)]) -> Result<
             MAX_PIPELINE_COMMANDS
         ));
     }
-    for (cmd, _args) in commands {
+    for (cmd, args) in commands {
         validate_non_empty(cmd, "pipeline command", MAX_IDENTIFIER_LEN)?;
         reject_null_bytes(cmd, "pipeline command")?;
+        // Also check blocked commands for each pipeline command
+        let first_token = cmd.trim().to_uppercase();
+        if BLOCKED_COMMANDS.contains(&first_token.as_str()) {
+            return Err(format!(
+                "Command '{}' is blocked for security reasons",
+                first_token
+            ));
+        }
+        // Validate arguments
+        if args.len() > MAX_ARGS_PER_CMD {
+            return Err(format!(
+                "Too many arguments for command '{}' ({} > {})",
+                first_token,
+                args.len(),
+                MAX_ARGS_PER_CMD
+            ));
+        }
+        for arg in args {
+            if arg.len() > MAX_ARG_LEN {
+                return Err(format!(
+                    "Argument for command '{}' exceeds maximum length ({} > {})",
+                    first_token,
+                    arg.len(),
+                    MAX_ARG_LEN
+                ));
+            }
+            reject_null_bytes(arg, "pipeline argument")?;
+        }
     }
     Ok(())
 }
