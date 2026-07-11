@@ -3,7 +3,7 @@ import { computed, ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useConnectionStore } from "@/stores/connectionStore";
-import { Database, Server, Layers, FlaskConical, Plus, Unplug } from "lucide-vue-next";
+import { Database, Server, Layers, FlaskConical, Plus, Unplug, X, Pin } from "lucide-vue-next";
 import { toast } from "@/utils/toast";
 
 const router = useRouter();
@@ -112,13 +112,28 @@ async function handleSidebarDisconnect(id: string) {
             class="text-[10px] font-mono font-semibold text-redis/70 bg-redis/8 px-1.5 py-0.5 rounded shrink-0 transition-opacity"
           >DB{{ conn.db }}</span>
           <button
-            :class="conn.status === 'connected' || conn.status === 'connecting' ? 'opacity-100' : 'opacity-0 pointer-events-none'"
+            v-if="conn.status === 'connected' || conn.status === 'connecting'"
             @click.stop="handleSidebarDisconnect(conn.id)"
             class="w-5 h-5 rounded flex items-center justify-center hover:bg-danger/10 transition-opacity shrink-0 group/disconnect"
             :title="t('connection.disconnect')"
           >
             <Unplug :size="12" class="text-text-muted group-hover/disconnect:text-danger" />
           </button>
+          <template v-else>
+            <!-- Pin indicator for pinned disconnected connections (red, close to X) -->
+            <Pin
+              v-if="conn.pinned"
+              :size="10"
+              class="text-danger shrink-0"
+            />
+            <button
+              @click.stop="connStore.dismissSession(conn.id)"
+              class="w-5 h-5 rounded flex items-center justify-center hover:bg-bg-hover transition-opacity shrink-0 group/dismiss"
+              :title="t('connection.dismissSession')"
+            >
+              <X :size="12" class="text-text-muted group-hover/dismiss:text-text-secondary" />
+            </button>
+          </template>
         </div>
       </div>
     </div>

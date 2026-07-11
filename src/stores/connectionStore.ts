@@ -247,6 +247,17 @@ export const useConnectionStore = defineStore("connection", () => {
     }
   }
 
+  /** Dismiss a disconnected session from the sidebar list (does NOT delete config from disk, does NOT unpin) */
+  function dismissSession(id: string) {
+    // Remove from session-connected set
+    const next = new Set(sessionConnectedIds.value);
+    next.delete(id);
+    sessionConnectedIds.value = next;
+
+    // Clear active if it was the dismissed connection
+    if (activeConnectionId.value === id) activeConnectionId.value = null;
+  }
+
   // Load saved connections on store init
   loadSavedConnections();
 
@@ -267,6 +278,7 @@ export const useConnectionStore = defineStore("connection", () => {
     testFormConnection,
     switchDb,
     togglePin,
+    dismissSession,
     loadSavedConnections,
   };
 });
