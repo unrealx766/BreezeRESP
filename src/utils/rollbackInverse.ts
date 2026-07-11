@@ -148,33 +148,26 @@ export function computeInverseCommands(
       if (!entry) break;
 
       if (entry.changeType === "added") {
-        // Entire key was new → DEL
-        inverseCmds.push(`DEL ${q(key)}`);
+        // Key was new — HDEL each field (Redis auto-removes empty hash)
+        const fieldArgs = args.slice(1);
+        for (let i = 0; i + 1 < fieldArgs.length; i += 2) {
+          inverseCmds.push(`HDEL ${q(key)} ${q(fieldArgs[i])}`);
+        }
       } else {
         // Key existed: compute field-level diff
         const beforeFields = parseHashFields(entry.beforeRaw);
-        const afterFields = parseHashFields(entry.afterRaw);
-
         const beforeMap = new Map(beforeFields);
-        const afterMap = new Map(afterFields);
 
-        // Fields added or modified by the command
         const fieldArgs = args.slice(1);
         for (let i = 0; i + 1 < fieldArgs.length; i += 2) {
           const field = fieldArgs[i];
           const beforeVal = beforeMap.get(field);
           if (beforeVal === undefined) {
-            // Field was added → HDEL
             inverseCmds.push(`HDEL ${q(key)} ${q(field)}`);
           } else {
-            // Field was modified → HSET old value
             inverseCmds.push(`HSET ${q(key)} ${q(field)} ${q(beforeVal)}`);
           }
         }
-
-        // If the key ends up empty after all HDELs, we may need cleanup,
-        // but Redis automatically removes empty hashes.
-        void afterMap; // afterMap used only for completeness
       }
       break;
     }
@@ -205,25 +198,22 @@ export function computeInverseCommands(
     case "HINCRBY": {
       const key = args[0];
       const field = args[1];
-      const increment = args[2];
       const entry = findDiff(key);
       if (!entry) break;
 
       if (entry.changeType === "added") {
-        inverseCmds.push(`DEL ${q(key)}`);
+        // Key was new — HDEL the field (Redis auto-removes empty hash)
+        inverseCmds.push(`HDEL ${q(key)} ${q(field)}`);
       } else {
         const beforeFields = parseHashFields(entry.beforeRaw);
         const beforeMap = new Map(beforeFields);
         const oldVal = beforeMap.get(field);
         if (oldVal === undefined) {
-          // Field was created by HINCRBY → HDEL
           inverseCmds.push(`HDEL ${q(key)} ${q(field)}`);
         } else {
-          // Field existed → restore old value
           inverseCmds.push(`HSET ${q(key)} ${q(field)} ${q(oldVal)}`);
         }
       }
-      void increment;
       break;
     }
 
@@ -233,16 +223,13 @@ export function computeInverseCommands(
       const entry = findDiff(key);
       if (!entry) break;
 
-      if (entry.changeType === "added") {
-        inverseCmds.push(`DEL ${q(key)}`);
+      // LPUSH prepended N values → LPOP N values to undo
+      // Works whether key was new or existing — LPOP on an empty/nonexistent key is safe
+      const count = args.length - 1;
+      if (count === 1) {
+        inverseCmds.push(`LPOP ${q(key)}`);
       } else {
-        // LPUSH prepended N values → LPOP N values to undo
-        const count = args.length - 1;
-        if (count === 1) {
-          inverseCmds.push(`LPOP ${q(key)}`);
-        } else {
-          inverseCmds.push(`LPOP ${q(key)} ${count}`);
-        }
+        inverseCmds.push(`LPOP ${q(key)} ${count}`);
       }
       break;
     }
@@ -252,15 +239,11 @@ export function computeInverseCommands(
       const entry = findDiff(key);
       if (!entry) break;
 
-      if (entry.changeType === "added") {
-        inverseCmds.push(`DEL ${q(key)}`);
+      const count = args.length - 1;
+      if (count === 1) {
+        inverseCmds.push(`RPOP ${q(key)}`);
       } else {
-        const count = args.length - 1;
-        if (count === 1) {
-          inverseCmds.push(`RPOP ${q(key)}`);
-        } else {
-          inverseCmds.push(`RPOP ${q(key)} ${count}`);
-        }
+        inverseCmds.push(`RPOP ${q(key)} ${count}`);
       }
       break;
     }
@@ -315,7 +298,11 @@ export function computeInverseCommands(
       if (!entry) break;
 
       if (entry.changeType === "added") {
-        inverseCmds.push(`DEL ${q(key)}`);
+        // Key was new — SREM all added members (Redis auto-removes empty set)
+        const members = args.slice(1);
+        if (members.length > 0) {
+          inverseCmds.push(`SREM ${q(key)} ${members.map(q).join(" ")}`);
+        }
       } else {
         // Only SREM the members that were actually added (not already present)
         const beforeMembers = parseSetMembers(entry.beforeRaw);
@@ -356,21 +343,23 @@ export function computeInverseCommands(
       if (!entry) break;
 
       if (entry.changeType === "added") {
-        inverseCmds.push(`DEL ${q(key)}`);
+        // Key was new — ZREM all added members (Redis auto-removes empty zset)
+        const scoreArgs = args.slice(1);
+        for (let i = 0; i + 1 < scoreArgs.length; i += 2) {
+          const member = scoreArgs[i + 1];
+          inverseCmds.push(`ZREM ${q(key)} ${q(member)}`);
+        }
       } else {
         const beforeMembers = parseZSetMembers(entry.beforeRaw);
         const beforeMap = new Map(beforeMembers.map(([m, s]) => [m, s]));
 
-        // Parse score-member pairs from args
         const scoreArgs = args.slice(1);
         for (let i = 0; i + 1 < scoreArgs.length; i += 2) {
           const member = scoreArgs[i + 1];
           const oldScore = beforeMap.get(member);
           if (oldScore === undefined) {
-            // Member was added → ZREM
             inverseCmds.push(`ZREM ${q(key)} ${q(member)}`);
           } else {
-            // Member existed → restore old score
             inverseCmds.push(`ZADD ${q(key)} ${oldScore} ${q(member)}`);
           }
         }
