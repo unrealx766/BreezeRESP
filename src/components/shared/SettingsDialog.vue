@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { availableLocales } from "@/i18n";
 import { Globe, Check, Settings, X, Info, SlidersHorizontal, Github } from "lucide-vue-next";
@@ -24,7 +24,7 @@ function setLocale(code: string) {
   locale.value = code;
 }
 
-const appVersion = computed(() => t("app.version"));
+const appVersion = __APP_VERSION__;
 
 defineExpose({ open });
 </script>

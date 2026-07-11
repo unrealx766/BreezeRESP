@@ -2,8 +2,7 @@
   "app": {
     "title": "BreezeRESP",
     "subtitle": "Redis 桌面客户端",
-    "copyright": "Copyright © 2026 unrealx766. All Rights Reserved.",
-    "version": "v0.1.0"
+    "copyright": "Copyright © 2026 unrealx766. All Rights Reserved."
   },
   "nav": {
     "connections": "连接管理",

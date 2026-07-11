@@ -1,6 +1,11 @@
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import { resolve } from "path";
+import { readFileSync } from "fs";
+
+// Read version from package.json (single source of truth)
+const pkg = JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf-8"));
+const appVersion = `v${pkg.version}`;
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
@@ -12,6 +17,9 @@ export default defineConfig(async () => ({
     alias: {
       "@": resolve(__dirname, "src"),
     },
+  },
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

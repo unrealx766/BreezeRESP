@@ -5,3 +5,6 @@ declare module "*.vue" {
   const component: DefineComponent<{}, {}, any>;
   export default component;
 }
+
+/** App version injected at build time from package.json */
+declare const __APP_VERSION__: string;

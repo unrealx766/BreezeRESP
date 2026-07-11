@@ -7,6 +7,7 @@ import { Activity, HardDrive, Clock, Cpu, Wifi } from "lucide-vue-next";
 const { t } = useI18n();
 const connStore = useConnectionStore();
 const metricsStore = useMetricsStore();
+const appVersion = __APP_VERSION__;
 </script>
 
 <template>
@@ -57,6 +58,6 @@ const metricsStore = useMetricsStore();
     </template>
 
     <!-- App version & Copyright (right side) -->
-    <span class="ml-auto text-text-muted/60 shrink-0 whitespace-nowrap hidden lg:block">{{ t("app.version") }} · {{ t("app.copyright") }}</span>
+    <span class="ml-auto text-text-muted/60 shrink-0 whitespace-nowrap hidden lg:block">{{ appVersion }} · {{ t("app.copyright") }}</span>
   </footer>
 </template>
