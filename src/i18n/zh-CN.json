@@ -28,7 +28,7 @@
     "noPassword": "无需密码",
     "db": "数据库",
     "ssl": "SSL/TLS",
-    "status": "状态",
+    "sessions": "会话",
     "connected": "已连接",
     "disconnected": "未连接",
     "connecting": "连接中...",

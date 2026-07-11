@@ -359,6 +359,7 @@ pub async fn db_size(
 ///   - "delete_field": remove a sub-element (HDEL, LREM 1, SREM, ZREM)
 ///   - "add_field": add a new sub-element (HSET new field, RPUSH, SADD, ZADD)
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn set_value(
     state: State<'_, AppState>,
     connection_id: String,

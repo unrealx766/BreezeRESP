@@ -136,10 +136,10 @@ pub async fn sandbox_preview(
     for key in &affected_keys {
         let kt = get_key_type(&mut conn, key).await;
         key_types.insert(key.clone(), kt.clone());
-        if kt != "none" {
-            if let Some(val) = get_key_value_string(&mut conn, key).await {
-                before_state.insert(key.clone(), val);
-            }
+        if kt != "none"
+            && let Some(val) = get_key_value_string(&mut conn, key).await
+        {
+            before_state.insert(key.clone(), val);
         }
     }
 
@@ -169,10 +169,10 @@ pub async fn sandbox_preview(
         let kt = get_key_type(&mut conn, key).await;
         // Update key_type to reflect after-execution state
         key_types.insert(key.clone(), kt.clone());
-        if kt != "none" {
-            if let Some(val) = get_key_value_string(&mut conn, key).await {
-                after_state.insert(key.clone(), val);
-            }
+        if kt != "none"
+            && let Some(val) = get_key_value_string(&mut conn, key).await
+        {
+            after_state.insert(key.clone(), val);
         }
     }
 

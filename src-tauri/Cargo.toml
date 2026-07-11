@@ -29,6 +29,8 @@ deadpool-redis = "0.18"
 chrono = { version = "0.4", features = ["serde"] }
 aes-gcm = "0.10"
 rand = "0.8"
+hex = "0.4"
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 thiserror = "2"
 log = "0.4"
 futures = "0.3"

@@ -79,7 +79,7 @@ async function handleSidebarDisconnect(id: string) {
     <div class="px-2 pb-2">
       <div class="flex items-center justify-between px-3 py-1.5">
         <span class="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-          {{ t("connection.status") }}
+          {{ t("connection.sessions") }}
         </span>
         <button
           @click="navigate('/')"

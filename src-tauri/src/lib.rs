@@ -41,15 +41,9 @@ pub fn run() {
                 .app_data_dir()
                 .unwrap_or_else(|_| std::path::PathBuf::from("./data"));
 
-            // Derive a 32-byte key from app name (padded with zeros).
-            //
-            // TODO(production): Replace with a key stored in the OS credential
-            // manager (Windows Credential Manager / macOS Keychain / Linux
-            // Secret Service) via the `keyring` crate, so that the key cannot
-            // be trivially extracted from the binary.
-            let mut key = [0u8; 32];
-            let app_name = b"BreezeRESP";
-            key[..app_name.len()].copy_from_slice(app_name);
+            // Retrieve (or generate) the encryption key from the OS Keychain.
+            let key = core::keystore::get_or_create_key()
+                .expect("Failed to obtain encryption key from system Keychain");
 
             let config_store = core::config_store::ConfigStore::new(data_dir.clone(), key);
             let pipeline_store = core::pipeline_store::PipelineStore::new(data_dir, key);

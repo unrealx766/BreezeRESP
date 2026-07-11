@@ -1,9 +1,9 @@
-/// IPC parameter validation utilities.
-///
-/// All strings arriving from the frontend via `invoke()` must pass through
-/// these guards before being forwarded to Redis commands or the filesystem,
-/// mitigating injection / abuse vectors when the frontend is compromised
-/// (e.g. via XSS on maliciously-crafted Redis values).
+//! IPC parameter validation utilities.
+//!
+//! All strings arriving from the frontend via `invoke()` must pass through
+//! these guards before being forwarded to Redis commands or the filesystem,
+//! mitigating injection / abuse vectors when the frontend is compromised
+//! (e.g. via XSS on maliciously-crafted Redis values).
 
 /// Maximum allowed length for identifiers (connection id, key name, pattern, etc.)
 const MAX_IDENTIFIER_LEN: usize = 1024;

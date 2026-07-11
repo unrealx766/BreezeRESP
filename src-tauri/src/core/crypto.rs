@@ -35,8 +35,7 @@ pub fn encrypt(key: &[u8; 32], plaintext: &[u8]) -> Result<Vec<u8>, String> {
 /// Decrypt data that was encrypted with [`encrypt`].
 ///
 /// Expects the first 12 bytes to be the nonce, followed by ciphertext + auth tag.
-/// Supports legacy format (no prepended nonce) for backward compatibility:
-/// if the data is shorter than NONCE_LEN bytes, decryption will fail gracefully.
+/// If the data is shorter than NONCE_LEN bytes, decryption will fail gracefully.
 pub fn decrypt(key: &[u8; 32], data: &[u8]) -> Result<Vec<u8>, String> {
     if data.len() < NONCE_LEN {
         return Err("Decryption error: data too short (missing nonce)".to_string());
@@ -68,7 +67,6 @@ mod tests {
         let plaintext = b"hello breezeresp";
         let encrypted = encrypt(&key, plaintext).unwrap();
         assert_ne!(encrypted, plaintext.to_vec());
-        // Nonce is prepended, so encrypted is longer
         assert!(encrypted.len() > plaintext.len());
         let decrypted = decrypt(&key, &encrypted).unwrap();
         assert_eq!(decrypted, plaintext.to_vec());
@@ -80,7 +78,6 @@ mod tests {
         let plaintext = b"determinism check";
         let a = encrypt(&key, plaintext).unwrap();
         let b = encrypt(&key, plaintext).unwrap();
-        // Random nonces should differ → ciphertexts differ
         assert_ne!(a, b);
     }
 
@@ -94,7 +91,6 @@ mod tests {
     fn decrypt_tampered_data() {
         let key = test_key();
         let mut encrypted = encrypt(&key, b"secret").unwrap();
-        // Flip a byte in the ciphertext portion
         if let Some(last) = encrypted.last_mut() {
             *last ^= 0xFF;
         }

@@ -7,3 +7,4 @@ pub mod shadow_store;
 pub mod format;
 pub mod crypto;
 pub mod validate;
+pub mod keystore;

@@ -28,7 +28,7 @@
     "noPassword": "No Password",
     "db": "Database",
     "ssl": "SSL/TLS",
-    "status": "Status",
+    "sessions": "Sessions",
     "connected": "Connected",
     "disconnected": "Disconnected",
     "connecting": "Connecting...",

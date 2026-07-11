@@ -44,6 +44,10 @@ impl ConfigStore {
     }
 
     /// Load and decrypt connections from disk.
+    ///
+    /// If the file exists but cannot be decrypted (e.g. encrypted with an
+    /// older incompatible format), the file is treated as empty and a warning
+    /// is logged so the application can continue gracefully.
     pub fn load(&self) -> Result<Vec<StoredConnection>, String> {
         let path = self.config_path();
         if !path.exists() {
@@ -51,7 +55,13 @@ impl ConfigStore {
         }
 
         let data = std::fs::read(&path).map_err(|e| e.to_string())?;
-        let plaintext = crypto::decrypt(&self.encryption_key, &data)?;
+        let plaintext = match crypto::decrypt(&self.encryption_key, &data) {
+            Ok(pt) => pt,
+            Err(e) => {
+                log::warn!("Failed to decrypt connections.enc, starting fresh: {}", e);
+                return Ok(vec![]);
+            }
+        };
 
         let json = String::from_utf8(plaintext).map_err(|e| e.to_string())?;
         serde_json::from_str(&json).map_err(|e| e.to_string())
