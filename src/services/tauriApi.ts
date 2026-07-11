@@ -1,6 +1,21 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { SavedPipeline } from "@/types";
 
+// ---- Connection guard (registered at app startup to avoid circular deps) ----
+let _requireConnection: (() => void) | null = null;
+
+/** Register a function that throws if no active connection. Call once at app startup. */
+export function registerConnectionGuard(fn: () => void) {
+  _requireConnection = fn;
+}
+
+/** Wrapper: validates connection before invoking IPC. Use for all connection-requiring calls. */
+function withConn<T>(connectionId: string, fn: () => Promise<T>): Promise<T> {
+  if (!connectionId) throw new Error("No active connection");
+  if (_requireConnection) _requireConnection();
+  return fn();
+}
+
 // ---- Rust-side response types (snake_case → camelCase via serde) ----
 
 export interface RustConnectionConfig {
@@ -112,27 +127,27 @@ export const tauriApi = {
 
   cascade: {
     scanKeys: (connectionId: string, pattern: string, cursor: number, count: number) =>
-      invoke<[number, RustRedisKeyInfo[]]>("scan_keys", {
+      withConn(connectionId, () => invoke<[number, RustRedisKeyInfo[]]>("scan_keys", {
         connectionId,
         pattern,
         cursor,
         count,
-      }),
+      })),
 
     getKeyDetail: (connectionId: string, key: string) =>
-      invoke<RustKeyDetail>("get_key_detail", { connectionId, key }),
+      withConn(connectionId, () => invoke<RustKeyDetail>("get_key_detail", { connectionId, key })),
 
     deleteKey: (connectionId: string, key: string) =>
-      invoke<boolean>("delete_key", { connectionId, key }),
+      withConn(connectionId, () => invoke<boolean>("delete_key", { connectionId, key })),
 
     setKeyTtl: (connectionId: string, key: string, ttl: number) =>
-      invoke<boolean>("set_key_ttl", { connectionId, key, ttl }),
+      withConn(connectionId, () => invoke<boolean>("set_key_ttl", { connectionId, key, ttl })),
 
     renameKey: (connectionId: string, oldKey: string, newKey: string) =>
-      invoke<boolean>("rename_key", { connectionId, oldKey, newKey }),
+      withConn(connectionId, () => invoke<boolean>("rename_key", { connectionId, oldKey, newKey })),
 
     dbSize: (connectionId: string) =>
-      invoke<number>("db_size", { connectionId }),
+      withConn(connectionId, () => invoke<number>("db_size", { connectionId })),
 
     setValue: (params: {
       connectionId: string;
@@ -144,12 +159,12 @@ export const tauriApi = {
       index?: number;
       score?: number;
       oldValue?: string;
-    }) => invoke<boolean>("set_value", params),
+    }) => withConn(params.connectionId, () => invoke<boolean>("set_value", params)),
   },
 
   pipeline: {
     execute: (connectionId: string, commands: RustPipelineCommand[]) =>
-      invoke<RustPipelineResponse>("execute_pipeline", { connectionId, commands }),
+      withConn(connectionId, () => invoke<RustPipelineResponse>("execute_pipeline", { connectionId, commands })),
 
     save: (id: string, name: string, commands: RustPipelineCommand[], createdAt: number) =>
       invoke<void>("save_pipeline", { id, name, commands, createdAt }),
@@ -163,17 +178,17 @@ export const tauriApi = {
 
   sandbox: {
     preview: (connectionId: string, command: string) =>
-      invoke<RustSandboxPreview>("sandbox_preview", { connectionId, command }),
+      withConn(connectionId, () => invoke<RustSandboxPreview>("sandbox_preview", { connectionId, command })),
 
     apply: (connectionId: string, command: string) =>
-      invoke<boolean>("sandbox_apply", { connectionId, command }),
+      withConn(connectionId, () => invoke<boolean>("sandbox_apply", { connectionId, command })),
 
     rollback: (connectionId: string, beforeState: Record<string, string>, addedKeys: string[]) =>
-      invoke<boolean>("sandbox_rollback", { connectionId, beforeState, addedKeys }),
+      withConn(connectionId, () => invoke<boolean>("sandbox_rollback", { connectionId, beforeState, addedKeys })),
   },
 
   metrics: {
     get: (connectionId: string) =>
-      invoke<RustServerMetrics>("get_metrics", { connectionId }),
+      withConn(connectionId, () => invoke<RustServerMetrics>("get_metrics", { connectionId })),
   },
 };

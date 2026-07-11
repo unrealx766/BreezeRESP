@@ -24,6 +24,7 @@ const connStore = useConnectionStore();
 const confirmDialog = ref<InstanceType<typeof ConfirmDialog>>();
 
 const connectionLost = ref(false);
+const isConnected = computed(() => connStore.activeConnection?.status === "connected");
 
 // Debounce search input: wait 300ms after user stops typing before triggering filter/scan
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -103,7 +104,7 @@ watch(
   (newStatus, oldStatus) => {
     if (oldStatus === "connected" && newStatus !== "connected") {
       connectionLost.value = true;
-      // toast already shown by connectionStore.markConnectionLost
+      // Data clearing & toast already handled by connectionStore.markConnectionLost
     }
     if (newStatus === "connected") {
       connectionLost.value = false;
@@ -427,11 +428,11 @@ onMounted(() => {
       <div class="p-3 space-y-2 border-b border-border-light">
         <div class="relative">
           <Search :size="14" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
-          <input v-model="cascade.searchQuery" :placeholder="t('browser.search')"
-            class="w-full pl-8 pr-3 py-1.5 text-xs bg-bg-primary border border-border rounded-lg focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20" />
+          <input v-model="cascade.searchQuery" :placeholder="t('browser.search')" :disabled="!isConnected"
+            class="w-full pl-8 pr-3 py-1.5 text-xs bg-bg-primary border border-border rounded-lg focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20 disabled:opacity-50 disabled:cursor-not-allowed" />
         </div>
         <div class="flex items-center gap-2">
-          <select v-model="cascade.typeFilter" class="flex-1 px-2 py-1.5 text-xs bg-bg-primary border border-border rounded-lg focus:outline-none focus:border-redis">
+          <select v-model="cascade.typeFilter" :disabled="!isConnected" class="flex-1 px-2 py-1.5 text-xs bg-bg-primary border border-border rounded-lg focus:outline-none focus:border-redis disabled:opacity-50 disabled:cursor-not-allowed">
             <option value="all">{{ t("browser.allTypes") }}</option>
             <option value="string">String</option>
             <option value="hash">Hash</option>
@@ -439,7 +440,7 @@ onMounted(() => {
             <option value="set">Set</option>
             <option value="zset">ZSet</option>
           </select>
-          <button @click="cascade.refreshKeys()" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-bg-hover transition-colors">
+          <button @click="cascade.refreshKeys()" :disabled="!isConnected" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-bg-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
             <RefreshCw :size="14" :class="cascade.loading ? 'animate-spin' : ''" class="text-text-muted" />
           </button>
         </div>
@@ -467,7 +468,7 @@ onMounted(() => {
           <div v-if="cascade.hasMore" class="px-3 py-2">
             <button
               @click="cascade.loadMoreKeys()"
-              :disabled="cascade.loading"
+              :disabled="cascade.loading || !isConnected"
               class="w-full py-1.5 text-[11px] font-medium text-redis border border-dashed border-redis/30 rounded-lg hover:bg-redis/5 transition-colors disabled:opacity-50"
             >
               {{ cascade.loading ? "..." : t("browser.loadMore") }}

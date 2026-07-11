@@ -87,7 +87,8 @@ export const useMetricsStore = defineStore("metrics", () => {
       if (consecutiveFailures >= MAX_FAILURES) {
         connStore.markConnectionLost(connId);
         consecutiveFailures = 0;
-        stopMonitoring();
+        // Keep monitoring — when status becomes "error", fetchMetrics
+        // returns early; when user reconnects, polling resumes automatically.
       }
     }
   }

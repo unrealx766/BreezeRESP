@@ -84,6 +84,24 @@ export const useDetailStore = defineStore("detail", () => {
     };
   }
 
+  // TTL countdown simulation
+  let ttlTimer: ReturnType<typeof setInterval> | null = null;
+  function startTtlTimer() {
+    stopTtlTimer();
+    ttlTimer = setInterval(() => {
+      if (ttlRemaining.value > 0) {
+        ttlRemaining.value--;
+        if (ttlRemaining.value <= 0 && ttlTotal.value > 0) {
+          isExpired.value = true;
+        }
+      }
+    }, 1000);
+  }
+  function stopTtlTimer() {
+    if (ttlTimer) { clearInterval(ttlTimer); ttlTimer = null; }
+  }
+  startTtlTimer();
+
   async function loadDetail(key: string) {
     const connStore = useConnectionStore();
     const connId = connStore.activeConnectionId;
@@ -118,6 +136,7 @@ export const useDetailStore = defineStore("detail", () => {
       currentDetail.value = null;
     } finally {
       loading.value = false;
+      startTtlTimer();
     }
   }
 
@@ -129,24 +148,6 @@ export const useDetailStore = defineStore("detail", () => {
       else currentDetail.value = null;
     }
   );
-
-  // TTL countdown simulation
-  let ttlTimer: ReturnType<typeof setInterval> | null = null;
-  function startTtlTimer() {
-    stopTtlTimer();
-    ttlTimer = setInterval(() => {
-      if (ttlRemaining.value > 0) {
-        ttlRemaining.value--;
-        if (ttlRemaining.value <= 0 && ttlTotal.value > 0) {
-          isExpired.value = true;
-        }
-      }
-    }, 1000);
-  }
-  function stopTtlTimer() {
-    if (ttlTimer) { clearInterval(ttlTimer); ttlTimer = null; }
-  }
-  startTtlTimer();
 
   function setEditing(val: boolean) { editing.value = val; }
 

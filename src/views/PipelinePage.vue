@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { usePipelineStore } from "@/stores/pipelineStore";
 import { useMetricsStore } from "@/stores/metricsStore";
@@ -21,6 +21,7 @@ const metrics = useMetricsStore();
 const connStore = useConnectionStore();
 
 const confirmDialog = ref<InstanceType<typeof ConfirmDialog>>();
+const isConnected = computed(() => connStore.activeConnection?.status === "connected");
 
 // Save dialog state
 const showSaveDialog = ref(false);
@@ -155,8 +156,8 @@ function onDrop(idx: number) {
         <p class="text-sm text-text-muted mt-1">{{ t("pipeline.commandsQueued", { count: pipeline.commandCount }) }}</p>
       </div>
       <div class="flex items-center gap-2 flex-wrap">
-        <button @click="openSaveDialog()" :disabled="pipeline.commandCount === 0"
-          class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-text-secondary bg-bg-primary border border-border rounded-lg hover:bg-bg-hover transition-colors disabled:opacity-40">
+        <button @click="openSaveDialog()" :disabled="pipeline.commandCount === 0 || !isConnected"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-text-secondary bg-bg-primary border border-border rounded-lg hover:bg-bg-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
           <Save :size="13" /> {{ t("pipeline.saveAs") }}
         </button>
         <button @click="showSavedList = !showSavedList"
@@ -165,17 +166,17 @@ function onDrop(idx: number) {
           <FolderOpen :size="13" /> {{ t("pipeline.savedPipelines") }}
           <span v-if="pipeline.savedPipelines.length" class="text-[10px] bg-redis/10 text-redis rounded-full px-1.5">{{ pipeline.savedPipelines.length }}</span>
         </button>
-        <button @click="pipeline.clearResults()" :disabled="!pipeline.hasResults"
-          class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-text-secondary bg-bg-primary border border-border rounded-lg hover:bg-bg-hover transition-colors disabled:opacity-40">
+        <button @click="pipeline.clearResults()" :disabled="!pipeline.hasResults || !isConnected"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-text-secondary bg-bg-primary border border-border rounded-lg hover:bg-bg-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
           <Eraser :size="13" /> {{ t("pipeline.clearResults") }}
         </button>
-        <button @click="pipeline.clearAll()" :disabled="pipeline.commandCount === 0"
-          class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-danger bg-danger/5 border border-danger/20 rounded-lg hover:bg-danger/10 transition-colors disabled:opacity-40">
+        <button @click="pipeline.clearAll()" :disabled="pipeline.commandCount === 0 || !isConnected"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-danger bg-danger/5 border border-danger/20 rounded-lg hover:bg-danger/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
           <Trash2 :size="13" /> {{ t("pipeline.clearAll") }}
         </button>
-        <button @click="pipeline.executeAll()" :disabled="pipeline.commandCount === 0 || pipeline.executing || !connStore.activeConnectionId"
-          class="inline-flex items-center justify-center gap-1.5 w-36 h-9 text-sm font-medium text-white bg-redis rounded-lg hover:bg-redis-dark transition-colors disabled:opacity-50 shadow-sm"
-          :title="!connStore.activeConnectionId ? t('status.noConnection') : ''">
+        <button @click="pipeline.executeAll()" :disabled="pipeline.commandCount === 0 || pipeline.executing || !isConnected"
+          class="inline-flex items-center justify-center gap-1.5 w-36 h-9 text-sm font-medium text-white bg-redis rounded-lg hover:bg-redis-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+          :title="!isConnected ? t('status.noConnection') : ''">
           <Play :size="14" />
           <span>{{ pipeline.executing ? t("pipeline.executing") : t("pipeline.executeAll") }}</span>
         </button>
@@ -221,7 +222,8 @@ function onDrop(idx: number) {
           <span class="text-xs text-text-muted self-center mr-1">{{ t("pipeline.templates") }}:</span>
           <button v-for="tpl in commandTemplates" :key="tpl.label"
             @click="addFromTemplate(tpl)"
-            class="px-2 py-0.5 text-[11px] font-mono bg-bg-primary border border-border rounded text-text-secondary hover:border-redis hover:text-redis transition-colors">
+            :disabled="!isConnected"
+            class="px-2 py-0.5 text-[11px] font-mono bg-bg-primary border border-border rounded text-text-secondary hover:border-redis hover:text-redis transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
             {{ tpl.label }}
           </button>
         </div>
@@ -251,10 +253,10 @@ function onDrop(idx: number) {
             <!-- Command input -->
             <div class="flex-1 min-w-0">
               <div class="flex gap-2">
-                <input v-model="cmd.command" :placeholder="t('pipeline.command')"
-                  class="w-28 px-2 py-1.5 text-xs font-mono font-semibold bg-bg-primary border border-border rounded focus:outline-none focus:border-redis uppercase" />
-                <input :value="getArgsText(cmd.id)" @input="(e: any) => { setArgsText(cmd.id, e.target.value); cmd.args = (e.target.value as string).split(/\s+/).filter(Boolean); }" @focus="() => initArgsText(cmd)" :placeholder="t('pipeline.arguments')"
-                  class="flex-1 px-2 py-1.5 text-xs font-mono bg-bg-primary border border-border rounded focus:outline-none focus:border-redis" />
+                <input v-model="cmd.command" :placeholder="t('pipeline.command')" :disabled="!isConnected"
+                  class="w-28 px-2 py-1.5 text-xs font-mono font-semibold bg-bg-primary border border-border rounded focus:outline-none focus:border-redis uppercase disabled:opacity-50 disabled:cursor-not-allowed" />
+                <input :value="getArgsText(cmd.id)" @input="(e: any) => { setArgsText(cmd.id, e.target.value); cmd.args = (e.target.value as string).split(/\s+/).filter(Boolean); }" @focus="() => initArgsText(cmd)" :placeholder="t('pipeline.arguments')" :disabled="!isConnected"
+                  class="flex-1 px-2 py-1.5 text-xs font-mono bg-bg-primary border border-border rounded focus:outline-none focus:border-redis disabled:opacity-50 disabled:cursor-not-allowed" />
               </div>
               <!-- Result -->
               <div v-if="cmd.result" class="mt-2">
@@ -278,15 +280,15 @@ function onDrop(idx: number) {
             </div>
 
             <!-- Delete -->
-            <button @click="pipeline.removeCommand(cmd.id)"
-              class="w-6 h-6 flex items-center justify-center rounded hover:bg-danger/10 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5">
+            <button @click="pipeline.removeCommand(cmd.id)" :disabled="!isConnected"
+              class="w-6 h-6 flex items-center justify-center rounded hover:bg-danger/10 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5 disabled:opacity-50 disabled:cursor-not-allowed">
               <Trash2 :size="12" class="text-danger" />
             </button>
           </div>
         </div>
 
         <!-- Add button (outside scrollable area, always visible at bottom) -->
-        <button @click="pipeline.addCommand()" class="w-full py-2 mt-2 border-2 border-dashed border-border rounded-lg text-xs text-text-muted hover:border-redis hover:text-redis transition-colors flex items-center justify-center gap-1.5 shrink-0">
+        <button @click="pipeline.addCommand()" :disabled="!isConnected" class="w-full py-2 mt-2 border-2 border-dashed border-border rounded-lg text-xs text-text-muted hover:border-redis hover:text-redis transition-colors flex items-center justify-center gap-1.5 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed">
           <Plus :size="14" /> {{ t("pipeline.addCommand") }}
         </button>
       </div>

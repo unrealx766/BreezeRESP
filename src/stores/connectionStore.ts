@@ -119,6 +119,20 @@ export const useConnectionStore = defineStore("connection", () => {
       lastError.value = "Connection lost";
       const msg = i18n.global.t("connection.connectionLost");
       toast.error(msg, 5000, conn.name);
+
+      // Clear data browser content regardless of current page
+      // Lazy store access to avoid circular dependencies
+      const { useCascadeStore } = require("@/stores/cascadeStore");
+      const { useDetailStore } = require("@/stores/detailStore");
+      const cascade = useCascadeStore();
+      const detail = useDetailStore();
+      cascade.keys = [];
+      cascade.selectedKey = null;
+      cascade.searchQuery = "";
+      cascade.debouncedSearchQuery = "";
+      cascade.typeFilter = "all";
+      cascade.expandedPaths = new Set<string>();
+      detail.clearDetail();
     }
   }
 
