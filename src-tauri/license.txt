@@ -1,0 +1,66 @@
+BreezeRESP 免责声明 / Disclaimer
+===================================
+
+版权所有 (c) 2026 unrealx766. 保留所有权利。
+Copyright (c) 2026 unrealx766. All rights reserved.
+
+本软件基于 Apache License 2.0 许可证发布。
+This software is distributed under the Apache License 2.0.
+
+---
+
+【中文】
+
+1. 数据安全
+   BreezeRESP 是一款 Redis 客户端工具，直接对目标数据库执行读写操作。
+   用户在使用过程中应自行承担数据风险，包括但不限于误操作导致的数据
+   丢失、数据损坏或业务中断。建议在操作生产环境前做好数据备份。
+
+2. 沙箱与回滚
+   沙箱模式提供的预览与回滚功能仅供参考，不保证在所有场景下完全准确。
+   用户应在执行写操作前仔细审查变更内容，并对回滚结果进行验证。
+
+3. 连接安全
+   本工具使用 AES-256-GCM 加密存储连接信息并通过系统 Keychain 管理密钥，
+   但不对因操作系统安全配置不当、第三方恶意软件或网络攻击导致的信息
+   泄露承担责任。
+
+4. 第三方依赖
+   本项目依赖多个开源组件（Tauri、Vue、Rust crates 等），各组件的安全性
+   与稳定性由其各自维护者负责。
+
+5. 无担保
+   本软件按"原样"提供，不作任何明示或暗示的担保，包括但不限于对适销性、
+   特定用途适用性和非侵权性的担保。在任何情况下，作者或版权持有者均不对
+   因本软件或使用本软件产生的任何索赔、损害或其他责任承担责任。
+
+---
+
+【English】
+
+1. Data Safety
+   BreezeRESP is a Redis client tool that directly performs read/write
+   operations on target databases. Users assume all data risks, including
+   but not limited to data loss, corruption, or service interruption caused
+   by misoperation. Back up data before operating on production environments.
+
+2. Sandbox & Rollback
+   The preview and rollback features in Sandbox mode are for reference only
+   and are not guaranteed to be fully accurate in all scenarios. Review
+   changes before executing write operations and verify rollback results.
+
+3. Connection Security
+   This tool uses AES-256-GCM encryption for connection storage and manages
+   keys via the system Keychain. No responsibility is assumed for information
+   disclosure from improper OS configurations, malware, or network attacks.
+
+4. Third-Party Dependencies
+   This project depends on open-source components (Tauri, Vue, Rust crates,
+   etc.). Their security and stability are the responsibility of their
+   respective maintainers.
+
+5. No Warranty
+   This software is provided "as is" without any express or implied warranty.
+   In no event shall the authors or copyright holders be liable for any
+   claim, damages, or other liability arising from or in connection with
+   the software or its use.

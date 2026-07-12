@@ -67,15 +67,28 @@ npm run tauri:build  # 构建生产包
 
 ## 📦 构建产物
 
-| 平台 | 格式 |
-|------|------|
-| Windows | `.exe` (NSIS) |
-| macOS | `.dmg` / `.app`（支持 x86_64 & ARM64） |
-| Linux | `.deb` / `.AppImage`（支持 x86_64 & ARM64） |
+| 平台 | 格式 | 命令 | 说明 |
+|------|------|------|------|
+| Windows | `.exe` (NSIS) | `npm run tauri:build:win` | 安装向导支持自定义路径 |
+| macOS (Intel) | `.dmg` / `.app` | `npm run tauri:build:mac` | x86_64 |
+| macOS (Apple Silicon) | `.dmg` / `.app` | `npm run tauri:build:mac-arm` | aarch64 |
+| Linux (Debian 系) | `.deb` / `.AppImage` | `npm run tauri:build:linux` | 统信 UOS / Ubuntu / Deepin |
+| Linux (RPM 系) | `.rpm` | `npm run tauri:build:linux-rpm` | CentOS / 银河麒麟 / openEuler |
+| Linux ARM64 | `.deb` / `.AppImage` | `npm run tauri:build:linux-arm` | aarch64 |
+
+> **注意：** RPM 包须在 Fedora / CentOS / RHEL 等 RPM 系发行版上构建，不支持在 Debian/Ubuntu 上交叉生成。CI 已配置 Fedora runner 自动构建。
 
 ## 📄 License
 
 [Apache 2.0](LICENSE)
+
+## ⚠️ 免责声明
+
+1. **数据安全** — BreezeRESP 作为 Redis 客户端工具，直接对目标数据库执行读写操作。用户在使用过程中应自行承担数据风险，包括但不限于误操作导致的数据丢失、数据损坏或业务中断。建议在操作生产环境前做好数据备份。
+2. **沙箱与回滚** — 沙箱模式提供的预览与回滚功能仅供参考，不保证在所有场景下完全准确。用户应在执行写操作前仔细审查变更内容，并对回滚结果进行验证。
+3. **连接安全** — 本工具使用 AES-256-GCM 加密存储连接信息并通过系统 Keychain 管理密钥，但不对因操作系统安全配置不当、第三方恶意软件或网络攻击导致的信息泄露承担责任。
+4. **第三方依赖** — 本项目依赖多个开源组件（Tauri、Vue、Rust crates 等），各组件的安全性与稳定性由其各自维护者负责。
+5. **无担保** — 本软件按"原样"提供，不作任何明示或暗示的担保，包括但不限于对适销性、特定用途适用性和非侵权性的担保。在任何情况下，作者或版权持有者均不对因本软件或使用本软件产生的任何索赔、损害或其他责任承担责任。
 
 ---
 

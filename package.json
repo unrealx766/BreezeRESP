@@ -2,7 +2,7 @@
   "name": "breezeresp",
   "private": true,
   "version": "1.0.0",
-  "license": "GPL-3.0",
+  "license": "Apache-2.0",
   "author": {
     "name": "unrealx766"
   },
@@ -17,8 +17,9 @@
     "tauri:build:win": "tauri build --target x86_64-pc-windows-msvc --bundles nsis",
     "tauri:build:mac": "tauri build --target x86_64-apple-darwin",
     "tauri:build:mac-arm": "tauri build --target aarch64-apple-darwin",
-    "tauri:build:linux": "tauri build --target x86_64-unknown-linux-gnu",
-    "tauri:build:linux-arm": "tauri build --target aarch64-unknown-linux-gnu",
+    "tauri:build:linux": "tauri build --target x86_64-unknown-linux-gnu --bundles deb,appimage",
+    "tauri:build:linux-rpm": "tauri build --target x86_64-unknown-linux-gnu --bundles rpm",
+    "tauri:build:linux-arm": "tauri build --target aarch64-unknown-linux-gnu --bundles deb,appimage",
     "version:sync": "node scripts/sync-version.mjs",
     "version:patch": "node scripts/sync-version.mjs patch",
     "version:minor": "node scripts/sync-version.mjs minor",

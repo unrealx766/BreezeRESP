@@ -67,15 +67,28 @@ Build output is located in `src-tauri/target/release/bundle/`. Use `npm run dev`
 
 ## 📦 Build Artifacts
 
-| Platform | Format |
-|----------|--------|
-| Windows | `.exe` (NSIS) |
-| macOS | `.dmg` / `.app` (x86_64 & ARM64) |
-| Linux | `.deb` / `.AppImage` (x86_64 & ARM64) |
+| Platform | Format | Command | Notes |
+|----------|--------|---------|-------|
+| Windows | `.exe` (NSIS) | `npm run tauri:build:win` | Installer with custom path support |
+| macOS (Intel) | `.dmg` / `.app` | `npm run tauri:build:mac` | x86_64 |
+| macOS (Apple Silicon) | `.dmg` / `.app` | `npm run tauri:build:mac-arm` | aarch64 |
+| Linux (Debian-based) | `.deb` / `.AppImage` | `npm run tauri:build:linux` | UOS / Ubuntu / Deepin |
+| Linux (RPM-based) | `.rpm` | `npm run tauri:build:linux-rpm` | CentOS / Kylin / openEuler |
+| Linux ARM64 | `.deb` / `.AppImage` | `npm run tauri:build:linux-arm` | aarch64 |
+
+> **Note:** RPM packages must be built on RPM-based distributions (Fedora / CentOS / RHEL). Cross-building from Debian/Ubuntu is not supported. A Fedora runner is configured in CI for automated builds.
 
 ## 📄 License
 
 [Apache 2.0](LICENSE)
+
+## ⚠️ Disclaimer
+
+1. **Data Safety** — BreezeRESP is a Redis client tool that directly performs read/write operations on target databases. Users assume all data risks, including but not limited to data loss, corruption, or service interruption caused by misoperation. It is recommended to back up data before operating on production environments.
+2. **Sandbox & Rollback** — The preview and rollback features in Sandbox mode are provided for reference only and are not guaranteed to be fully accurate in all scenarios. Users should carefully review changes before executing write operations and verify rollback results.
+3. **Connection Security** — This tool uses AES-256-GCM encryption to store connection information and manages keys via the system Keychain. However, it assumes no responsibility for information disclosure resulting from improper OS security configurations, third-party malware, or network attacks.
+4. **Third-Party Dependencies** — This project depends on multiple open-source components (Tauri, Vue, Rust crates, etc.). The security and stability of each component are the responsibility of their respective maintainers.
+5. **No Warranty** — This software is provided "as is" without any express or implied warranty, including but not limited to warranties of merchantability, fitness for a particular purpose, and non-infringement. In no event shall the authors or copyright holders be liable for any claim, damages, or other liability arising from, out of, or in connection with the software or the use or other dealings in the software.
 
 ---
 
