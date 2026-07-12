@@ -19,6 +19,20 @@
 - **Settings Center** — Dark / light theme toggle, persistent language preference
 - **Cross-Platform** — Supports Windows / macOS / Linux
 
+## 📸 Screenshots
+
+| Connection Management | Dark Mode |
+|:---:|:---:|
+| ![Connection Management](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/home.png) | ![Dark Mode](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/dark_mode.png) |
+
+| Data Browser | Pipeline Builder |
+|:---:|:---:|
+| ![Data Browser](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/data_browser.png) | ![Pipeline Builder](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/Pipeline.png) |
+
+| Command Sandbox |
+|:---:|
+| ![Command Sandbox](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/shadow.png) |
+
 ## 🛠 Tech Stack
 
 | Layer | Technology |
