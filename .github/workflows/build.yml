@@ -63,7 +63,8 @@ jobs:
             libappindicator3-dev \
             librsvg2-dev \
             patchelf \
-            libsecret-1-dev
+            libsecret-1-dev \
+            libssl-dev
 
       - name: Install Linux dependencies (Fedora)
         if: matrix.platform == 'fedora-latest'
@@ -74,6 +75,7 @@ jobs:
             librsvg2-devel \
             patchelf \
             libsecret-devel \
+            openssl-devel \
             rpm-build
 
       - name: Install ARM64 cross-compilation tools
@@ -85,12 +87,17 @@ jobs:
           sudo sed -i '/^Types:/a Architectures: amd64' /etc/apt/sources.list.d/*.sources 2>/dev/null || true
           sudo sh -c 'echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -cs) main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list'
           sudo sh -c 'echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -cs)-updates main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list'
+          sudo sh -c 'echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -cs)-security main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list'
+          sudo sh -c 'echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -cs)-backports main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list'
           sudo apt-get update
           sudo apt-get install -y \
             gcc-aarch64-linux-gnu \
+            libglib2.0-dev:arm64 \
             libwebkit2gtk-4.1-dev:arm64 \
             libappindicator3-dev:arm64 \
-            libsecret-1-dev:arm64
+            librsvg2-dev:arm64 \
+            libsecret-1-dev:arm64 \
+            libssl-dev:arm64
           echo "PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu" >> $GITHUB_ENV
           echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
 
