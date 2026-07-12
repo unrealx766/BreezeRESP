@@ -1,5 +1,6 @@
 # BreezeRESP
 
+[English](README_EN.md) | 中文
 > 一款轻量、快速的 Redis 可视化工具，基于 Tauri v2 + Vue 3 构建。
 
 ![Version](https://img.shields.io/badge/version-0.1.0-blue)
