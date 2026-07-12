@@ -3,6 +3,30 @@
 version = 4
 
 [[package]]
+name = "BreezeResp"
+version = "1.0.0"
+dependencies = [
+ "aes-gcm",
+ "deadpool-redis",
+ "futures",
+ "hex",
+ "keyring",
+ "log",
+ "rand",
+ "redis",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-opener",
+ "tauri-plugin-single-instance",
+ "thiserror 2.0.18",
+ "tokio",
+ "urlencoding",
+ "uuid",
+]
+
+[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -337,30 +361,6 @@ dependencies = [
  "futures-io",
  "futures-lite",
  "piper",
-]
-
-[[package]]
-name = "breezeresp"
-version = "1.0.0"
-dependencies = [
- "aes-gcm",
- "deadpool-redis",
- "futures",
- "hex",
- "keyring",
- "log",
- "rand",
- "redis",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-opener",
- "tauri-plugin-single-instance",
- "thiserror 2.0.18",
- "tokio",
- "urlencoding",
- "uuid",
 ]
 
 [[package]]
