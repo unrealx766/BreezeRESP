@@ -43,8 +43,7 @@
         "displayLanguageSelector": false,
         "languages": ["English", "SimpChinese"],
         "installerIcon": "icons/icon.ico",
-        "uninstallerIcon": "icons/icon.ico",
-        "customId": "MyCustomAppInstaller"
+        "uninstallerIcon": "icons/icon.ico"
       }
     },
     "macOS": {
