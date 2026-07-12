@@ -38,8 +38,9 @@
     ],
     "windows": {
       "nsis": {
-        "installMode": "currentUser",
-        "displayLanguageSelector": false
+        "installMode": "both",
+        "displayLanguageSelector": false,
+        "languages": ["English", "SimpChinese"]
       },
       "wix": null
     },
