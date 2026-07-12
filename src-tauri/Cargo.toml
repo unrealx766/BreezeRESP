@@ -1,9 +1,9 @@
 [package]
-name = "breezeresp"
+name = "BreezeResp"
 version = "1.0.0"
 description = "redis view"
 authors = ["unrealx766"]
-license = "Apache 2.0"
+license = "Apache-2.0"
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
