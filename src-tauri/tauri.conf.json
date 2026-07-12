@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "breezeresp",
+  "productName": "BreezeResp",
   "version": "1.0.0",
   "identifier": "com.unrealx766.breezeresp",
   "build": {
