@@ -23,15 +23,15 @@
 
 | 连接管理 | 暗黑模式 |
 |:---:|:---:|
-| ![连接管理](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/home.png) | ![暗黑模式](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/dark_mode.png) |
+| ![连接管理](https://raw.githubusercontent.com/unrealx766/BreezeRESP/blob/screenshots/home.png) | ![暗黑模式](https://raw.githubusercontent.com/unrealx766/blob/BreezeRESP/screenshots/dark_mode.png) |
 
 | 数据浏览器 | Pipeline 构建器 |
 |:---:|:---:|
-| ![数据浏览器](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/data_browser.png) | ![Pipeline 构建器](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/Pipeline.png) |
+| ![数据浏览器](https://raw.githubusercontent.com/unrealx766/BreezeRESP/blob/screenshots/data_browser.png) | ![Pipeline 构建器](https://raw.githubusercontent.com/unrealx766/BreezeRESP/blob/screenshots/Pipeline.png) |
 
 | 命令沙盒 |
 |:---:|
-| ![命令沙盒](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/shadow.png) |
+| ![命令沙盒](https://raw.githubusercontent.com/unrealx766/BreezeRESP/blob/screenshots/shadow.png) |
 
 ## 🛠 技术栈
 
