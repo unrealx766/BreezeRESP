@@ -22,18 +22,15 @@ jobs:
             target: x86_64-pc-windows-msvc
             args: '--bundles nsis'
           - platform: macos-latest
-            target: x86_64-apple-darwin
-            args: ''
-          - platform: macos-latest
-            target: aarch64-apple-darwin
+            target: universal-apple-darwin
             args: ''
           - platform: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             args: '--bundles deb,appimage'
-          - platform: ubuntu-latest
+          - platform: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
             args: '--bundles deb,appimage'
-          - platform: fedora-latest
+          - platform: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             args: '--bundles rpm'
 
@@ -50,7 +47,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: ${{ matrix.target == 'universal-apple-darwin' && 'x86_64-apple-darwin,aarch64-apple-darwin' || matrix.target }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -58,7 +55,7 @@ jobs:
           workspaces: './src-tauri -> target'
 
       - name: Install Linux dependencies (Ubuntu)
-        if: matrix.platform == 'ubuntu-latest'
+        if: startsWith(matrix.platform, 'ubuntu')
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -68,41 +65,9 @@ jobs:
             patchelf \
             libsecret-1-dev \
             libssl-dev
-
-      - name: Install Linux dependencies (Fedora)
-        if: matrix.platform == 'fedora-latest'
-        run: |
-          sudo dnf install -y \
-            webkit2gtk4.1-devel \
-            libappindicator-gtk3-devel \
-            librsvg2-devel \
-            patchelf \
-            libsecret-devel \
-            openssl-devel \
-            rpm-build
-
-      - name: Install ARM64 cross-compilation tools
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list
-          sudo dpkg --add-architecture arm64
-          sudo sed -i 's/^deb /deb [arch=amd64] /' /etc/apt/sources.list.d/*.list /etc/apt/sources.list 2>/dev/null || true
-          sudo sed -i '/^Types:/a Architectures: amd64' /etc/apt/sources.list.d/*.sources 2>/dev/null || true
-          sudo sh -c 'echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -cs) main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list'
-          sudo sh -c 'echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -cs)-updates main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list'
-          sudo sh -c 'echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -cs)-security main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list'
-          sudo sh -c 'echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports $(lsb_release -cs)-backports main restricted universe multiverse" >> /etc/apt/sources.list.d/arm64.list'
-          sudo apt-get update
-          sudo apt-get install -y \
-            gcc-aarch64-linux-gnu \
-            libglib2.0-dev:arm64 \
-            libwebkit2gtk-4.1-dev:arm64 \
-            libappindicator3-dev:arm64 \
-            librsvg2-dev:arm64 \
-            libsecret-1-dev:arm64 \
-            libssl-dev:arm64
-          echo "PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu" >> $GITHUB_ENV
-          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+          if [[ "${{ matrix.args }}" == *rpm* ]]; then
+            sudo apt-get install -y rpm
+          fi
 
       - name: Install frontend dependencies
         run: npm ci
