@@ -51,6 +51,19 @@ pub async fn connect(
     validate_connection_id(&config.id)?;
     validate_connection_config(&config.host, config.port, &config.name, &config.password)?;
 
+    // Resolve password: if keep_password is set and password is empty, look up from config_store
+    let resolved_password = if config.password.is_empty() && config.keep_password.unwrap_or(false) {
+        let cs = state.config_store.lock().map_err(|e| e.to_string())?;
+        let connections = cs.load()?;
+        connections
+            .iter()
+            .find(|c| c.id == config.id)
+            .map(|c| c.password.clone())
+            .unwrap_or_default()
+    } else {
+        config.password.clone()
+    };
+
     // Remove stale pool if exists (config may have changed)
     {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
@@ -60,10 +73,10 @@ pub async fn connect(
     // Create or get pool
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
-        let pw = if config.password.is_empty() {
+        let pw = if resolved_password.is_empty() {
             None
         } else {
-            Some(config.password.as_str())
+            Some(resolved_password.as_str())
         };
         pm.get_or_create(&config.id, &config.host, config.port, pw, config.db, config.ssl)?
     };
