@@ -10,6 +10,11 @@ export const useDetailStore = defineStore("detail", () => {
   const loading = ref(false);
   const editing = ref(false);
 
+  // Pagination state
+  const currentPage = ref(0);
+  const pageSize = ref(100);
+  const filterPattern = ref("");
+
   const cascade = useCascadeStore();
 
   const currentKey = computed(() => currentDetail.value?.key ?? null);
@@ -35,6 +40,7 @@ export const useDetailStore = defineStore("detail", () => {
           type: "string",
           value: val.value as string,
           encoding: (val.encoding as string) || rust.encoding,
+          contentEncoding: val.contentEncoding as string | undefined,
         };
         break;
       case "hash":
@@ -42,6 +48,9 @@ export const useDetailStore = defineStore("detail", () => {
           type: "hash",
           fields: (val.fields as Array<{ field: string; value: string }>) || [],
           encoding: (val.encoding as string) || rust.encoding,
+          contentEncoding: val.contentEncoding as string | undefined,
+          totalCount: val.totalCount as number | undefined,
+          truncated: val.truncated as boolean | undefined,
         };
         break;
       case "list":
@@ -49,6 +58,9 @@ export const useDetailStore = defineStore("detail", () => {
           type: "list",
           items: (val.items as string[]) || [],
           encoding: (val.encoding as string) || rust.encoding,
+          contentEncoding: val.contentEncoding as string | undefined,
+          totalCount: val.totalCount as number | undefined,
+          truncated: val.truncated as boolean | undefined,
         };
         break;
       case "set":
@@ -56,6 +68,9 @@ export const useDetailStore = defineStore("detail", () => {
           type: "set",
           members: (val.members as string[]) || [],
           encoding: (val.encoding as string) || rust.encoding,
+          contentEncoding: val.contentEncoding as string | undefined,
+          totalCount: val.totalCount as number | undefined,
+          truncated: val.truncated as boolean | undefined,
         };
         break;
       case "zset":
@@ -63,6 +78,9 @@ export const useDetailStore = defineStore("detail", () => {
           type: "zset",
           members: (val.members as Array<{ member: string; score: number }>) || [],
           encoding: (val.encoding as string) || rust.encoding,
+          contentEncoding: val.contentEncoding as string | undefined,
+          totalCount: val.totalCount as number | undefined,
+          truncated: val.truncated as boolean | undefined,
         };
         break;
       default:
@@ -70,6 +88,7 @@ export const useDetailStore = defineStore("detail", () => {
           type: "string",
           value: JSON.stringify(val),
           encoding: rust.encoding,
+          contentEncoding: undefined,
         };
     }
 
@@ -104,14 +123,24 @@ export const useDetailStore = defineStore("detail", () => {
     if (ttlTimer) { clearInterval(ttlTimer); ttlTimer = null; }
   }
 
-  async function loadDetail(key: string) {
+  async function loadDetail(key: string, page = 0, filter?: string) {
     const connStore = useConnectionStore();
     const connId = connStore.activeConnectionId;
     if (!connId) return;
 
     loading.value = true;
+    currentPage.value = page;
+    if (filter !== undefined) filterPattern.value = filter;
+
     try {
-      const rustDetail = await tauriApi.cascade.getKeyDetail(connId, key);
+      const offset = page * pageSize.value;
+      const rustDetail = await tauriApi.cascade.getKeyDetail(
+        connId,
+        key,
+        offset,
+        pageSize.value,
+        filterPattern.value || undefined
+      );
       currentDetail.value = mapKeyDetail(rustDetail);
 
       if (currentDetail.value.key.ttl > 0) {
@@ -142,12 +171,30 @@ export const useDetailStore = defineStore("detail", () => {
     }
   }
 
+  /** Load a specific page */
+  function loadPage(page: number) {
+    const key = currentDetail.value?.key.key ?? cascade.selectedKey;
+    if (key) loadDetail(key, page);
+  }
+
+  /** Search/filter within the key */
+  function searchFilter(pattern: string) {
+    const key = currentDetail.value?.key.key ?? cascade.selectedKey;
+    if (key) loadDetail(key, 0, pattern);
+  }
+
   // Watch selected key changes
   watch(
     () => cascade.selectedKey,
     (key) => {
-      if (key) loadDetail(key);
-      else currentDetail.value = null;
+      if (key) {
+        // Reset pagination and filter when switching keys
+        filterPattern.value = "";
+        currentPage.value = 0;
+        loadDetail(key);
+      } else {
+        currentDetail.value = null;
+      }
     }
   );
 
@@ -167,7 +214,7 @@ export const useDetailStore = defineStore("detail", () => {
         action: "set",
         value: newValue,
       });
-      await loadDetail(key);
+      await loadDetail(key, currentPage.value);
       return true;
     } catch (e) {
       console.error("Failed to save string value:", e);
@@ -190,7 +237,7 @@ export const useDetailStore = defineStore("detail", () => {
         field,
         value: newValue,
       });
-      await loadDetail(key);
+      await loadDetail(key, currentPage.value);
       return true;
     } catch (e) {
       console.error("Failed to save hash field:", e);
@@ -213,7 +260,7 @@ export const useDetailStore = defineStore("detail", () => {
         index,
         value: newValue,
       });
-      await loadDetail(key);
+      await loadDetail(key, currentPage.value);
       return true;
     } catch (e) {
       console.error("Failed to save list item:", e);
@@ -236,7 +283,7 @@ export const useDetailStore = defineStore("detail", () => {
         value: newValue,
         oldValue,
       });
-      await loadDetail(key);
+      await loadDetail(key, currentPage.value);
       return true;
     } catch (e) {
       console.error("Failed to save set member:", e);
@@ -260,7 +307,7 @@ export const useDetailStore = defineStore("detail", () => {
         score,
         oldValue: oldMember,
       });
-      await loadDetail(key);
+      await loadDetail(key, currentPage.value);
       return true;
     } catch (e) {
       console.error("Failed to save zset member:", e);
@@ -281,6 +328,9 @@ export const useDetailStore = defineStore("detail", () => {
       const k = cascadeStore.keys.find((k) => k.key === oldKey);
       if (k) k.key = newKey;
       cascade.selectedKey = newKey;
+      // Reset pagination for renamed key
+      filterPattern.value = "";
+      currentPage.value = 0;
       await loadDetail(newKey);
       return true;
     } catch (e) {
@@ -297,7 +347,7 @@ export const useDetailStore = defineStore("detail", () => {
     if (!connId || !key) return false;
     try {
       await tauriApi.cascade.setKeyTtl(connId, key, ttl);
-      await loadDetail(key);
+      await loadDetail(key, currentPage.value);
       return true;
     } catch (e) {
       console.error("Failed to set TTL:", e);
@@ -307,12 +357,14 @@ export const useDetailStore = defineStore("detail", () => {
 
   function clearDetail() {
     currentDetail.value = null;
+    currentPage.value = 0;
+    filterPattern.value = "";
     stopTtlTimer();
   }
 
   function refresh() {
     const key = currentDetail.value?.key.key ?? cascade.selectedKey;
-    if (key) loadDetail(key);
+    if (key) loadDetail(key, currentPage.value);
   }
 
   return {
@@ -325,7 +377,12 @@ export const useDetailStore = defineStore("detail", () => {
     ttlTotal,
     ttlPercent,
     isExpired,
+    currentPage,
+    pageSize,
+    filterPattern,
     loadDetail,
+    loadPage,
+    searchFilter,
     clearDetail,
     setEditing,
     refresh,

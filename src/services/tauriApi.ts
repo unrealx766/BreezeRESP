@@ -141,8 +141,8 @@ export const tauriApi = {
         count,
       })),
 
-    getKeyDetail: (connectionId: string, key: string) =>
-      withConn(connectionId, () => invoke<RustKeyDetail>("get_key_detail", { connectionId, key })),
+    getKeyDetail: (connectionId: string, key: string, offset?: number, limit?: number, filter?: string) =>
+      withConn(connectionId, () => invoke<RustKeyDetail>("get_key_detail", { connectionId, key, offset, limit, filter })),
 
     deleteKey: (connectionId: string, key: string) =>
       withConn(connectionId, () => invoke<boolean>("delete_key", { connectionId, key })),

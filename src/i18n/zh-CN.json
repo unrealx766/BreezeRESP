@@ -74,7 +74,8 @@
     "type": "类型",
     "ttl": "TTL",
     "size": "大小",
-    "encoding": "编码",
+    "encoding": "存储编码",
+    "contentEncoding": "内容编码",
     "noExpiry": "永不过期",
     "expired": "已过期",
     "seconds": "秒",
@@ -101,7 +102,9 @@
     "ttlSeconds": "{n}秒",
     "fieldCount": "{n} 个字段",
     "itemCount": "{n} 项",
-    "memberCount": "{n} 个成员"
+    "memberCount": "{n} 个成员",
+    "truncated": "仅显示前 {shown} 条，共 {total} 条（为防止页面卡顿已截断）",
+    "searchPlaceholder": "搜索..."
   },
   "pipeline": {
     "title": "Pipeline 构建器",

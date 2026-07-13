@@ -28,30 +28,43 @@ export interface StringValue {
   type: "string";
   value: string;
   encoding: string;
+  contentEncoding?: string;
 }
 
 export interface HashValue {
   type: "hash";
   fields: Array<{ field: string; value: string }>;
   encoding: string;
+  contentEncoding?: string;
+  totalCount?: number;
+  truncated?: boolean;
 }
 
 export interface ListValue {
   type: "list";
   items: string[];
   encoding: string;
+  contentEncoding?: string;
+  totalCount?: number;
+  truncated?: boolean;
 }
 
 export interface SetValue {
   type: "set";
   members: string[];
   encoding: string;
+  contentEncoding?: string;
+  totalCount?: number;
+  truncated?: boolean;
 }
 
 export interface ZSetValue {
   type: "zset";
   members: Array<{ member: string; score: number }>;
   encoding: string;
+  contentEncoding?: string;
+  totalCount?: number;
+  truncated?: boolean;
 }
 
 export type KeyValue = StringValue | HashValue | ListValue | SetValue | ZSetValue;

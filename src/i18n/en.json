@@ -74,7 +74,8 @@
     "type": "Type",
     "ttl": "TTL",
     "size": "Size",
-    "encoding": "Encoding",
+    "encoding": "Storage Encoding",
+        "contentEncoding": "Content Encoding",
     "noExpiry": "No Expiry",
     "expired": "Expired",
     "seconds": "seconds",
@@ -101,7 +102,9 @@
     "ttlSeconds": "{n}s",
     "fieldCount": "1 field | {n} fields",
     "itemCount": "1 item | {n} items",
-    "memberCount": "1 member | {n} members"
+    "memberCount": "1 member | {n} members",
+    "truncated": "Showing first {shown} of {total} items (truncated to prevent UI freeze)",
+    "searchPlaceholder": "Search..."
   },
   "pipeline": {
     "title": "Pipeline Builder",

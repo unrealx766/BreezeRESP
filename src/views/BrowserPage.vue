@@ -14,6 +14,7 @@ import {
   Search, RefreshCw, Trash2, Copy, Tag,
   Type, Hash, List, CircleDot, BarChart3,
   AlertTriangle, X, Pencil, Save,
+  ChevronLeft, ChevronRight,
 } from "lucide-vue-next";
 
 const { t } = useI18n();
@@ -50,6 +51,15 @@ watch(
     cascade.refreshKeys(true);
   }
 );
+
+// Debounce filter input for composite types (hash/list/set/zset)
+let filterDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+function debounceFilter(value: string) {
+  if (filterDebounceTimer) clearTimeout(filterDebounceTimer);
+  filterDebounceTimer = setTimeout(() => {
+    detail.searchFilter(value);
+  }, 400);
+}
 
 // --- Virtual scroll ---
 const ITEM_HEIGHT = 32;
@@ -213,7 +223,8 @@ function startEditList(index: number, value: string) {
 }
 async function saveEditList() {
   if (editingListIndex.value === null) return;
-  const ok = await detail.saveListItem(editingListIndex.value, listItemTemp.value);
+  const globalIndex = detail.currentPage * detail.pageSize + editingListIndex.value;
+  const ok = await detail.saveListItem(globalIndex, listItemTemp.value);
   if (ok) editingListIndex.value = null;
 }
 function cancelEditList() { editingListIndex.value = null; }
@@ -526,7 +537,27 @@ onBeforeUnmount(() => {
 
           <!-- Hash -->
           <div v-else-if="detail.currentValue?.type === 'hash'" class="flex flex-col min-h-0">
-            <label class="text-xs font-medium text-text-secondary mb-3 shrink-0">{{ t("detail.value") }} ({{ t("detail.fieldCount", (detail.currentValue as any).fields.length) }})</label>
+            <div class="flex items-center justify-between mb-3 shrink-0">
+              <label class="text-xs font-medium text-text-secondary">{{ t("detail.value") }} ({{ t("detail.fieldCount", (detail.currentValue as any).totalCount || (detail.currentValue as any).fields.length) }})</label>
+              <div class="flex items-center gap-2">
+                <input
+                  type="text"
+                  :placeholder="t('detail.searchPlaceholder')"
+                  :value="detail.filterPattern"
+                  @input="debounceFilter(($event.target as HTMLInputElement).value)"
+                  class="w-32 px-2 py-1 text-xs border border-border rounded-lg bg-bg-primary focus:outline-none focus:ring-1 focus:ring-redis/30"
+                />
+                <div v-if="((detail.currentValue as any).totalCount || 0) > detail.pageSize" class="flex items-center gap-1">
+                  <button @click="detail.loadPage(detail.currentPage - 1)" :disabled="detail.currentPage === 0" class="p-1 text-text-muted rounded hover:bg-bg-hover disabled:opacity-30">
+                    <ChevronLeft :size="14" />
+                  </button>
+                  <span class="text-xs text-text-muted">{{ detail.currentPage + 1 }} / {{ Math.ceil((detail.currentValue as any).totalCount / detail.pageSize) }}</span>
+                  <button @click="detail.loadPage(detail.currentPage + 1)" :disabled="(detail.currentPage + 1) * detail.pageSize >= ((detail.currentValue as any).totalCount || 0)" class="p-1 text-text-muted rounded hover:bg-bg-hover disabled:opacity-30">
+                    <ChevronRight :size="14" />
+                  </button>
+                </div>
+              </div>
+            </div>
             <div class="border border-border rounded-lg flex-1 min-h-0">
               <div class="h-full overflow-y-auto">
               <table class="w-full text-sm">
@@ -561,7 +592,27 @@ onBeforeUnmount(() => {
 
           <!-- List -->
           <div v-else-if="detail.currentValue?.type === 'list'" class="flex flex-col min-h-0">
-            <label class="text-xs font-medium text-text-secondary mb-3 shrink-0">{{ t("detail.value") }} ({{ t("detail.itemCount", (detail.currentValue as any).items.length) }})</label>
+            <div class="flex items-center justify-between mb-3 shrink-0">
+              <label class="text-xs font-medium text-text-secondary">{{ t("detail.value") }} ({{ t("detail.itemCount", (detail.currentValue as any).totalCount || (detail.currentValue as any).items.length) }})</label>
+              <div class="flex items-center gap-2">
+                <input
+                  type="text"
+                  :placeholder="t('detail.searchPlaceholder')"
+                  :value="detail.filterPattern"
+                  @input="debounceFilter(($event.target as HTMLInputElement).value)"
+                  class="w-32 px-2 py-1 text-xs border border-border rounded-lg bg-bg-primary focus:outline-none focus:ring-1 focus:ring-redis/30"
+                />
+                <div v-if="((detail.currentValue as any).totalCount || 0) > detail.pageSize" class="flex items-center gap-1">
+                  <button @click="detail.loadPage(detail.currentPage - 1)" :disabled="detail.currentPage === 0" class="p-1 text-text-muted rounded hover:bg-bg-hover disabled:opacity-30">
+                    <ChevronLeft :size="14" />
+                  </button>
+                  <span class="text-xs text-text-muted">{{ detail.currentPage + 1 }} / {{ Math.ceil((detail.currentValue as any).totalCount / detail.pageSize) }}</span>
+                  <button @click="detail.loadPage(detail.currentPage + 1)" :disabled="(detail.currentPage + 1) * detail.pageSize >= ((detail.currentValue as any).totalCount || 0)" class="p-1 text-text-muted rounded hover:bg-bg-hover disabled:opacity-30">
+                    <ChevronRight :size="14" />
+                  </button>
+                </div>
+              </div>
+            </div>
             <div class="border border-border rounded-lg flex-1 min-h-0">
               <div class="h-full overflow-y-auto">
               <table class="w-full text-sm">
@@ -571,7 +622,7 @@ onBeforeUnmount(() => {
                 </tr></thead>
                 <tbody>
                   <tr v-for="(item, i) in (detail.currentValue as any).items" :key="i" class="border-b border-border-light last:border-0" :class="i % 2 ? 'bg-bg-primary/50' : ''">
-                    <td class="px-3 py-2 text-xs text-text-muted font-mono">{{ i }}</td>
+                    <td class="px-3 py-2 text-xs text-text-muted font-mono">{{ detail.currentPage * detail.pageSize + i }}</td>
                     <td class="px-3 py-2 font-mono text-xs text-text-primary truncate max-w-0">
                       <div v-if="editingListIndex === i" class="flex items-center gap-1.5">
                         <input v-model="listItemTemp" @keyup.enter="saveEditList" @keyup.escape="cancelEditList"
@@ -581,7 +632,7 @@ onBeforeUnmount(() => {
                       </div>
                       <span v-else
                         class="truncate block cursor-pointer hover:bg-bg-hover rounded px-1 -mx-1"
-                        @click="showCellPopup($event, item, `Index ${i}`)"
+                        @click="showCellPopup($event, item, `Index ${detail.currentPage * detail.pageSize + i}`)"
                         @dblclick.stop="startEditList(i, item)"
                       >{{ item }}</span>
                     </td>
@@ -594,7 +645,27 @@ onBeforeUnmount(() => {
 
           <!-- Set -->
           <div v-else-if="detail.currentValue?.type === 'set'" class="flex flex-col min-h-0">
-            <label class="text-xs font-medium text-text-secondary mb-3 shrink-0">{{ t("detail.value") }} ({{ t("detail.memberCount", (detail.currentValue as any).members.length) }})</label>
+            <div class="flex items-center justify-between mb-3 shrink-0">
+              <label class="text-xs font-medium text-text-secondary">{{ t("detail.value") }} ({{ t("detail.memberCount", (detail.currentValue as any).totalCount || (detail.currentValue as any).members.length) }})</label>
+              <div class="flex items-center gap-2">
+                <input
+                  type="text"
+                  :placeholder="t('detail.searchPlaceholder')"
+                  :value="detail.filterPattern"
+                  @input="debounceFilter(($event.target as HTMLInputElement).value)"
+                  class="w-32 px-2 py-1 text-xs border border-border rounded-lg bg-bg-primary focus:outline-none focus:ring-1 focus:ring-redis/30"
+                />
+                <div v-if="((detail.currentValue as any).totalCount || 0) > detail.pageSize" class="flex items-center gap-1">
+                  <button @click="detail.loadPage(detail.currentPage - 1)" :disabled="detail.currentPage === 0" class="p-1 text-text-muted rounded hover:bg-bg-hover disabled:opacity-30">
+                    <ChevronLeft :size="14" />
+                  </button>
+                  <span class="text-xs text-text-muted">{{ detail.currentPage + 1 }} / {{ Math.ceil((detail.currentValue as any).totalCount / detail.pageSize) }}</span>
+                  <button @click="detail.loadPage(detail.currentPage + 1)" :disabled="(detail.currentPage + 1) * detail.pageSize >= ((detail.currentValue as any).totalCount || 0)" class="p-1 text-text-muted rounded hover:bg-bg-hover disabled:opacity-30">
+                    <ChevronRight :size="14" />
+                  </button>
+                </div>
+              </div>
+            </div>
             <div class="flex-1 min-h-0 overflow-y-auto space-y-1">
               <div v-for="(m, i) in (detail.currentValue as any).members" :key="m"
                 class="px-3 py-2 text-xs font-mono bg-bg-primary border border-border-light rounded-lg flex items-center gap-2">
@@ -618,7 +689,27 @@ onBeforeUnmount(() => {
 
           <!-- ZSet -->
           <div v-else-if="detail.currentValue?.type === 'zset'" class="flex flex-col min-h-0">
-            <label class="text-xs font-medium text-text-secondary mb-3 shrink-0">{{ t("detail.value") }} ({{ t("detail.memberCount", (detail.currentValue as any).members.length) }})</label>
+            <div class="flex items-center justify-between mb-3 shrink-0">
+              <label class="text-xs font-medium text-text-secondary">{{ t("detail.value") }} ({{ t("detail.memberCount", (detail.currentValue as any).totalCount || (detail.currentValue as any).members.length) }})</label>
+              <div class="flex items-center gap-2">
+                <input
+                  type="text"
+                  :placeholder="t('detail.searchPlaceholder')"
+                  :value="detail.filterPattern"
+                  @input="debounceFilter(($event.target as HTMLInputElement).value)"
+                  class="w-32 px-2 py-1 text-xs border border-border rounded-lg bg-bg-primary focus:outline-none focus:ring-1 focus:ring-redis/30"
+                />
+                <div v-if="((detail.currentValue as any).totalCount || 0) > detail.pageSize" class="flex items-center gap-1">
+                  <button @click="detail.loadPage(detail.currentPage - 1)" :disabled="detail.currentPage === 0" class="p-1 text-text-muted rounded hover:bg-bg-hover disabled:opacity-30">
+                    <ChevronLeft :size="14" />
+                  </button>
+                  <span class="text-xs text-text-muted">{{ detail.currentPage + 1 }} / {{ Math.ceil((detail.currentValue as any).totalCount / detail.pageSize) }}</span>
+                  <button @click="detail.loadPage(detail.currentPage + 1)" :disabled="(detail.currentPage + 1) * detail.pageSize >= ((detail.currentValue as any).totalCount || 0)" class="p-1 text-text-muted rounded hover:bg-bg-hover disabled:opacity-30">
+                    <ChevronRight :size="14" />
+                  </button>
+                </div>
+              </div>
+            </div>
             <div class="border border-border rounded-lg flex-1 min-h-0">
               <div class="h-full overflow-y-auto">
               <table class="w-full text-sm">
@@ -711,6 +802,10 @@ onBeforeUnmount(() => {
         <div class="flex justify-between text-xs">
           <span class="text-text-muted">{{ t("detail.encoding") }}</span>
           <span class="text-text-primary font-mono">{{ (detail.currentValue as any).encoding }}</span>
+        </div>
+        <div v-if="(detail.currentValue as any).contentEncoding" class="flex justify-between text-xs">
+          <span class="text-text-muted">{{ t("detail.contentEncoding") }}</span>
+          <span class="text-text-primary font-mono">{{ (detail.currentValue as any).contentEncoding }}</span>
         </div>
       </div>
     </div>

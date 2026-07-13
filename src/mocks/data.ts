@@ -89,6 +89,7 @@ export const mockKeyDetails: Record<string, KeyDetail> = {
       type: "string",
       value: "John Doe",
       encoding: "embstr",
+      contentEncoding: "ASCII",
     },
   },
   "user:1001:profile": {
@@ -104,6 +105,7 @@ export const mockKeyDetails: Record<string, KeyDetail> = {
         { field: "created_at", value: "2024-03-15T10:30:00Z" },
       ],
       encoding: "ziplist",
+      contentEncoding: "ASCII",
     },
   },
   "user:1001:sessions": {
@@ -117,6 +119,7 @@ export const mockKeyDetails: Record<string, KeyDetail> = {
         "sess_jkl012",
       ],
       encoding: "hashtable",
+      contentEncoding: "ASCII",
     },
   },
   "cache:product:list": {
@@ -131,6 +134,7 @@ export const mockKeyDetails: Record<string, KeyDetail> = {
         '{"id":1005,"name":"Earbuds","price":149}',
       ],
       encoding: "quicklist",
+      contentEncoding: "ASCII",
     },
   },
   "leaderboard:global": {
@@ -148,6 +152,7 @@ export const mockKeyDetails: Record<string, KeyDetail> = {
         { member: "player:bear", score: 21980 },
       ],
       encoding: "skiplist",
+      contentEncoding: "ASCII",
     },
   },
 };
@@ -163,18 +168,18 @@ export function getMockKeyDetail(key: string): KeyDetail {
   };
   const type = redisKey.type;
   if (type === "string") {
-    return { key: redisKey, value: { type: "string", value: `value_of_${key}`, encoding: "embstr" } };
+    return { key: redisKey, value: { type: "string", value: `value_of_${key}`, encoding: "embstr", contentEncoding: "UTF-8" } };
   } else if (type === "hash") {
     return {
       key: redisKey,
-      value: { type: "hash", fields: [{ field: "field1", value: "val1" }, { field: "field2", value: "val2" }], encoding: "ziplist" },
+      value: { type: "hash", fields: [{ field: "field1", value: "val1" }, { field: "field2", value: "val2" }], encoding: "ziplist", contentEncoding: "UTF-8" },
     };
   } else if (type === "list") {
-    return { key: redisKey, value: { type: "list", items: ["item1", "item2", "item3"], encoding: "quicklist" } };
+    return { key: redisKey, value: { type: "list", items: ["item1", "item2", "item3"], encoding: "quicklist", contentEncoding: "UTF-8" } };
   } else if (type === "set") {
-    return { key: redisKey, value: { type: "set", members: ["member1", "member2"], encoding: "hashtable" } };
+    return { key: redisKey, value: { type: "set", members: ["member1", "member2"], encoding: "hashtable", contentEncoding: "UTF-8" } };
   } else {
-    return { key: redisKey, value: { type: "zset", members: [{ member: "m1", score: 1.5 }, { member: "m2", score: 2.0 }], encoding: "skiplist" } };
+    return { key: redisKey, value: { type: "zset", members: [{ member: "m1", score: 1.5 }, { member: "m2", score: 2.0 }], encoding: "skiplist", contentEncoding: "UTF-8" } };
   }
 }
 

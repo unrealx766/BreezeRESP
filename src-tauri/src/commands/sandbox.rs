@@ -1,6 +1,6 @@
 use crate::core::validate::{validate_command, validate_connection_id};
 use crate::AppState;
-use crate::core::format::{format_redis_value, format_for_display, get_key_value_string};
+use crate::core::format::{format_redis_value, format_for_display, get_key_value_string_with_type};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use tauri::State;
@@ -25,14 +25,6 @@ pub struct SandboxPreview {
     pub command_result: Option<String>,
     pub snapshot_id: String,
     pub key_types: HashMap<String, String>,
-}
-
-async fn get_key_type(conn: &mut deadpool_redis::Connection, key: &str) -> String {
-    redis::cmd("TYPE")
-        .arg(key)
-        .query_async::<String>(&mut **conn)
-        .await
-        .unwrap_or_else(|_| "none".to_string())
 }
 
 const READ_ONLY_COMMANDS: &[&str] = &[
@@ -593,14 +585,31 @@ pub async fn sandbox_preview(
     // Step 1: Read current Redis state for affected keys
     let mut redis_state: HashMap<String, Option<String>> = HashMap::new();
     let mut redis_key_types: HashMap<String, String> = HashMap::new();
-    for key in &affected_keys {
-        let kt = get_key_type(&mut conn, key).await;
-        redis_key_types.insert(key.clone(), kt.clone());
-        if kt != "none" {
-            let val = get_key_value_string(&mut conn, key).await;
-            redis_state.insert(key.clone(), val);
-        } else {
-            redis_state.insert(key.clone(), None);
+
+    // Pipeline: batch TYPE for all affected keys (1 round-trip)
+    if !affected_keys.is_empty() {
+        let mut pipe = redis::pipe();
+        for key in &affected_keys {
+            pipe.cmd("TYPE").arg(key);
+        }
+        let type_values: Vec<redis::Value> = pipe
+            .query_async(&mut *conn)
+            .await
+            .unwrap_or_default();
+
+        for (i, key) in affected_keys.iter().enumerate() {
+            let kt = if i < type_values.len() {
+                redis::from_redis_value::<String>(&type_values[i]).unwrap_or_else(|_| "none".to_string())
+            } else {
+                "none".to_string()
+            };
+            redis_key_types.insert(key.clone(), kt.clone());
+            if kt != "none" {
+                let val = get_key_value_string_with_type(&mut conn, key, &kt).await;
+                redis_state.insert(key.clone(), val);
+            } else {
+                redis_state.insert(key.clone(), None);
+            }
         }
     }
 

@@ -37,3 +37,4 @@ futures = "0.3"
 uuid = { version = "1", features = ["v4"] }
 urlencoding = "2"
 zeroize = { version = "1", features = ["derive"] }
+encoding_rs = "0.8"

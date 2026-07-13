@@ -80,43 +80,50 @@ pub fn format_for_display(raw: &str, key_type: &str) -> String {
 
 /// Get the current canonical string representation of a key's value.
 /// Used for storage, comparison, and rollback — must be stable/deterministic.
-pub async fn get_key_value_string(
+/// Accepts pre-fetched type to avoid redundant TYPE call.
+pub async fn get_key_value_string_with_type(
     conn: &mut deadpool_redis::Connection,
     key: &str,
+    type_str: &str,
 ) -> Option<String> {
-    let type_str: String = redis::cmd("TYPE")
-        .arg(key)
-        .query_async(&mut **conn)
-        .await
-        .ok()?;
-
-    if type_str == "none" {
-        return None;
-    }
-
-    match type_str.as_str() {
+    match type_str {
         "string" => {
-            let val: String = conn.get(key).await.ok()?;
-            Some(val)
+            let val: Vec<u8> = conn.get(key).await.ok()?;
+            Some(String::from_utf8_lossy(&val).into_owned())
         }
         "hash" => {
-            let mut fields: Vec<(String, String)> = conn.hgetall(key).await.ok()?;
-            // Sort by field name for deterministic serialization
+            let mut fields: Vec<(Vec<u8>, Vec<u8>)> = conn.hgetall(key).await.ok()?;
             fields.sort_by(|a, b| a.0.cmp(&b.0));
+            let fields: Vec<(String, String)> = fields
+                .into_iter()
+                .map(|(f, v)| {
+                    (
+                        String::from_utf8_lossy(&f).into_owned(),
+                        String::from_utf8_lossy(&v).into_owned(),
+                    )
+                })
+                .collect();
             Some(serde_json::to_string(&fields).unwrap_or_default())
         }
         "list" => {
-            let items: Vec<String> = conn.lrange(key, 0, -1).await.ok()?;
+            let items: Vec<Vec<u8>> = conn.lrange(key, 0, -1).await.ok()?;
+            let items: Vec<String> = items
+                .into_iter()
+                .map(|b| String::from_utf8_lossy(&b).into_owned())
+                .collect();
             Some(serde_json::to_string(&items).unwrap_or_default())
         }
         "set" => {
-            let mut members: Vec<String> = conn.smembers(key).await.ok()?;
-            // Sort for deterministic serialization
+            let mut members: Vec<Vec<u8>> = conn.smembers(key).await.ok()?;
             members.sort();
+            let members: Vec<String> = members
+                .into_iter()
+                .map(|b| String::from_utf8_lossy(&b).into_owned())
+                .collect();
             Some(serde_json::to_string(&members).unwrap_or_default())
         }
         "zset" => {
-            let mut members: Vec<(String, f64)> = redis::cmd("ZRANGE")
+            let mut members: Vec<(Vec<u8>, f64)> = redis::cmd("ZRANGE")
                 .arg(key)
                 .arg(0)
                 .arg(-1)
@@ -124,8 +131,11 @@ pub async fn get_key_value_string(
                 .query_async(&mut **conn)
                 .await
                 .ok()?;
-            // Sort by score then by member name for deterministic order
             members.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal).then(a.0.cmp(&b.0)));
+            let members: Vec<(String, f64)> = members
+                .into_iter()
+                .map(|(m, s)| (String::from_utf8_lossy(&m).into_owned(), s))
+                .collect();
             Some(serde_json::to_string(&members).unwrap_or_default())
         }
         _ => Some("(unsupported type)".to_string()),
