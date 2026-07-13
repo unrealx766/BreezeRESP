@@ -19,6 +19,7 @@ const props = withDefaults(
     height?: number;
     pinned?: boolean;
     zIndex?: number;
+    onSaveContent?: (id: string, newContent: string) => Promise<boolean>;
   }>(),
   { width: 380, height: 240, pinned: false, zIndex: 9999, redisKey: '', cellType: '', cellId: '' }
 );
@@ -29,7 +30,6 @@ const emit = defineEmits<{
   (e: "updatePosition", id: string, x: number, y: number): void;
   (e: "updateSize", id: string, w: number, h: number): void;
   (e: "focus", id: string): void;
-  (e: "saveContent", id: string, newContent: string): Promise<boolean>;
 }>();
 
 // Position & size
@@ -84,7 +84,7 @@ async function saveEdit() {
   if (isSaving.value) return;
   isSaving.value = true;
   try {
-    const ok = await emit('saveContent', props.id, editTemp.value);
+    const ok = props.onSaveContent ? await props.onSaveContent(props.id, editTemp.value) : false;
     if (ok) isEditing.value = false;
   } finally {
     isSaving.value = false;

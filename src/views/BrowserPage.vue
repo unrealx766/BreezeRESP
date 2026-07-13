@@ -99,6 +99,18 @@ function onTreeScroll(e: Event) {
   containerHeight.value = el.clientHeight;
 }
 
+// Auto-load more keys when visible nodes don't fill the viewport (e.g. tree collapsed)
+watch(
+  [() => cascade.visibleNodes.length, () => cascade.keys.length],
+  ([visibleLen]) => {
+    if (!cascade.hasMore || cascade.loading || !isConnected.value) return;
+    const viewportCapacity = Math.ceil(containerHeight.value / ITEM_HEIGHT);
+    if (visibleLen < viewportCapacity) {
+      cascade.loadMoreKeys();
+    }
+  }
+);
+
 // Immediately flush debounce when resetting search (e.g. DB switch, connection change)
 function resetSearchImmediate() {
   if (searchDebounceTimer) {
@@ -628,10 +640,23 @@ onBeforeUnmount(() => {
             <RefreshCw :size="14" :class="cascade.loading ? 'animate-spin' : ''" class="text-text-muted" />
           </button>
         </div>
-        <div class="text-[11px] text-text-muted">
-          {{ cascade.totalKeyCount > cascade.loadedCount
-            ? t("browser.keyCountWithTotal", { loaded: cascade.loadedCount, total: cascade.totalKeyCount })
-            : t("browser.keyCount", { count: cascade.keyCount }) }}
+        <div class="text-[11px] text-text-muted flex items-center justify-between">
+          <span>
+            {{ cascade.totalKeyCount > cascade.loadedCount
+              ? t("browser.keyCountWithTotal", { loaded: cascade.loadedCount, total: cascade.totalKeyCount })
+              : t("browser.keyCount", { count: cascade.keyCount }) }}
+          </span>
+          <button
+            v-if="cascade.hasMore && isConnected"
+            @click="cascade.loadMoreKeys()"
+            :disabled="cascade.loading"
+            class="text-[11px] text-redis hover:text-redis/80 disabled:opacity-50 transition-colors shrink-0"
+          >
+            {{ cascade.loading ? "..." : t("browser.loadMore") }}
+          </button>
+          <span v-else-if="!cascade.hasMore && cascade.keys.length > 0" class="text-[11px] text-text-muted/60">
+            {{ t("browser.allLoaded") }}
+          </span>
         </div>
       </div>
 
@@ -648,18 +673,9 @@ onBeforeUnmount(() => {
             :depth="item.depth"
             @select="handleSelect"
           />
-          <!-- Load more button: in document flow, right after last rendered item -->
-          <div v-if="cascade.hasMore" class="px-3 py-2">
-            <button
-              @click="cascade.loadMoreKeys()"
-              :disabled="cascade.loading || !isConnected"
-              class="w-full py-1.5 text-[11px] font-medium text-redis border border-dashed border-redis/30 rounded-lg hover:bg-redis/5 transition-colors disabled:opacity-50"
-            >
-              {{ cascade.loading ? "..." : t("browser.loadMore") }}
-            </button>
-          </div>
         </div>
       </div>
+
     </div>
 
     <!-- Center Panel: Key Detail -->
@@ -1095,7 +1111,7 @@ onBeforeUnmount(() => {
         @update-position="updateWinPosition"
         @update-size="updateWinSize"
         @focus="focusWin"
-        @save-content="handleSaveContent"
+        :on-save-content="handleSaveContent"
       />
     </Teleport>
 

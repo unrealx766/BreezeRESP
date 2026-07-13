@@ -15,7 +15,7 @@ export const useCascadeStore = defineStore("cascade", () => {
   const loading = ref(false);
   const expandedPaths = ref(new Set<string>());
   const totalKeyCount = ref(0);
-  let scanCursor = 0;
+  const scanCursor = ref(0);
   let refreshing = false;
 
   const filteredKeys = computed(() => {
@@ -86,7 +86,7 @@ export const useCascadeStore = defineStore("cascade", () => {
   });
 
   const keyCount = computed(() => keys.value.length);
-  const hasMore = computed(() => scanCursor !== 0);
+  const hasMore = computed(() => scanCursor.value !== 0);
   const loadedCount = computed(() => keys.value.length);
 
   const typeDistribution = computed(() => {
@@ -124,7 +124,7 @@ export const useCascadeStore = defineStore("cascade", () => {
     const searchPattern = debouncedSearchQuery.value ? `*${debouncedSearchQuery.value}*` : "*";
 
     do {
-      const raw = await tauriApi.cascade.scanKeys(connId, searchPattern, cursor, 200);
+      const raw = await tauriApi.cascade.scanKeys(connId, searchPattern, cursor, 2);
       const response = raw as unknown as [number, any[]];
       const nextCursor = response[0];
       const rustKeys = Array.isArray(response[1]) ? response[1] : [];
@@ -153,10 +153,10 @@ export const useCascadeStore = defineStore("cascade", () => {
     refreshing = true;
     loading.value = true;
     try {
-      scanCursor = 0;
+      scanCursor.value = 0;
       const result = await scanBatch(connId, 0);
       keys.value = result.keys;
-      scanCursor = result.nextCursor;
+      scanCursor.value = result.nextCursor;
       await fetchDbSize(connId);
     } catch (e) {
       console.error("Failed to scan keys:", e);
@@ -169,17 +169,17 @@ export const useCascadeStore = defineStore("cascade", () => {
   async function loadMoreKeys() {
     const connStore = useConnectionStore();
     const connId = connStore.activeConnectionId;
-    if (!connId || scanCursor === 0 || refreshing) return;
+    if (!connId || scanCursor.value === 0 || refreshing) return;
 
     refreshing = true;
     loading.value = true;
     try {
-      const result = await scanBatch(connId, scanCursor);
+      const result = await scanBatch(connId, scanCursor.value);
       // Deduplicate: filter out keys already present
       const existingKeys = new Set(keys.value.map((k) => k.key));
       const newKeys = result.keys.filter((k) => !existingKeys.has(k.key));
       keys.value = [...keys.value, ...newKeys];
-      scanCursor = result.nextCursor;
+      scanCursor.value = result.nextCursor;
     } catch (e) {
       console.error("Failed to load more keys:", e);
     } finally {

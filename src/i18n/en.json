@@ -61,6 +61,7 @@
     "keyCount": "{count} keys total",
     "keyCountWithTotal": "Loaded {loaded} / {total} keys",
     "loadMore": "Load more",
+    "allLoaded": "All loaded",
     "selectKey": "Select a key to view details",
     "noKeys": "No matching keys found",
     "deleteKey": "Delete Key",
