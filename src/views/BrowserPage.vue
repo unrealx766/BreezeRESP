@@ -297,6 +297,33 @@ async function saveEditTtl(e: Event) {
 }
 function cancelEditTtl() { editingTtl.value = false; }
 
+// Reset all editing state when switching keys
+function resetAllEditingState() {
+  editingKey.value = false;
+  editKeyTemp.value = '';
+  editingString.value = false;
+  stringTemp.value = '';
+  editingHashField.value = null;
+  hashFieldTemp.value = '';
+  renamingHashField.value = null;
+  hashFieldRenameTemp.value = '';
+  editingListIndex.value = null;
+  listItemTemp.value = '';
+  editingSetMember.value = null;
+  setMemberTemp.value = '';
+  editingZSetMember.value = null;
+  zsetMemberTemp.value = '';
+  zsetScoreTemp.value = 0;
+  editingTtl.value = false;
+  ttlTemp.value = '';
+}
+
+// Watch selected key change to reset editing state
+watch(
+  () => cascade.selectedKey,
+  () => { resetAllEditingState(); }
+);
+
 // Floating windows for cell value display
 interface FloatingWin {
   id: string;
@@ -442,6 +469,7 @@ watch(
     if (id) {
       cascade.selectedKey = null;
       resetSearchImmediate();
+      resetAllEditingState();
       cascade.typeFilter = "all";
       detail.clearDetail();
       cascade.refreshKeys(true);
@@ -631,23 +659,23 @@ onBeforeUnmount(() => {
             </div>
             <div class="border border-border rounded-lg flex-1 min-h-0">
               <div class="h-full overflow-y-auto">
-              <table class="w-full text-sm">
+              <table class="w-full text-sm table-fixed">
                 <thead class="sticky top-0 z-10"><tr class="bg-bg-primary">
-                  <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border w-1/3">{{ t("detail.field") }}</th>
+                  <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border" style="width:35%;max-width:260px">{{ t("detail.field") }}</th>
                   <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border">{{ t("detail.value") }}</th>
                 </tr></thead>
                 <tbody>
                   <tr v-for="(f, i) in (detail.currentValue as any).fields" :key="f.field" class="border-b border-border-light last:border-0" :class="i % 2 ? 'bg-bg-primary/50' : ''">
-                    <td class="px-3 py-2 font-mono text-xs text-text-primary font-medium">
+                    <td class="px-3 py-2 font-mono text-xs text-text-primary font-medium overflow-hidden">
                       <!-- Field name editing -->
                       <div v-if="renamingHashField === f.field" class="flex items-center gap-1.5">
                         <input v-model="hashFieldRenameTemp" @keyup.enter="saveRenameHashField($event)" @keyup.escape="cancelRenameHashField"
-                          class="flex-1 text-xs font-mono font-medium px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-bg-secondary" />
-                        <button @click="saveRenameHashField($event)" class="text-success hover:text-success/80"><Save :size="11" /></button>
-                        <button @click="cancelRenameHashField" class="text-text-muted hover:text-text-primary"><X :size="11" /></button>
+                          class="flex-1 text-xs font-mono font-medium px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-bg-secondary min-w-0" />
+                        <button @click="saveRenameHashField($event)" class="shrink-0 text-success hover:text-success/80"><Save :size="11" /></button>
+                        <button @click="cancelRenameHashField" class="shrink-0 text-text-muted hover:text-text-primary"><X :size="11" /></button>
                       </div>
                       <!-- Field name display with hover edit button -->
-                      <div v-else class="flex items-center gap-1 group/field">
+                      <div v-else class="flex items-center gap-1 group/field min-w-0">
                         <span class="truncate" :title="f.field">{{ f.field }}</span>
                         <button @click="startRenameHashField(f.field)" class="shrink-0 text-text-muted hover:text-text-primary opacity-0 group-hover/field:opacity-100 transition-opacity">
                           <Pencil :size="10" />

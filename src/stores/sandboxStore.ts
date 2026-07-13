@@ -19,7 +19,6 @@ export const useSandboxStore = defineStore("sandbox", () => {
   const history = ref<SandboxHistoryItem[]>([]);
   const showPreview = ref(false);
   const currentCommand = ref<string>("");
-  /** Original key types BEFORE command execution — needed for type-safe rollback */
   const currentKeyTypes = ref<Record<string, string>>({});
 
   const hasDiff = computed(() => currentDiff.value.length > 0);
@@ -74,20 +73,103 @@ export const useSandboxStore = defineStore("sandbox", () => {
     KEYS: 1, SCAN: 1, DBSIZE: 0, INFO: 0, PING: 0, ECHO: 1,
   };
 
-  function validateCommand(input: string): string | null {
-    const trimmed = input.trim();
-    if (!trimmed) return null; // empty handled by button disabled state
+  /**
+   * Parse a command string into parts, respecting quoted strings.
+   * Mirrors the Rust parse_command_parts function.
+   */
+  function parseCommandParts(input: string): string[] {
+    const parts: string[] = [];
+    let current = "";
+    let i = 0;
 
-    const parts = trimmed.split(/\s+/);
-    const cmd = parts[0].toUpperCase();
+    while (i < input.length) {
+      const c = input[i];
 
-    if (BLOCKED_COMMANDS.has(cmd)) {
-      return `命令 "${cmd}" 已被安全策略禁止`;
+      if ((c === ' ' || c === '\t') && current === "") {
+        i++;
+        continue;
+      }
+
+      if (c === '"') {
+        i++;
+        while (i < input.length) {
+          const inner = input[i];
+          if (inner === '"') { i++; break; }
+          if (inner === '\\' && i + 1 < input.length) {
+            current += input[i + 1];
+            i += 2;
+          } else {
+            current += inner;
+            i++;
+          }
+        }
+        continue;
+      }
+
+      if (c === "'") {
+        i++;
+        while (i < input.length) {
+          if (input[i] === "'") { i++; break; }
+          current += input[i];
+          i++;
+        }
+        continue;
+      }
+
+      if (c === ' ' || c === '\t') {
+        parts.push(current);
+        current = "";
+        i++;
+        continue;
+      }
+
+      current += c;
+      i++;
     }
 
-    const minArgs = MIN_ARGS[cmd];
+    if (current !== "") {
+      parts.push(current);
+    }
+
+    return parts;
+  }
+
+  /** Commands that require paired arguments (field-value or score-member) */
+  const PAIRED_COMMANDS: Record<string, { pairArgs: 'after-key' | 'all'; keyCount: number }> = {
+    HSET: { pairArgs: 'after-key', keyCount: 1 },
+    HMSET: { pairArgs: 'after-key', keyCount: 1 },
+    ZADD: { pairArgs: 'after-key', keyCount: 1 },
+    MSET: { pairArgs: 'all', keyCount: 0 },
+  };
+
+  function validateCommand(input: string): string | null {
+    const cmd = input.trim();
+    if (!cmd) return null;
+
+    const parts = parseCommandParts(cmd);
+    if (parts.length === 0) return null;
+
+    const cmdName = parts[0].toUpperCase();
+
+    if (BLOCKED_COMMANDS.has(cmdName)) {
+      return `命令 "${cmdName}" 已被安全策略禁止`;
+    }
+
+    const minArgs = MIN_ARGS[cmdName];
     if (minArgs !== undefined && parts.length - 1 < minArgs) {
-      return `命令 "${cmd}" 至少需要 ${minArgs} 个参数，当前只有 ${parts.length - 1} 个`;
+      return `命令 "${cmdName}" 至少需要 ${minArgs} 个参数，当前只有 ${parts.length - 1} 个`;
+    }
+
+    // Check paired arguments
+    const pairRule = PAIRED_COMMANDS[cmdName];
+    if (pairRule) {
+      const argCount = pairRule.pairArgs === 'after-key'
+        ? parts.length - 1 - pairRule.keyCount  // args after the key
+        : parts.length - 1;                      // all args
+      if (argCount % 2 !== 0) {
+        const pairDesc = pairRule.pairArgs === 'after-key' ? 'field-value' : 'key-value';
+        return `命令 "${cmdName}" 需要成对的 ${pairDesc} 参数，当前参数数量为奇数`;
+      }
     }
 
     return null;
@@ -164,7 +246,7 @@ export const useSandboxStore = defineStore("sandbox", () => {
         return;
       }
 
-      // Compute precise inverse commands for rollback
+      // Compute precise inverse rollback commands using frontend logic
       const rollbackCommands = computeInverseCommands(
         cmd,
         currentDiff.value,

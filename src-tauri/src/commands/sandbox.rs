@@ -25,6 +25,8 @@ pub struct SandboxPreview {
     pub command_result: Option<String>,
     pub snapshot_id: String,
     pub key_types: HashMap<String, String>,
+    /// Precise inverse commands for rollback (computed per-command during simulation)
+    pub rollback_commands: Vec<String>,
 }
 
 const READ_ONLY_COMMANDS: &[&str] = &[
@@ -519,23 +521,26 @@ fn simulated_key_type(
     }
 }
 
+
 // ───────────────────────────────────────────────────────────────────────────
 // IPC commands
 // ───────────────────────────────────────────────────────────────────────────
 
-/// Execute a command in sandbox mode and return the diff preview.
+/// Execute command(s) in sandbox mode and return the diff preview.
+///
+/// Supports multiple commands separated by newlines. Comments (`#` or `--`)
+/// and blank lines are ignored. Write commands are simulated locally; read-only
+/// commands are executed directly against Redis.
 ///
 /// ## Cumulative preview model (pure local simulation)
 ///
 /// Preview never modifies Redis:
-/// 1. Read current key data from Redis
+/// 1. Read current key data from Redis for ALL affected keys
 /// 2. Use pending_state as baseline if available (cumulative)
-/// 3. Locally simulate the command → compute after-state
-/// 4. Update pending_state with the after-state
-/// 5. Compute diff between baseline and after-state
-///
-/// * **Apply**  → execute the command in Redis for real, clear pending.
-/// * **Cancel** → just clear pending (Redis was never touched).
+/// 3. Locally simulate EACH write command sequentially
+/// 4. Update pending_state with the final after-state
+/// 5. Compute diff between baseline and final after-state
+/// 6. Compute per-command rollback commands
 #[tauri::command]
 pub async fn sandbox_preview(
     state: State<'_, AppState>,
@@ -543,7 +548,6 @@ pub async fn sandbox_preview(
     command: String,
 ) -> Result<SandboxPreview, String> {
     validate_connection_id(&connection_id)?;
-    validate_command(&command)?;
 
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
@@ -551,45 +555,54 @@ pub async fn sandbox_preview(
     };
     let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
 
-    let parts: Vec<String> = parse_command_parts(&command);
+    // Parse single command
+    let cmd = command.trim().to_string();
+    if cmd.is_empty() {
+        return Err("Empty command".to_string());
+    }
+    validate_command(&cmd)?;
+
+    // Classify command
+    let parts = parse_command_parts(&cmd);
     if parts.is_empty() {
         return Err("Empty command".to_string());
     }
-    let part_refs: Vec<&str> = parts.iter().map(|s| s.as_str()).collect();
-    let cmd_name_upper = part_refs[0].to_uppercase();
+    let cmd_upper = parts[0].to_uppercase();
 
-    // ── Read-only commands: execute directly ──
-    if READ_ONLY_COMMANDS.contains(&cmd_name_upper.as_str()) {
-        let mut redis_cmd = redis::cmd(part_refs[0]);
-        for arg in &part_refs[1..] {
-            redis_cmd.arg(*arg);
+    // Read-only command: execute directly
+    if READ_ONLY_COMMANDS.contains(&cmd_upper.as_str()) {
+        let mut redis_cmd = redis::cmd(&parts[0]);
+        for arg in &parts[1..] {
+            redis_cmd.arg(arg);
         }
         let result: redis::Value = redis_cmd
             .query_async(&mut *conn)
             .await
             .map_err(|e| format!("Command error: {}", e))?;
-
-        let formatted = format_redis_value(&result);
         return Ok(SandboxPreview {
             command,
             diff: vec![],
-            command_result: Some(formatted),
+            command_result: Some(format_redis_value(&result)),
             snapshot_id: String::new(),
             key_types: HashMap::new(),
+            rollback_commands: vec![],
         });
     }
 
-    // ── Write commands: local simulation ──
-    let affected_keys = extract_keys(&part_refs);
+    // ── Write command: local simulation ──
+    let write_cmds: Vec<Vec<String>> = vec![parts];
+    let refs: Vec<&str> = write_cmds[0].iter().map(|s| s.as_str()).collect();
+    let per_cmd_refs = vec![refs];
+    let per_cmd_keys = vec![extract_keys(&per_cmd_refs[0])];
+    let all_affected_keys: Vec<String> = per_cmd_keys[0].clone();
 
-    // Step 1: Read current Redis state for affected keys
+    // Step 1: Read current Redis state for ALL affected keys (batch)
     let mut redis_state: HashMap<String, Option<String>> = HashMap::new();
     let mut redis_key_types: HashMap<String, String> = HashMap::new();
 
-    // Pipeline: batch TYPE for all affected keys (1 round-trip)
-    if !affected_keys.is_empty() {
+    if !all_affected_keys.is_empty() {
         let mut pipe = redis::pipe();
-        for key in &affected_keys {
+        for key in &all_affected_keys {
             pipe.cmd("TYPE").arg(key);
         }
         let type_values: Vec<redis::Value> = pipe
@@ -597,7 +610,7 @@ pub async fn sandbox_preview(
             .await
             .unwrap_or_default();
 
-        for (i, key) in affected_keys.iter().enumerate() {
+        for (i, key) in all_affected_keys.iter().enumerate() {
             let kt = if i < type_values.len() {
                 redis::from_redis_value::<String>(&type_values[i]).unwrap_or_else(|_| "none".to_string())
             } else {
@@ -613,7 +626,7 @@ pub async fn sandbox_preview(
         }
     }
 
-    // Step 2: Build diff baseline (pending_state or redis_state)
+    // Step 2: Build baseline (pending_state or redis_state)
     let has_pending = {
         let ss = state.shadow_store.lock().map_err(|e| e.to_string())?;
         ss.has_pending()
@@ -621,34 +634,34 @@ pub async fn sandbox_preview(
 
     let mut before_for_diff: HashMap<String, String> = HashMap::new();
     let mut before_key_types: HashMap<String, String> = HashMap::new();
-    // effective_state = what the key looks like right now (for simulation input)
     let mut effective_values: HashMap<String, Option<String>> = HashMap::new();
     let mut effective_types: HashMap<String, String> = HashMap::new();
+
     {
         let ss = state.shadow_store.lock().map_err(|e| e.to_string())?;
-        for key in &affected_keys {
+        for key in &all_affected_keys {
+            // ── Diff baseline: ALWAYS use Redis state ──
+            // This ensures the diff always shows the change from the original
+            // Redis state, regardless of how many previews have been run.
+            if let Some(val) = redis_state.get(key).cloned().flatten() {
+                before_for_diff.insert(key.clone(), val);
+            }
+            if let Some(kt) = redis_key_types.get(key) {
+                before_key_types.insert(key.clone(), kt.clone());
+            }
+
+            // ── Simulation baseline: use pending state if available ──
+            // This allows cumulative previews to build on each other correctly.
             if let Some(pending_val) = ss.pending_state.get(key) {
                 effective_values.insert(key.clone(), pending_val.clone());
                 if let Some(kt) = ss.pending_key_types.get(key) {
                     effective_types.insert(key.clone(), kt.clone());
-                }
-                if let Some(val) = pending_val {
-                    before_for_diff.insert(key.clone(), val.clone());
-                }
-                if let Some(kt) = ss.pending_key_types.get(key) {
-                    before_key_types.insert(key.clone(), kt.clone());
                 }
             } else {
                 let rv = redis_state.get(key).cloned().flatten();
                 effective_values.insert(key.clone(), rv.clone());
                 if let Some(kt) = redis_key_types.get(key) {
                     effective_types.insert(key.clone(), kt.clone());
-                }
-                if let Some(val) = &rv {
-                    before_for_diff.insert(key.clone(), val.clone());
-                }
-                if let Some(kt) = redis_key_types.get(key) {
-                    before_key_types.insert(key.clone(), kt.clone());
                 }
             }
         }
@@ -658,7 +671,7 @@ pub async fn sandbox_preview(
     if !has_pending {
         let ss = state.shadow_store.lock().map_err(|e| e.to_string())?;
         let mut ss = ss;
-        for key in &affected_keys {
+        for key in &all_affected_keys {
             if let Some(val) = redis_state.get(key).cloned().flatten() {
                 ss.original_state.insert(key.clone(), val);
             }
@@ -668,27 +681,40 @@ pub async fn sandbox_preview(
         }
     }
 
-    // Step 4: Locally simulate the command
-    let simulated = simulate_write_command(
-        part_refs[0],
-        &part_refs[1..],
-        &effective_values,
-        &effective_types,
-    )?;
+    // Step 4: Simulate EACH write command sequentially
+    for (cmd_idx, _parts) in write_cmds.iter().enumerate() {
+        let refs = &per_cmd_refs[cmd_idx];
+        let cmd_keys = &per_cmd_keys[cmd_idx];
 
-    // Build after_state & after_key_types from simulation result
-    let mut after_state: HashMap<String, String> = HashMap::new();
-    let mut after_key_types: HashMap<String, String> = HashMap::new();
-    for key in &affected_keys {
-        if let Some(sim_val) = simulated.get(key) {
-            if let Some(val) = sim_val {
-                after_state.insert(key.clone(), val.clone());
+        // Build per-command input from effective state (only affected keys)
+        let mut cmd_values: HashMap<String, Option<String>> = HashMap::new();
+        let mut cmd_types: HashMap<String, String> = HashMap::new();
+        for key in cmd_keys {
+            cmd_values.insert(key.clone(), effective_values.get(key).cloned().flatten());
+            if let Some(kt) = effective_types.get(key) {
+                cmd_types.insert(key.clone(), kt.clone());
             }
-            let before_kt = effective_types.get(key).map(|s| s.as_str()).unwrap_or("none");
-            let new_kt = simulated_key_type(part_refs[0], before_kt, sim_val);
-            after_key_types.insert(key.clone(), new_kt);
+        }
+
+        let simulated = simulate_write_command(
+            refs[0],
+            &refs[1..],
+            &cmd_values,
+            &cmd_types,
+        )?;
+
+        // Update effective state for next command
+        for key in cmd_keys {
+            if let Some(sim_val) = simulated.get(key) {
+                effective_values.insert(key.clone(), sim_val.clone());
+                let before_kt = effective_types.get(key).map(|s| s.as_str()).unwrap_or("none");
+                let new_kt = simulated_key_type(refs[0], before_kt, sim_val);
+                effective_types.insert(key.clone(), new_kt);
+            }
         }
     }
+
+    // Step 4b: Rollback commands are computed by the frontend using computeInverseCommands
 
     // Step 5: Create snapshot
     let snap_id = uuid::Uuid::new_v4().to_string();
@@ -698,28 +724,41 @@ pub async fn sandbox_preview(
         ss.create_snapshot(&snap_id, before_for_diff.clone());
     }
 
-    // Step 6: Update pending state & compute diff
-    let diff_result = {
+    // Step 6: Build after state & update pending
+    let mut after_state: HashMap<String, String> = HashMap::new();
+    let mut after_key_types: HashMap<String, String> = HashMap::new();
+    for key in &all_affected_keys {
+        if let Some(val) = effective_values.get(key).cloned().flatten() {
+            after_state.insert(key.clone(), val);
+        }
+        if let Some(kt) = effective_types.get(key) {
+            after_key_types.insert(key.clone(), kt.clone());
+        }
+    }
+
+    {
         let ss = state.shadow_store.lock().map_err(|e| e.to_string())?;
         let mut ss = ss;
 
-        for key in &affected_keys {
-            if let Some(sim_val) = simulated.get(key) {
-                ss.pending_state.insert(key.clone(), sim_val.clone());
+        for key in &all_affected_keys {
+            if let Some(val) = effective_values.get(key) {
+                ss.pending_state.insert(key.clone(), val.clone());
             }
-            if let Some(kt) = after_key_types.get(key) {
+            if let Some(kt) = effective_types.get(key) {
                 ss.pending_key_types.insert(key.clone(), kt.clone());
             }
         }
 
         ss.set_after_state(&snap_id, after_state);
+    }
+
+    // Step 7: Compute final cumulative diff
+    let diff_result = {
+        let ss = state.shadow_store.lock().map_err(|e| e.to_string())?;
         ss.compute_diff(&snap_id)
     };
 
     // Convert DiffResult to Vec<DiffEntry>
-    // IMPORTANT: before_raw must always hold the ORIGINAL Redis state (not
-    // the pending/simulated state) so that rollback can faithfully restore
-    // keys to their pre-command condition.
     let mut diff = Vec::new();
     if let Some(dr) = diff_result {
         for (key, val) in dr.added {
@@ -778,6 +817,7 @@ pub async fn sandbox_preview(
         command_result: None,
         snapshot_id: snap_id,
         key_types: before_key_types,
+        rollback_commands: vec![],
     })
 }
 
@@ -789,7 +829,6 @@ pub async fn sandbox_apply(
     command: String,
 ) -> Result<bool, String> {
     validate_connection_id(&connection_id)?;
-    validate_command(&command)?;
 
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
@@ -797,7 +836,15 @@ pub async fn sandbox_apply(
     };
     let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
 
-    let parts: Vec<String> = parse_command_parts(&command);
+    // Parse single command
+    let cmd = command.trim().to_string();
+    if cmd.is_empty() {
+        return Err("Empty command".to_string());
+    }
+    validate_command(&cmd)?;
+
+    // Execute the command
+    let parts: Vec<String> = parse_command_parts(&cmd);
     if parts.is_empty() {
         return Err("Empty command".to_string());
     }

@@ -141,7 +141,7 @@
   },
   "sandbox": {
     "title": "命令沙盒",
-    "placeholder": "输入 Redis 命令进行安全演练...",
+    "placeholder": "输入 Redis 命令（例如 SET key value）...",
     "preview": "执行预览",
     "apply": "确认提交",
     "rollback": "回滚",

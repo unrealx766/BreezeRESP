@@ -91,6 +91,8 @@ export interface RustSandboxPreview {
   snapshotId: string;
   /** Original key types BEFORE command execution — for type-safe rollback */
   keyTypes: Record<string, string>;
+  /** Precise inverse commands for rollback (computed by backend) */
+  rollbackCommands: string[];
 }
 
 export interface RustServerMetrics {

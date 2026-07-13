@@ -141,7 +141,7 @@
   },
   "sandbox": {
     "title": "Command Sandbox",
-    "placeholder": "Enter a Redis command for safe rehearsal...",
+    "placeholder": "Enter a Redis command (e.g. SET key value)...",
     "preview": "Preview",
     "apply": "Apply",
     "rollback": "Rollback",
