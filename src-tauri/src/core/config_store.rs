@@ -8,7 +8,7 @@ pub struct ConfigStore {
     encryption_key: [u8; 32],
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct StoredConnection {
     pub id: String,
     pub name: String,
@@ -19,6 +19,21 @@ pub struct StoredConnection {
     pub ssl: bool,
     #[serde(default)]
     pub pinned: bool,
+}
+
+impl std::fmt::Debug for StoredConnection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StoredConnection")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("password", &"[REDACTED]")
+            .field("db", &self.db)
+            .field("ssl", &self.ssl)
+            .field("pinned", &self.pinned)
+            .finish()
+    }
 }
 
 impl ConfigStore {

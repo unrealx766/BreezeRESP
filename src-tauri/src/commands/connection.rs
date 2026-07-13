@@ -3,10 +3,11 @@ use crate::AppState;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tauri::State;
+use zeroize::Zeroize;
 
 const CONN_TIMEOUT: Duration = Duration::from_secs(10);
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionConfig {
     pub id: String,
@@ -24,6 +25,21 @@ pub struct ConnectionConfig {
     /// When true, preserve the existing password (don't overwrite with empty)
     #[serde(default)]
     pub keep_password: Option<bool>,
+}
+
+impl std::fmt::Debug for ConnectionConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ConnectionConfig")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("password", &"[REDACTED]")
+            .field("db", &self.db)
+            .field("ssl", &self.ssl)
+            .field("pinned", &self.pinned)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -81,6 +97,11 @@ pub async fn connect(
         pm.get_or_create(&config.id, &config.host, config.port, pw, config.db, config.ssl)?
     };
 
+    // Capture has_password before clearing, then zeroize
+    let has_password = !resolved_password.is_empty();
+    let mut resolved_password = resolved_password;
+    resolved_password.zeroize();
+
     // Verify connection with PING (with timeout to prevent TLS hang)
     let mut conn = tokio::time::timeout(CONN_TIMEOUT, pool.get())
         .await
@@ -100,7 +121,7 @@ pub async fn connect(
         ssl: config.ssl,
         status: "connected".to_string(),
         pinned: config.pinned,
-        has_password: !config.password.is_empty(),
+        has_password,
     })
 }
 
@@ -147,6 +168,10 @@ pub async fn test_connection(
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
         pm.get_or_create(&test_id, &config.host, config.port, pw, config.db, config.ssl)?
     };
+
+    // Clear password from memory after pool creation
+    let mut resolved_password = resolved_password;
+    resolved_password.zeroize();
 
     // Test with PING (with timeout to prevent TLS hang)
     let result = async {
