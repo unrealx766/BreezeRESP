@@ -253,6 +253,29 @@ export const useDetailStore = defineStore("detail", () => {
     }
   }
 
+  /** Rename a hash field (preserves its value) */
+  async function renameHashField(oldField: string, newField: string) {
+    const connStore = useConnectionStore();
+    const connId = connStore.activeConnectionId;
+    const key = currentDetail.value?.key.key;
+    if (!connId || !key || oldField === newField) return false;
+    try {
+      await tauriApi.cascade.setValue({
+        connectionId: connId,
+        key,
+        keyType: "hash",
+        action: "rename_field",
+        field: newField,
+        oldValue: oldField,
+      });
+      await loadDetail(key, currentPage.value);
+      return true;
+    } catch (e) {
+      console.error("Failed to rename hash field:", e);
+      return false;
+    }
+  }
+
   /** Save list item by index */
   async function saveListItem(index: number, newValue: string) {
     const connStore = useConnectionStore();
@@ -396,6 +419,7 @@ export const useDetailStore = defineStore("detail", () => {
     refresh,
     saveStringValue,
     saveHashField,
+    renameHashField,
     saveListItem,
     saveSetMember,
     saveZSetMember,

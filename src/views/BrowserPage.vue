@@ -10,6 +10,7 @@ import TtlGauge from "@/components/charts/TtlGauge.vue";
 import FloatingWindow from "@/components/shared/FloatingWindow.vue";
 import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
 import { useCopyTip } from "@/utils/copyTip";
+import { useSaveTip } from "@/utils/saveTip";
 import {
   Search, RefreshCw, Trash2, Copy, Tag,
   Type, Hash, List, CircleDot, BarChart3,
@@ -146,6 +147,7 @@ function handleSelect(node: any) {
 }
 
 const { copyWithTip } = useCopyTip();
+const { handleSave } = useSaveTip();
 
 async function copyKey(key: string, e: Event) {
   await copyWithTip(key, e);
@@ -178,12 +180,11 @@ async function startEditKey() {
   editKeyTemp.value = detail.currentKey?.key ?? '';
   editingKey.value = true;
 }
-async function saveEditKey() {
+async function saveEditKey(e: Event) {
   const newKey = editKeyTemp.value.trim();
   if (!newKey || newKey === detail.currentKey?.key) { editingKey.value = false; return; }
-  const ok = await detail.renameKey(newKey);
-  if (ok) cascade.refreshKeys(true);
-  editingKey.value = false;
+  const ok = await handleSave(() => detail.renameKey(newKey), e);
+  if (ok) { cascade.refreshKeys(true); editingKey.value = false; }
 }
 function cancelEditKey() { editingKey.value = false; }
 
@@ -194,25 +195,41 @@ function startEditString() {
   stringTemp.value = (detail.currentValue as any).value;
   editingString.value = true;
 }
-async function saveEditString() {
-  const ok = await detail.saveStringValue(stringTemp.value);
+async function saveEditString(e: Event) {
+  const ok = await handleSave(() => detail.saveStringValue(stringTemp.value), e);
   if (ok) editingString.value = false;
 }
 function cancelEditString() { editingString.value = false; }
 
-// Hash field edit: track which row is being edited
+// Hash field value edit: track which row is being edited
 const editingHashField = ref<string | null>(null);
 const hashFieldTemp = ref('');
 function startEditHash(field: string, value: string) {
   editingHashField.value = field;
   hashFieldTemp.value = value;
 }
-async function saveEditHash() {
+async function saveEditHash(e: Event) {
   if (editingHashField.value === null) return;
-  const ok = await detail.saveHashField(editingHashField.value, hashFieldTemp.value);
+  const ok = await handleSave(() => detail.saveHashField(editingHashField.value!, hashFieldTemp.value), e);
   if (ok) editingHashField.value = null;
 }
 function cancelEditHash() { editingHashField.value = null; }
+
+// Hash field NAME rename
+const renamingHashField = ref<string | null>(null);
+const hashFieldRenameTemp = ref('');
+function startRenameHashField(field: string) {
+  renamingHashField.value = field;
+  hashFieldRenameTemp.value = field;
+}
+async function saveRenameHashField(e: Event) {
+  if (renamingHashField.value === null) return;
+  const newName = hashFieldRenameTemp.value.trim();
+  if (!newName || newName === renamingHashField.value) { renamingHashField.value = null; return; }
+  const ok = await handleSave(() => detail.renameHashField(renamingHashField.value!, newName), e);
+  if (ok) renamingHashField.value = null;
+}
+function cancelRenameHashField() { renamingHashField.value = null; }
 
 // List item edit
 const editingListIndex = ref<number | null>(null);
@@ -221,15 +238,14 @@ function startEditList(index: number, value: string) {
   editingListIndex.value = index;
   listItemTemp.value = value;
 }
-async function saveEditList() {
+async function saveEditList(e: Event) {
   if (editingListIndex.value === null) return;
   const listValue = detail.currentValue as any;
-  // When filter is active, use originalIndices to get the real Redis index
   const originalIndices = listValue?.originalIndices as number[] | undefined;
   const globalIndex = originalIndices
     ? originalIndices[editingListIndex.value]
     : detail.currentPage * detail.pageSize + editingListIndex.value;
-  const ok = await detail.saveListItem(globalIndex, listItemTemp.value);
+  const ok = await handleSave(() => detail.saveListItem(globalIndex, listItemTemp.value), e);
   if (ok) editingListIndex.value = null;
 }
 function cancelEditList() { editingListIndex.value = null; }
@@ -241,9 +257,9 @@ function startEditSet(member: string) {
   editingSetMember.value = member;
   setMemberTemp.value = member;
 }
-async function saveEditSet() {
+async function saveEditSet(e: Event) {
   if (editingSetMember.value === null) return;
-  const ok = await detail.saveSetMember(editingSetMember.value, setMemberTemp.value);
+  const ok = await handleSave(() => detail.saveSetMember(editingSetMember.value!, setMemberTemp.value), e);
   if (ok) editingSetMember.value = null;
 }
 function cancelEditSet() { editingSetMember.value = null; }
@@ -257,9 +273,9 @@ function startEditZSet(member: string, score: number) {
   zsetMemberTemp.value = member;
   zsetScoreTemp.value = score;
 }
-async function saveEditZSet() {
+async function saveEditZSet(e: Event) {
   if (editingZSetMember.value === null) return;
-  const ok = await detail.saveZSetMember(editingZSetMember.value, zsetMemberTemp.value, zsetScoreTemp.value);
+  const ok = await handleSave(() => detail.saveZSetMember(editingZSetMember.value!, zsetMemberTemp.value, zsetScoreTemp.value), e);
   if (ok) editingZSetMember.value = null;
 }
 function cancelEditZSet() { editingZSetMember.value = null; }
@@ -271,11 +287,11 @@ function startEditTtl() {
   ttlTemp.value = detail.ttlRemaining > 0 ? String(detail.ttlRemaining) : '-1';
   editingTtl.value = true;
 }
-async function saveEditTtl() {
+async function saveEditTtl(e: Event) {
   const val = parseInt(ttlTemp.value, 10);
   if (isNaN(val)) { editingTtl.value = false; return; }
-  await detail.setTtl(val);
-  editingTtl.value = false;
+  const ok = await handleSave(() => detail.setTtl(val), e);
+  if (ok) editingTtl.value = false;
 }
 function cancelEditTtl() { editingTtl.value = false; }
 
@@ -291,6 +307,10 @@ interface FloatingWin {
   height: number;
   pinned: boolean;
   zIndex: number;
+  /** Cell type for edit routing: 'hash' | 'list' | 'set' | 'zset' */
+  cellType?: string;
+  /** Identifier for the cell: field name (hash), index (list), member (set/zset) */
+  cellId?: string;
 }
 
 const floatingWindows = reactive<FloatingWin[]>([]);
@@ -301,7 +321,7 @@ function getNextZIndex() {
   return ++topZIndex;
 }
 
-function showCellPopup(e: MouseEvent, content: string, title: string) {
+function showCellPopup(e: MouseEvent, content: string, title: string, cellType?: string, cellId?: string) {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   const x = Math.min(e.clientX + 8, vw - 420);
@@ -317,6 +337,8 @@ function showCellPopup(e: MouseEvent, content: string, title: string) {
     existing.x = x;
     existing.y = y;
     existing.zIndex = getNextZIndex();
+    existing.cellType = cellType;
+    existing.cellId = cellId;
     return;
   }
 
@@ -332,6 +354,8 @@ function showCellPopup(e: MouseEvent, content: string, title: string) {
     height: 240,
     pinned: false,
     zIndex: getNextZIndex(),
+    cellType,
+    cellId,
   });
 }
 
@@ -371,6 +395,37 @@ function focusWin(id: string) {
   if (win) {
     win.zIndex = getNextZIndex();
   }
+}
+
+/** Handle content save from floating window edit mode */
+async function handleSaveContent(id: string, newContent: string) {
+  const win = floatingWindows.find((w) => w.id === id);
+  if (!win || !win.cellType) return false;
+
+  let ok = false;
+  switch (win.cellType) {
+    case 'hash':
+      ok = await detail.saveHashField(win.cellId!, newContent);
+      break;
+    case 'list':
+      ok = await detail.saveListItem(parseInt(win.cellId!), newContent);
+      break;
+    case 'set':
+      ok = await detail.saveSetMember(win.cellId!, newContent);
+      break;
+    case 'zset': {
+      // Find current score for the member
+      const zval = detail.currentValue as any;
+      const member = zval?.members?.find((m: any) => m.member === win.cellId);
+      ok = await detail.saveZSetMember(win.cellId!, newContent, member?.score ?? 0);
+      break;
+    }
+  }
+
+  if (ok) {
+    win.content = newContent;
+  }
+  return ok;
 }
 
 // Auto-load keys when connection changes or page mounts
@@ -475,13 +530,13 @@ onBeforeUnmount(() => {
             <template v-if="editingKey">
               <input
                 v-model="editKeyTemp"
-                @keyup.enter="saveEditKey"
+                @keyup.enter="saveEditKey($event)"
                 @keyup.escape="cancelEditKey"
                 ref="editKeyInputRef"
                 class="text-sm font-medium font-mono text-text-primary bg-bg-primary border border-redis rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-redis/30 min-w-0"
                 :placeholder="t('detail.renameKeyPlaceholder')"
               />
-              <button @click="saveEditKey" class="text-success hover:text-success/80 shrink-0"><Save :size="13" /></button>
+              <button @click="saveEditKey($event)" class="text-success hover:text-success/80 shrink-0"><Save :size="13" /></button>
               <button @click="cancelEditKey" class="text-text-muted hover:text-text-primary shrink-0"><X :size="13" /></button>
             </template>
             <template v-else>
@@ -519,7 +574,7 @@ onBeforeUnmount(() => {
               <label class="text-xs font-medium text-text-secondary">{{ t("detail.value") }}</label>
               <div class="flex items-center gap-1.5">
                 <template v-if="editingString">
-                  <button @click="saveEditString" class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium bg-success/10 text-success rounded-lg hover:bg-success/20 transition-colors">
+                  <button @click="saveEditString($event)" class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium bg-success/10 text-success rounded-lg hover:bg-success/20 transition-colors">
                     <Save :size="11" /> {{ t("detail.save") }}
                   </button>
                   <button @click="cancelEditString" class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-text-muted rounded-lg hover:bg-bg-hover transition-colors">
@@ -576,21 +631,41 @@ onBeforeUnmount(() => {
                 </tr></thead>
                 <tbody>
                   <tr v-for="(f, i) in (detail.currentValue as any).fields" :key="f.field" class="border-b border-border-light last:border-0" :class="i % 2 ? 'bg-bg-primary/50' : ''">
-                    <td class="px-3 py-2 font-mono text-xs text-text-primary font-medium">{{ f.field }}</td>
+                    <td class="px-3 py-2 font-mono text-xs text-text-primary font-medium">
+                      <!-- Field name editing -->
+                      <div v-if="renamingHashField === f.field" class="flex items-center gap-1.5">
+                        <input v-model="hashFieldRenameTemp" @keyup.enter="saveRenameHashField($event)" @keyup.escape="cancelRenameHashField"
+                          class="flex-1 text-xs font-mono font-medium px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-bg-secondary" />
+                        <button @click="saveRenameHashField($event)" class="text-success hover:text-success/80"><Save :size="11" /></button>
+                        <button @click="cancelRenameHashField" class="text-text-muted hover:text-text-primary"><X :size="11" /></button>
+                      </div>
+                      <!-- Field name display with hover edit button -->
+                      <div v-else class="flex items-center gap-1 group/field">
+                        <span class="truncate" :title="f.field">{{ f.field }}</span>
+                        <button @click="startRenameHashField(f.field)" class="shrink-0 text-text-muted hover:text-text-primary opacity-0 group-hover/field:opacity-100 transition-opacity">
+                          <Pencil :size="10" />
+                        </button>
+                      </div>
+                    </td>
                     <td class="px-3 py-2 font-mono text-xs text-text-secondary truncate max-w-0">
                       <!-- Editing mode -->
                       <div v-if="editingHashField === f.field" class="flex items-center gap-1.5">
-                        <input v-model="hashFieldTemp" @keyup.enter="saveEditHash" @keyup.escape="cancelEditHash"
+                        <input v-model="hashFieldTemp" @keyup.enter="saveEditHash($event)" @keyup.escape="cancelEditHash"
                           class="flex-1 text-xs font-mono px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-bg-secondary" />
-                        <button @click="saveEditHash" class="text-success hover:text-success/80"><Save :size="11" /></button>
+                        <button @click="saveEditHash($event)" class="text-success hover:text-success/80"><Save :size="11" /></button>
                         <button @click="cancelEditHash" class="text-text-muted hover:text-text-primary"><X :size="11" /></button>
                       </div>
-                      <!-- Display mode: click to view popup, double-click to edit -->
-                      <span v-else
-                        class="truncate block cursor-pointer hover:bg-bg-hover rounded px-1 -mx-1"
-                        @click="showCellPopup($event, f.value, f.field)"
-                        @dblclick.stop="startEditHash(f.field, f.value)"
-                      >{{ f.value }}</span>
+                      <!-- Display mode: click to view popup, button or double-click to edit -->
+                      <div v-else class="flex items-center gap-1 group/cell min-w-0">
+                        <span
+                          class="truncate cursor-pointer hover:bg-bg-hover rounded px-1 -mx-1 flex-1 min-w-0"
+                          @click="showCellPopup($event, f.value, f.field, 'hash', f.field)"
+                          @dblclick.stop="startEditHash(f.field, f.value)"
+                        >{{ f.value }}</span>
+                        <button @click="startEditHash(f.field, f.value)" class="shrink-0 text-text-muted hover:text-text-primary opacity-0 group-hover/cell:opacity-100 transition-opacity">
+                          <Pencil :size="10" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 </tbody>
@@ -634,16 +709,21 @@ onBeforeUnmount(() => {
                     <td class="px-3 py-2 text-xs text-text-muted font-mono">{{ (detail.currentValue as any).originalIndices ? (detail.currentValue as any).originalIndices[i] : detail.currentPage * detail.pageSize + i }}</td>
                     <td class="px-3 py-2 font-mono text-xs text-text-primary truncate max-w-0">
                       <div v-if="editingListIndex === i" class="flex items-center gap-1.5">
-                        <input v-model="listItemTemp" @keyup.enter="saveEditList" @keyup.escape="cancelEditList"
+                        <input v-model="listItemTemp" @keyup.enter="saveEditList($event)" @keyup.escape="cancelEditList"
                           class="flex-1 text-xs font-mono px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-bg-secondary" />
-                        <button @click="saveEditList" class="text-success hover:text-success/80"><Save :size="11" /></button>
+                        <button @click="saveEditList($event)" class="text-success hover:text-success/80"><Save :size="11" /></button>
                         <button @click="cancelEditList" class="text-text-muted hover:text-text-primary"><X :size="11" /></button>
                       </div>
-                      <span v-else
-                        class="truncate block cursor-pointer hover:bg-bg-hover rounded px-1 -mx-1"
-                        @click="showCellPopup($event, item, `Index ${(detail.currentValue as any).originalIndices ? (detail.currentValue as any).originalIndices[i] : detail.currentPage * detail.pageSize + i}`)"
-                        @dblclick.stop="startEditList(i, item)"
-                      >{{ item }}</span>
+                      <div v-else class="flex items-center gap-1 group/cell min-w-0">
+                        <span
+                          class="truncate cursor-pointer hover:bg-bg-hover rounded px-1 -mx-1 flex-1 min-w-0"
+                          @click="showCellPopup($event, item, `Index ${(detail.currentValue as any).originalIndices ? (detail.currentValue as any).originalIndices[i] : detail.currentPage * detail.pageSize + i}`, 'list', String((detail.currentValue as any).originalIndices ? (detail.currentValue as any).originalIndices[i] : detail.currentPage * detail.pageSize + i))"
+                          @dblclick.stop="startEditList(i, item)"
+                        >{{ item }}</span>
+                        <button @click="startEditList(i, item)" class="shrink-0 text-text-muted hover:text-text-primary opacity-0 group-hover/cell:opacity-100 transition-opacity">
+                          <Pencil :size="10" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 </tbody>
@@ -681,17 +761,22 @@ onBeforeUnmount(() => {
                 <span class="text-text-muted w-6 text-right shrink-0">{{ detail.currentPage * detail.pageSize + i + 1 }}</span>
                 <!-- Editing -->
                 <div v-if="editingSetMember === m" class="flex items-center gap-1.5 flex-1 min-w-0">
-                  <input v-model="setMemberTemp" @keyup.enter="saveEditSet" @keyup.escape="cancelEditSet"
+                  <input v-model="setMemberTemp" @keyup.enter="saveEditSet($event)" @keyup.escape="cancelEditSet"
                     class="flex-1 text-xs font-mono px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-bg-secondary min-w-0" />
-                  <button @click="saveEditSet" class="text-success hover:text-success/80 shrink-0"><Save :size="11" /></button>
+                  <button @click="saveEditSet($event)" class="text-success hover:text-success/80 shrink-0"><Save :size="11" /></button>
                   <button @click="cancelEditSet" class="text-text-muted hover:text-text-primary shrink-0"><X :size="11" /></button>
                 </div>
                 <!-- Display -->
-                <span v-else
-                  class="text-text-primary truncate cursor-pointer hover:bg-bg-hover rounded px-1 -mx-1 flex-1 min-w-0"
-                  @click="showCellPopup($event, m, `Member ${detail.currentPage * detail.pageSize + i + 1}`)"
-                  @dblclick.stop="startEditSet(m)"
-                >{{ m }}</span>
+                <div v-else class="flex items-center gap-1 flex-1 min-w-0 group/cell">
+                  <span
+                    class="text-text-primary truncate cursor-pointer hover:bg-bg-hover rounded px-1 -mx-1 flex-1 min-w-0"
+                    @click="showCellPopup($event, m, `Member ${detail.currentPage * detail.pageSize + i + 1}`, 'set', m)"
+                    @dblclick.stop="startEditSet(m)"
+                  >{{ m }}</span>
+                  <button @click="startEditSet(m)" class="shrink-0 text-text-muted hover:text-text-primary opacity-0 group-hover/cell:opacity-100 transition-opacity">
+                    <Pencil :size="10" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -731,18 +816,23 @@ onBeforeUnmount(() => {
                     <td class="px-3 py-2 text-xs font-mono text-redis font-semibold">{{ m.score.toLocaleString() }}</td>
                     <td class="px-3 py-2 font-mono text-xs text-text-primary truncate max-w-0">
                       <div v-if="editingZSetMember === m.member" class="flex items-center gap-1.5">
-                        <input v-model.number="zsetScoreTemp" type="number" @keyup.enter="saveEditZSet" @keyup.escape="cancelEditZSet"
+                        <input v-model.number="zsetScoreTemp" type="number" @keyup.enter="saveEditZSet($event)" @keyup.escape="cancelEditZSet"
                           class="w-16 text-xs font-mono px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-bg-secondary" />
-                        <input v-model="zsetMemberTemp" @keyup.enter="saveEditZSet" @keyup.escape="cancelEditZSet"
+                        <input v-model="zsetMemberTemp" @keyup.enter="saveEditZSet($event)" @keyup.escape="cancelEditZSet"
                           class="flex-1 text-xs font-mono px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-bg-secondary min-w-0" />
-                        <button @click="saveEditZSet" class="text-success hover:text-success/80"><Save :size="11" /></button>
+                        <button @click="saveEditZSet($event)" class="text-success hover:text-success/80"><Save :size="11" /></button>
                         <button @click="cancelEditZSet" class="text-text-muted hover:text-text-primary"><X :size="11" /></button>
                       </div>
-                      <span v-else
-                        class="truncate block cursor-pointer hover:bg-bg-hover rounded px-1 -mx-1"
-                        @click="showCellPopup($event, m.member, `Score: ${m.score}`)"
-                        @dblclick.stop="startEditZSet(m.member, m.score)"
-                      >{{ m.member }}</span>
+                      <div v-else class="flex items-center gap-1 group/cell min-w-0">
+                        <span
+                          class="truncate cursor-pointer hover:bg-bg-hover rounded px-1 -mx-1 flex-1 min-w-0"
+                          @click="showCellPopup($event, m.member, `Score: ${m.score}`, 'zset', m.member)"
+                          @dblclick.stop="startEditZSet(m.member, m.score)"
+                        >{{ m.member }}</span>
+                        <button @click="startEditZSet(m.member, m.score)" class="shrink-0 text-text-muted hover:text-text-primary opacity-0 group-hover/cell:opacity-100 transition-opacity">
+                          <Pencil :size="10" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 </tbody>
@@ -778,12 +868,12 @@ onBeforeUnmount(() => {
         <!-- TTL display / edit -->
         <template v-if="editingTtl">
           <div class="flex items-center gap-1.5 mt-2 justify-center">
-            <input v-model="ttlTemp" @keyup.enter="saveEditTtl" @keyup.escape="cancelEditTtl"
+            <input v-model="ttlTemp" @keyup.enter="saveEditTtl($event)" @keyup.escape="cancelEditTtl"
               type="number"
               class="w-20 text-xs font-mono px-2 py-1 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-bg-secondary text-center"
               :placeholder="t('detail.setTtlPlaceholder')"
             />
-            <button @click="saveEditTtl" class="w-7 h-7 flex items-center justify-center rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors"><Save :size="13" /></button>
+            <button @click="saveEditTtl($event)" class="w-7 h-7 flex items-center justify-center rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors"><Save :size="13" /></button>
             <button @click="cancelEditTtl" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-bg-hover text-text-muted hover:text-text-primary transition-colors"><X :size="13" /></button>
           </div>
           <p class="text-[10px] text-text-muted mt-1">{{ t("detail.setTtlPlaceholder") }}</p>
@@ -829,6 +919,8 @@ onBeforeUnmount(() => {
         :title="win.title"
         :content="win.content"
         :redis-key="win.redisKey"
+        :cell-type="win.cellType"
+        :cell-id="win.cellId"
         :x="win.x"
         :y="win.y"
         :width="win.width"
@@ -840,6 +932,7 @@ onBeforeUnmount(() => {
         @update-position="updateWinPosition"
         @update-size="updateWinSize"
         @focus="focusWin"
+        @save-content="handleSaveContent"
       />
     </Teleport>
 

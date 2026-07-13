@@ -789,6 +789,7 @@ pub async fn db_size(
 ///   - "set": set full value (string → SET, hash → HSET field, list → LSET index, set → SREM+SADD, zset → ZADD)
 ///   - "delete_field": remove a sub-element (HDEL, LREM 1, SREM, ZREM)
 ///   - "add_field": add a new sub-element (HSET new field, RPUSH, SADD, ZADD)
+///   - "rename_field": rename a hash field (HGET → HDEL → HSET)
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn set_value(
@@ -991,6 +992,43 @@ pub async fn set_value(
                 Ok(true)
             }
             _ => Err(format!("add_field not supported for type: {}", key_type)),
+        },
+        "rename_field" => match key_type.as_str() {
+            "hash" => {
+                let old_field = old_value.ok_or("old_value (old field name) is required for hash rename_field")?;
+                let new_field = field.ok_or("field (new field name) is required for hash rename_field")?;
+                if old_field == new_field {
+                    return Ok(true);
+                }
+                // Check new field doesn't already exist
+                let exists: bool = redis::cmd("HEXISTS")
+                    .arg(&key)
+                    .arg(&new_field)
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("HEXISTS error: {}", e))?;
+                if exists {
+                    return Err("Target field already exists".to_string());
+                }
+                // Get old field value
+                let val: Option<Vec<u8>> = redis::cmd("HGET")
+                    .arg(&key)
+                    .arg(&old_field)
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("HGET error: {}", e))?;
+                let val = val.ok_or("Source field does not exist".to_string())?;
+                // Delete old field and set new field atomically via pipeline
+                let mut pipe = redis::pipe();
+                pipe.cmd("HDEL").arg(&key).arg(&old_field);
+                pipe.cmd("HSET").arg(&key).arg(&new_field).arg(val);
+                let _: Vec<redis::Value> = pipe
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("Rename field pipeline error: {}", e))?;
+                Ok(true)
+            }
+            _ => Err(format!("rename_field not supported for type: {}", key_type)),
         },
         _ => Err(format!("Unknown action: {}", action)),
     }

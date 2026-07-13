@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onBeforeUnmount } from "vue";
-import { X, Pin, PinOff, Copy, Check, KeyRound } from "lucide-vue-next";
+import { X, Pin, PinOff, Copy, Check, KeyRound, Pencil, Save } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();
@@ -11,6 +11,8 @@ const props = withDefaults(
     title: string;
     content: string;
     redisKey?: string;
+    cellType?: string;
+    cellId?: string;
     x: number;
     y: number;
     width?: number;
@@ -18,7 +20,7 @@ const props = withDefaults(
     pinned?: boolean;
     zIndex?: number;
   }>(),
-  { width: 380, height: 240, pinned: false, zIndex: 9999, redisKey: '' }
+  { width: 380, height: 240, pinned: false, zIndex: 9999, redisKey: '', cellType: '', cellId: '' }
 );
 
 const emit = defineEmits<{
@@ -27,6 +29,7 @@ const emit = defineEmits<{
   (e: "updatePosition", id: string, x: number, y: number): void;
   (e: "updateSize", id: string, w: number, h: number): void;
   (e: "focus", id: string): void;
+  (e: "saveContent", id: string, newContent: string): Promise<boolean>;
 }>();
 
 // Position & size
@@ -57,6 +60,31 @@ const copied = ref(false);
 const copiedKey = ref(false);
 let copyTimer: ReturnType<typeof setTimeout> | null = null;
 let copyKeyTimer: ReturnType<typeof setTimeout> | null = null;
+
+// Edit mode
+const isEditing = ref(false);
+const editTemp = ref('');
+const isSaving = ref(false);
+
+function startEdit() {
+  editTemp.value = props.content;
+  isEditing.value = true;
+}
+
+function cancelEdit() {
+  isEditing.value = false;
+}
+
+async function saveEdit() {
+  if (isSaving.value) return;
+  isSaving.value = true;
+  try {
+    const ok = await emit('saveContent', props.id, editTemp.value);
+    if (ok) isEditing.value = false;
+  } finally {
+    isSaving.value = false;
+  }
+}
 
 const MIN_W = 220;
 const MIN_H = 140;
@@ -228,6 +256,15 @@ onBeforeUnmount(() => {
         <span class="text-xs font-semibold text-text-secondary truncate leading-tight">{{ title }}</span>
       </div>
       <div class="flex items-center gap-1 shrink-0">
+        <!-- Edit button (only when cellType is set) -->
+        <button
+          v-if="cellType && !isEditing"
+          @click.stop="startEdit"
+          class="p-1 rounded text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors"
+          :title="t('detail.edit')"
+        >
+          <Pencil :size="12" />
+        </button>
         <!-- Copy Key button -->
         <button
           v-if="redisKey"
@@ -274,7 +311,22 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Content -->
-    <div class="px-3 py-2.5 text-xs font-mono text-text-primary overflow-auto whitespace-pre-wrap break-all flex-1">
+    <div v-if="isEditing" class="flex flex-col flex-1 min-h-0 p-2 gap-2">
+      <textarea
+        v-model="editTemp"
+        class="flex-1 text-xs font-mono px-2 py-1.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-bg-primary text-text-primary resize-none"
+        @keydown.escape="cancelEdit"
+      />
+      <div class="flex items-center justify-end gap-1.5 shrink-0">
+        <button @click.stop="cancelEdit" class="px-2 py-1 text-xs rounded hover:bg-bg-hover text-text-muted hover:text-text-primary transition-colors">
+          {{ t("detail.cancel") }}
+        </button>
+        <button @click.stop="saveEdit" :disabled="isSaving" class="px-2 py-1 text-xs rounded bg-success/10 text-success hover:bg-success/20 transition-colors disabled:opacity-50">
+          {{ t("detail.save") }}
+        </button>
+      </div>
+    </div>
+    <div v-else class="px-3 py-2.5 text-xs font-mono text-text-primary overflow-auto whitespace-pre-wrap break-all flex-1">
       {{ content }}
     </div>
   </div>
