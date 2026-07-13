@@ -124,7 +124,7 @@ export const useCascadeStore = defineStore("cascade", () => {
     const searchPattern = debouncedSearchQuery.value ? `*${debouncedSearchQuery.value}*` : "*";
 
     do {
-      const raw = await tauriApi.cascade.scanKeys(connId, searchPattern, cursor, 2);
+      const raw = await tauriApi.cascade.scanKeys(connId, searchPattern, cursor, 200);
       const response = raw as unknown as [number, any[]];
       const nextCursor = response[0];
       const rustKeys = Array.isArray(response[1]) ? response[1] : [];
