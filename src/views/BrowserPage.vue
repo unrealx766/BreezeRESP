@@ -456,6 +456,7 @@ async function handleSaveContent(id: string, newContent: string) {
 
   if (ok) {
     win.content = newContent;
+    toast.success(t("detail.saveSuccess"));
   } else {
     toast.error(t("detail.saveFailed"));
   }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onBeforeUnmount } from "vue";
+import { ref, computed, watch, onBeforeUnmount } from "vue";
 import { X, Pin, PinOff, Copy, Check, KeyRound, Pencil } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
 
@@ -65,6 +65,11 @@ let copyKeyTimer: ReturnType<typeof setTimeout> | null = null;
 const isEditing = ref(false);
 const editTemp = ref('');
 const isSaving = ref(false);
+
+// Sync editTemp with content prop when it changes externally (e.g. after save)
+watch(() => props.content, (val) => {
+  editTemp.value = val;
+});
 
 function startEdit() {
   editTemp.value = props.content;
