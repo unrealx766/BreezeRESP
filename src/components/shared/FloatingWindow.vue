@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onBeforeUnmount } from "vue";
-import { X, Pin, PinOff, Copy, Check, KeyRound, Pencil, Save } from "lucide-vue-next";
+import { X, Pin, PinOff, Copy, Check, KeyRound, Pencil } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
 
 const { t } = useI18n();

@@ -11,6 +11,7 @@ import FloatingWindow from "@/components/shared/FloatingWindow.vue";
 import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
 import { useCopyTip } from "@/utils/copyTip";
 import { useSaveTip } from "@/utils/saveTip";
+import { toast } from "@/utils/toast";
 import {
   Search, RefreshCw, Trash2, Copy, Tag,
   Type, Hash, List, CircleDot, BarChart3,
@@ -169,6 +170,7 @@ async function deleteKey() {
     detail.clearDetail();
   } catch (e) {
     console.error("Delete key failed:", e);
+    toast.error(typeof e === 'string' ? e : `Failed to delete key: ${key}`);
   }
 }
 
@@ -403,27 +405,32 @@ async function handleSaveContent(id: string, newContent: string) {
   if (!win || !win.cellType) return false;
 
   let ok = false;
-  switch (win.cellType) {
-    case 'hash':
-      ok = await detail.saveHashField(win.cellId!, newContent);
-      break;
-    case 'list':
-      ok = await detail.saveListItem(parseInt(win.cellId!), newContent);
-      break;
-    case 'set':
-      ok = await detail.saveSetMember(win.cellId!, newContent);
-      break;
-    case 'zset': {
-      // Find current score for the member
-      const zval = detail.currentValue as any;
-      const member = zval?.members?.find((m: any) => m.member === win.cellId);
-      ok = await detail.saveZSetMember(win.cellId!, newContent, member?.score ?? 0);
-      break;
+  try {
+    switch (win.cellType) {
+      case 'hash':
+        ok = await detail.saveHashField(win.cellId!, newContent);
+        break;
+      case 'list':
+        ok = await detail.saveListItem(parseInt(win.cellId!), newContent);
+        break;
+      case 'set':
+        ok = await detail.saveSetMember(win.cellId!, newContent);
+        break;
+      case 'zset': {
+        const zval = detail.currentValue as any;
+        const member = zval?.members?.find((m: any) => m.member === win.cellId);
+        ok = await detail.saveZSetMember(win.cellId!, newContent, member?.score ?? 0);
+        break;
+      }
     }
+  } catch (e) {
+    console.error("Failed to save from floating window:", e);
   }
 
   if (ok) {
     win.content = newContent;
+  } else {
+    toast.error(t("detail.saveFailed"));
   }
   return ok;
 }
