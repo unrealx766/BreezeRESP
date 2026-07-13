@@ -1,6 +1,7 @@
-use deadpool_redis::{Config, Pool, Runtime};
+use deadpool_redis::{Config, Pool, Runtime, Timeouts};
 use std::collections::HashMap;
 use std::sync::Mutex;
+use std::time::Duration;
 
 /// Manages multiple Redis connection pools, keyed by connection ID.
 pub struct ConnectionPoolManager {
@@ -22,6 +23,7 @@ impl ConnectionPoolManager {
         port: u16,
         password: Option<&str>,
         db: u8,
+        ssl: bool,
     ) -> Result<Pool, String> {
         let mut pools = self.pools.lock().map_err(|e| e.to_string())?;
 
@@ -29,17 +31,26 @@ impl ConnectionPoolManager {
             return Ok(pool.clone());
         }
 
+        let scheme = if ssl { "rediss" } else { "redis" };
         let url = match password {
             Some(pw) if !pw.is_empty() => {
                 let encoded_pw = urlencoding::encode(pw);
-                format!("redis://:{}@{}:{}/{}", encoded_pw, host, port, db)
+                format!("{}://:{}@{}:{}/{}", scheme, encoded_pw, host, port, db)
             }
-            _ => format!("redis://{}:{}/{}", host, port, db),
+            _ => format!("{}://{}:{}/{}", scheme, host, port, db),
         };
 
         let cfg = Config::from_url(url);
         let pool = cfg
-            .create_pool(Some(Runtime::Tokio1))
+            .builder()
+            .map_err(|e| format!("Failed to build pool: {}", e))?
+            .runtime(Runtime::Tokio1)
+            .timeouts(Timeouts {
+                wait: Some(Duration::from_secs(10)),
+                create: Some(Duration::from_secs(10)),
+                recycle: Some(Duration::from_secs(5)),
+            })
+            .build()
             .map_err(|e| format!("Failed to create pool: {}", e))?;
 
         pools.insert(id.to_string(), pool.clone());

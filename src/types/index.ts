@@ -14,6 +14,7 @@ export interface RedisConnection {
   status: ConnectionStatus;
   lastUsed?: number;
   pinned?: boolean;
+  hasPassword?: boolean;
 }
 
 export interface RedisKey {

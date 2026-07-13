@@ -1,9 +1,13 @@
 use crate::core::validate::{validate_connection_config, validate_connection_id};
 use crate::AppState;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use tauri::State;
 
+const CONN_TIMEOUT: Duration = Duration::from_secs(10);
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ConnectionConfig {
     pub id: String,
     pub name: String,
@@ -14,9 +18,16 @@ pub struct ConnectionConfig {
     pub ssl: bool,
     #[serde(default)]
     pub pinned: bool,
+    /// When true and password is empty, look up the saved password from config_store
+    #[serde(default)]
+    pub use_saved_password: Option<bool>,
+    /// When true, preserve the existing password (don't overwrite with empty)
+    #[serde(default)]
+    pub keep_password: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ConnectionInfo {
     pub id: String,
     pub name: String,
@@ -27,6 +38,8 @@ pub struct ConnectionInfo {
     pub status: String,
     #[serde(default)]
     pub pinned: bool,
+    /// Whether this connection has a password stored (for UI display)
+    pub has_password: bool,
 }
 
 /// Connect to a Redis instance
@@ -52,14 +65,17 @@ pub async fn connect(
         } else {
             Some(config.password.as_str())
         };
-        pm.get_or_create(&config.id, &config.host, config.port, pw, config.db)?
+        pm.get_or_create(&config.id, &config.host, config.port, pw, config.db, config.ssl)?
     };
 
-    // Verify connection with PING
-    let mut conn = pool.get().await.map_err(|e| format!("Pool get error: {}", e))?;
-    let _: String = redis::cmd("PING")
-        .query_async(&mut *conn)
+    // Verify connection with PING (with timeout to prevent TLS hang)
+    let mut conn = tokio::time::timeout(CONN_TIMEOUT, pool.get())
         .await
+        .map_err(|_| "Connection timed out. If using SSL/TLS, ensure the server supports TLS.".to_string())?
+        .map_err(|e| format!("Pool get error: {}", e))?;
+    let _: String = tokio::time::timeout(CONN_TIMEOUT, redis::cmd("PING").query_async(&mut *conn))
+        .await
+        .map_err(|_| "PING timed out".to_string())?
         .map_err(|e| format!("PING failed: {}", e))?;
 
     Ok(ConnectionInfo {
@@ -71,6 +87,7 @@ pub async fn connect(
         ssl: config.ssl,
         status: "connected".to_string(),
         pinned: config.pinned,
+        has_password: !config.password.is_empty(),
     })
 }
 
@@ -92,24 +109,41 @@ pub async fn test_connection(
     validate_connection_config(&config.host, config.port, &config.name, &config.password)?;
 
     let test_id = format!("__test_{}", config.id);
-    let pw = if config.password.is_empty() {
+
+    // Resolve password: if use_saved_password is set and password is empty, look up from config_store
+    let resolved_password = if config.password.is_empty() && config.use_saved_password.unwrap_or(false) {
+        let cs = state.config_store.lock().map_err(|e| e.to_string())?;
+        let connections = cs.load()?;
+        connections
+            .iter()
+            .find(|c| c.id == config.id)
+            .map(|c| c.password.clone())
+            .unwrap_or_default()
+    } else {
+        config.password.clone()
+    };
+
+    let pw = if resolved_password.is_empty() {
         None
     } else {
-        Some(config.password.as_str())
+        Some(resolved_password.as_str())
     };
 
     // Create temp pool
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
-        pm.get_or_create(&test_id, &config.host, config.port, pw, config.db)?
+        pm.get_or_create(&test_id, &config.host, config.port, pw, config.db, config.ssl)?
     };
 
-    // Test with PING
+    // Test with PING (with timeout to prevent TLS hang)
     let result = async {
-        let mut conn = pool.get().await.map_err(|e| format!("Pool get error: {}", e))?;
-        let _: String = redis::cmd("PING")
-            .query_async(&mut *conn)
+        let mut conn = tokio::time::timeout(CONN_TIMEOUT, pool.get())
             .await
+            .map_err(|_| "Connection timed out. If using SSL/TLS, ensure the server supports TLS.".to_string())?
+            .map_err(|e| format!("Pool get error: {}", e))?;
+        let _: String = tokio::time::timeout(CONN_TIMEOUT, redis::cmd("PING").query_async(&mut *conn))
+            .await
+            .map_err(|_| "PING timed out".to_string())?
             .map_err(|e| format!("PING failed: {}", e))?;
         Ok::<bool, String>(true)
     }
@@ -140,6 +174,7 @@ pub async fn get_connections(state: State<'_, AppState>) -> Result<Vec<Connectio
             ssl: c.ssl,
             status: "disconnected".to_string(),
             pinned: c.pinned,
+            has_password: !c.password.is_empty(),
         })
         .collect())
 }
@@ -156,13 +191,24 @@ pub async fn save_connection(
     let cs = state.config_store.lock().map_err(|e| e.to_string())?;
     let mut connections = cs.load()?;
 
+    // Resolve password: if keep_password is set, preserve existing password
+    let password = if config.keep_password.unwrap_or(false) {
+        if let Some(existing) = connections.iter().find(|c| c.id == config.id) {
+            existing.password.clone()
+        } else {
+            config.password.clone()
+        }
+    } else {
+        config.password.clone()
+    };
+
     // Update existing or append
     let stored = crate::core::config_store::StoredConnection {
         id: config.id.clone(),
         name: config.name,
         host: config.host,
         port: config.port,
-        password: config.password,
+        password,
         db: config.db,
         ssl: config.ssl,
         pinned: config.pinned,
@@ -187,14 +233,14 @@ pub async fn switch_db(
     validate_connection_id(&id)?;
 
     // Get current connection info from config store
-    let (host, port, password) = {
+    let (host, port, password, ssl) = {
         let cs = state.config_store.lock().map_err(|e| e.to_string())?;
         let connections = cs.load()?;
         let conn = connections
             .iter()
             .find(|c| c.id == id)
             .ok_or_else(|| format!("Connection not found: {}", id))?;
-        (conn.host.clone(), conn.port, conn.password.clone())
+        (conn.host.clone(), conn.port, conn.password.clone(), conn.ssl)
     };
 
     // Remove old pool
@@ -207,14 +253,17 @@ pub async fn switch_db(
     let pw = if password.is_empty() { None } else { Some(password.as_str()) };
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
-        pm.get_or_create(&id, &host, port, pw, db)?
+        pm.get_or_create(&id, &host, port, pw, db, ssl)?
     };
 
-    // Verify with PING
-    let mut conn = pool.get().await.map_err(|e| format!("Pool get error: {}", e))?;
-    let _: String = redis::cmd("PING")
-        .query_async(&mut *conn)
+    // Verify with PING (with timeout to prevent TLS hang)
+    let mut conn = tokio::time::timeout(CONN_TIMEOUT, pool.get())
         .await
+        .map_err(|_| "Connection timed out. If using SSL/TLS, ensure the server supports TLS.".to_string())?
+        .map_err(|e| format!("Pool get error: {}", e))?;
+    let _: String = tokio::time::timeout(CONN_TIMEOUT, redis::cmd("PING").query_async(&mut *conn))
+        .await
+        .map_err(|_| "PING timed out".to_string())?
         .map_err(|e| format!("PING failed: {}", e))?;
 
     Ok(())

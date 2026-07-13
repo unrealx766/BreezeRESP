@@ -14,6 +14,27 @@ export const useConnectionStore = defineStore("connection", () => {
   /** IDs of connections that have been connected during this session (persists until app exit) */
   const sessionConnectedIds = ref<Set<string>>(new Set());
 
+  // ── Cancellation support ──
+  const _cancellers = new Map<string, () => void>();
+  let _formTestCanceller: (() => void) | null = null;
+
+  function _withCancel<T>(key: string, promise: Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      _cancellers.set(key, () => reject(new Error("__cancelled__")));
+      promise.then(resolve, reject).finally(() => _cancellers.delete(key));
+    });
+  }
+
+  function cancelConnect(id: string) {
+    _cancellers.get(`connect:${id}`)?.();
+  }
+  function cancelTest(id: string) {
+    _cancellers.get(`test:${id}`)?.();
+  }
+  function cancelFormTest() {
+    _formTestCanceller?.();
+  }
+
   const activeConnection = computed(() =>
     connections.value.find((c) => c.id === activeConnectionId.value) ?? null
   );
@@ -43,6 +64,7 @@ export const useConnectionStore = defineStore("connection", () => {
         ssl: info.ssl,
         status: "disconnected" as ConnectionStatus,
         pinned: info.pinned ?? false,
+        hasPassword: info.hasPassword ?? false,
       }));
     } catch (e) {
       console.error("Failed to load saved connections:", e);
@@ -51,7 +73,7 @@ export const useConnectionStore = defineStore("connection", () => {
 
   /** Build a Rust-side config from a local connection */
   function toRustConfig(conn: RedisConnection): RustConnectionConfig {
-    return {
+    const config: RustConnectionConfig = {
       id: conn.id,
       name: conn.name,
       host: conn.host,
@@ -61,6 +83,12 @@ export const useConnectionStore = defineStore("connection", () => {
       ssl: conn.ssl,
       pinned: conn.pinned ?? false,
     };
+    // If frontend doesn't have the real password (always empty after load),
+    // tell backend to preserve the stored password
+    if (!conn.password && !conn.id.startsWith("__form_test_")) {
+      config.keepPassword = true;
+    }
+    return config;
   }
 
   async function addConnection(conn: Omit<RedisConnection, "id" | "status">) {
@@ -84,12 +112,12 @@ export const useConnectionStore = defineStore("connection", () => {
   async function updateConnection(id: string, patch: Partial<RedisConnection>) {
     const idx = connections.value.findIndex((c) => c.id === id);
     if (idx !== -1) {
-      // If password is undefined in patch, preserve the existing password
+      // If password is undefined in patch, user didn't change it → set empty so toRustConfig adds keepPassword
       if (patch.password === undefined) {
-        patch = { ...patch, password: connections.value[idx].password };
+        patch = { ...patch, password: "" };
       }
       connections.value[idx] = { ...connections.value[idx], ...patch };
-      // Persist to disk
+      // Persist to disk (toRustConfig auto-sets keepPassword when password is empty)
       try {
         await tauriApi.connection.saveConnection(toRustConfig(connections.value[idx]));
       } catch (e) {
@@ -144,16 +172,21 @@ export const useConnectionStore = defineStore("connection", () => {
     lastError.value = null;
     setStatus(id, "connecting");
     try {
-      await tauriApi.connection.connect(toRustConfig(conn));
+      await _withCancel(`connect:${id}`, tauriApi.connection.connect(toRustConfig(conn)));
       setStatus(id, "connected");
       activeConnectionId.value = id;
       conn.lastUsed = Date.now();
       sessionConnectedIds.value = new Set([...sessionConnectedIds.value, id]);
       return true;
     } catch (e) {
+      const msg = typeof e === "string" ? e : (e as Error)?.message || String(e);
+      if (msg === "__cancelled__") {
+        setStatus(id, "disconnected");
+        return false;
+      }
       console.error("Connect failed:", e);
       setStatus(id, "error");
-      lastError.value = typeof e === "string" ? e : (e as Error)?.message || String(e);
+      lastError.value = msg;
       return false;
     }
   }
@@ -186,24 +219,37 @@ export const useConnectionStore = defineStore("connection", () => {
     const conn = connections.value.find((c) => c.id === id);
     if (!conn) return false;
 
+    lastError.value = null;
     setStatus(id, "connecting");
     try {
-      const result = await tauriApi.connection.testConnection(toRustConfig(conn));
+      const result = await _withCancel(`test:${id}`, tauriApi.connection.testConnection(toRustConfig(conn)));
       setStatus(id, result ? "connected" : "error");
       // Revert to disconnected since test doesn't maintain connection
       if (result) setStatus(id, "disconnected");
       return result;
     } catch (e) {
+      const msg = typeof e === "string" ? e : (e as Error)?.message || String(e);
+      if (msg === "__cancelled__") {
+        setStatus(id, "disconnected");
+        return false;
+      }
       console.error("Test connection failed:", e);
       setStatus(id, "error");
+      lastError.value = msg;
       return false;
     }
   }
 
   /** Test a connection from form data without saving it */
-  async function testFormConnection(config: Omit<RedisConnection, "id" | "status">): Promise<boolean> {
+  async function testFormConnection(
+    config: Omit<RedisConnection, "id" | "status">,
+    editingId?: string | null
+  ): Promise<boolean> {
+    lastError.value = null;
+    // If editing and password is empty, signal backend to use saved password
+    const useSavedPw = editingId && !config.password;
     const tempConfig: RustConnectionConfig = {
-      id: `__form_test_${Date.now()}`,
+      id: editingId || `__form_test_${Date.now()}`,
       name: config.name,
       host: config.host,
       port: config.port,
@@ -211,11 +257,19 @@ export const useConnectionStore = defineStore("connection", () => {
       db: config.db,
       ssl: config.ssl,
       pinned: false,
+      useSavedPassword: useSavedPw || undefined,
     };
     try {
-      return await tauriApi.connection.testConnection(tempConfig);
+      const promise = tauriApi.connection.testConnection(tempConfig);
+      return await new Promise<boolean>((resolve, reject) => {
+        _formTestCanceller = () => reject(new Error("__cancelled__"));
+        promise.then(resolve, reject).finally(() => { _formTestCanceller = null; });
+      });
     } catch (e) {
+      const msg = typeof e === "string" ? e : (e as Error)?.message || String(e);
+      if (msg === "__cancelled__") return false;
       console.error("Form test connection failed:", e);
+      lastError.value = msg;
       return false;
     }
   }
@@ -276,6 +330,9 @@ export const useConnectionStore = defineStore("connection", () => {
     markConnectionLost,
     testConnection,
     testFormConnection,
+    cancelConnect,
+    cancelTest,
+    cancelFormTest,
     switchDb,
     togglePin,
     dismissSession,

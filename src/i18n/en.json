@@ -39,6 +39,8 @@
     "confirmDelete": "Are you sure to delete connection \"{name}\"?",
     "nameRequired": "Connection name is required",
     "testFromForm": "Test Connection",
+    "testing": "Testing...",
+    "cancelTest": "Cancel Test",
     "testFailed": "Connection test failed",
     "passwordUnchanged": "Leave blank to keep current password",
     "connectFailed": "Connection Failed",

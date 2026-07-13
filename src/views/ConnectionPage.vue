@@ -7,8 +7,8 @@ import type { RedisConnection } from "@/types";
 import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
 import { toast } from "@/utils/toast";
 import {
-  Plus, Server, Wifi, WifiOff, Trash2, Edit3, Zap,
-  X, Loader2, Lock, Unlock, Pin, PinOff,
+  Plus, Server, Plug, Unplug, Trash2, Edit3, Zap,
+  X, Loader2, Lock, Unlock, Pin, PinOff, Check,
 } from "lucide-vue-next";
 
 const router = useRouter();
@@ -19,8 +19,8 @@ const confirmDialog = ref<InstanceType<typeof ConfirmDialog>>();
 
 const showForm = ref(false);
 const editingId = ref<string | null>(null);
-const testing = ref<string | null>(null);
 const formTesting = ref(false);
+const testResult = ref<"success" | "error" | null>(null);
 const savingForm = ref(false);
 const disconnectingIds = ref<Set<string>>(new Set());
 const usePassword = ref(false);
@@ -40,14 +40,16 @@ function openNew() {
   form.value = { name: "", host: "127.0.0.1", port: 6379, password: "", db: 0, ssl: false };
   usePassword.value = false;
   hadPassword.value = false;
+  testResult.value = null;
   showForm.value = true;
 }
 
 function openEdit(conn: RedisConnection) {
   editingId.value = conn.id;
   form.value = { name: conn.name, host: conn.host, port: conn.port, password: "", db: conn.db, ssl: conn.ssl };
-  usePassword.value = !!conn.password;
-  hadPassword.value = !!conn.password;
+  usePassword.value = conn.hasPassword || !!conn.password;
+  hadPassword.value = conn.hasPassword || !!conn.password;
+  testResult.value = null;
   showForm.value = true;
 }
 
@@ -94,36 +96,43 @@ function reconnectInBackground(id: string) {
 }
 
 async function handleFormTest() {
+  if (formTesting.value) {
+    connStore.cancelFormTest();
+    return;
+  }
+  testResult.value = null;
   formTesting.value = true;
-  const ok = await connStore.testFormConnection(form.value);
-  formTesting.value = false;
-  if (ok) {
-    toast.success(t("connection.testSuccess"), form.value.name);
-  } else {
-    toast.error(t("connection.testFailed"), 5000, form.value.name);
+  try {
+    // If editing with password toggle on but empty field, use saved password
+    const editId = usePassword.value && editingId.value && !form.value.password
+      ? editingId.value
+      : null;
+    const ok = await connStore.testFormConnection(form.value, editId);
+    if (!formTesting.value) return; // cancelled
+    formTesting.value = false;
+    testResult.value = ok ? "success" : "error";
+    if (ok) {
+      toast.success(t("connection.testSuccess"), form.value.name);
+    } else {
+      if (connStore.lastError) toast.error(connStore.lastError, 5000, form.value.name);
+    }
+  } finally {
+    formTesting.value = false;
   }
 }
 
 async function handleConnect(id: string) {
   const conn = connStore.connections.find((c) => c.id === id);
-  if (!conn || conn.status === "connecting") return;
+  if (!conn) return;
+  if (conn.status === "connecting") {
+    connStore.cancelConnect(id);
+    return;
+  }
   const ok = await connStore.connect(id);
   if (ok) {
     router.push("/browser");
   } else {
     toast.error(connStore.lastError || t("connection.connectFailed"), 5000, conn.name);
-  }
-}
-
-async function handleTest(conn: RedisConnection) {
-  if (testing.value === conn.id) return;
-  testing.value = conn.id;
-  const ok = await connStore.testConnection(conn.id);
-  testing.value = null;
-  if (ok) {
-    toast.success(t("connection.testSuccess"), conn.name);
-  } else {
-    toast.error(t("connection.testFailed"), 5000, conn.name);
   }
 }
 
@@ -234,7 +243,7 @@ function statusColor(status: string) {
         <div class="flex items-center gap-3 mb-4 text-xs text-text-muted">
           <span>DB{{ conn.db }}</span>
           <span v-if="conn.ssl" class="badge bg-info/10 text-info">SSL</span>
-          <span v-if="conn.password" class="badge bg-bg-primary text-text-muted">Auth</span>
+          <span v-if="conn.hasPassword || conn.password" class="badge bg-danger/10 text-danger">Auth</span>
         </div>
 
         <!-- Actions -->
@@ -242,28 +251,30 @@ function statusColor(status: string) {
           <button
             v-if="conn.status !== 'connected'"
             @click="handleConnect(conn.id)"
-            :disabled="conn.status === 'connecting'"
-            class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-redis text-white rounded-lg text-xs font-medium hover:bg-redis-dark transition-colors disabled:opacity-60"
+            class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-white rounded-lg text-xs font-medium transition-all"
+            :class="conn.status === 'connecting'
+              ? 'bg-redis/70 group-hover:bg-warning cursor-pointer'
+              : 'bg-redis hover:bg-redis-dark'"
           >
-            <Wifi :size="12" />
-            {{ conn.status === "connecting" ? t("connection.connecting") : t("connection.connect") }}
+            <!-- Default: show connecting text or connect text -->
+            <span class="inline-flex items-center gap-1.5" :class="conn.status === 'connecting' ? 'group-hover:hidden' : ''">
+              <Loader2 v-if="conn.status === 'connecting'" :size="12" class="animate-spin" />
+              <Plug v-else :size="12" />
+              {{ conn.status === "connecting" ? t("connection.connecting") : t("connection.connect") }}
+            </span>
+            <!-- Hover (only when connecting): show cancel -->
+            <span v-if="conn.status === 'connecting'" class="hidden group-hover:inline-flex items-center gap-1.5">
+              <X :size="12" />
+              {{ t("common.cancel") }}
+            </span>
           </button>
           <button
             v-else
             @click="handleCardDisconnect(conn.id)"
             class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-bg-primary text-text-secondary rounded-lg text-xs font-medium hover:bg-bg-hover transition-colors"
           >
-            <WifiOff :size="12" />
+            <Unplug :size="12" />
             {{ t("connection.disconnect") }}
-          </button>
-          <button
-            @click="handleTest(conn)"
-            :disabled="conn.status === 'connected' || conn.status === 'connecting'"
-            class="w-8 h-8 flex items-center justify-center rounded-lg transition-colors relative disabled:opacity-30 disabled:cursor-not-allowed hover:bg-bg-hover"
-            :title="conn.status === 'connected' ? t('connection.alreadyConnected') : t('connection.testConnection')"
-          >
-            <Loader2 v-if="testing === conn.id" :size="14" class="animate-spin text-text-muted" />
-            <Zap v-else :size="14" class="text-text-muted" />
           </button>
           <button
             @click="connStore.togglePin(conn.id)"
@@ -294,7 +305,7 @@ function statusColor(status: string) {
     <Teleport to="body">
       <div v-if="showForm" class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" @click="showForm = false" />
-        <div class="relative bg-bg-secondary rounded-xl shadow-xl w-[440px] max-h-[90vh] overflow-y-auto p-6">
+        <div class="relative bg-bg-secondary rounded-xl shadow-xl w-[440px] max-h-[90vh] overflow-y-auto p-6 group">
           <div class="flex items-center justify-between mb-5">
             <h3 class="text-base font-semibold text-text-primary">
               {{ editingId ? t("connection.editConnection") : t("connection.newConnection") }}
@@ -360,12 +371,43 @@ function statusColor(status: string) {
           <div class="flex justify-between gap-2 mt-6">
             <button
               @click="handleFormTest"
-              :disabled="formTesting"
-              class="inline-flex items-center gap-1.5 px-3 py-2 border border-border text-sm text-text-secondary rounded-lg hover:bg-bg-hover transition-colors disabled:opacity-60"
+              :disabled="!formTesting && testResult === 'success'"
+              class="group/btn inline-flex items-center gap-2 px-4 py-2 border text-sm font-medium rounded-lg transition-all"
+              :class="{
+                'border-warning bg-warning/5 text-warning hover:bg-warning/10': formTesting,
+                'border-success bg-success/5 text-success': !formTesting && testResult === 'success',
+                'border-danger bg-danger/5 text-danger hover:bg-danger/10 cursor-pointer': !formTesting && testResult === 'error',
+                'border-border text-text-secondary hover:border-redis hover:text-redis hover:bg-redis/5': !formTesting && !testResult,
+              }"
             >
-              <Loader2 v-if="formTesting" :size="14" class="animate-spin" />
-              <Zap v-else :size="14" />
-              {{ t("connection.testFromForm") }}
+              <!-- Success state -->
+              <template v-if="!formTesting && testResult === 'success'">
+                <Check :size="14" />
+                {{ t("connection.testSuccess") }}
+              </template>
+              <!-- Error state -->
+              <template v-else-if="!formTesting && testResult === 'error'">
+                <Zap :size="14" />
+                {{ t("connection.testFailed") }}
+              </template>
+              <!-- Default / non-testing state -->
+              <template v-else-if="!formTesting">
+                <Zap :size="14" />
+                {{ t("connection.testFromForm") }}
+              </template>
+              <!-- Testing: show spinner + text, on hover switch to cancel -->
+              <template v-else>
+                <span class="relative">
+                  <span class="inline-flex items-center gap-2 whitespace-nowrap" :class="formTesting ? 'visible group-hover/btn:invisible' : ''">
+                    <Loader2 :size="14" class="animate-spin" />
+                    {{ t("connection.testing") }}
+                  </span>
+                  <span class="inline-flex items-center gap-2 whitespace-nowrap absolute inset-0 justify-center" :class="formTesting ? 'invisible group-hover/btn:visible' : 'hidden'">
+                    <X :size="14" />
+                    {{ t("connection.cancelTest") }}
+                  </span>
+                </span>
+              </template>
             </button>
             <div class="flex gap-2">
               <button @click="showForm = false" class="px-4 py-2 text-sm text-text-secondary hover:bg-bg-hover rounded-lg transition-colors">
