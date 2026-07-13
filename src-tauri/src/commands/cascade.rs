@@ -410,6 +410,14 @@ pub async fn scan_keys(
     Ok((next_cursor, result))
 }
 
+/// Check if a Redis version string satisfies >= 7.4.0 (for field-level TTL support).
+fn redis_supports_field_ttl(version: &str) -> bool {
+    let mut parts = version.split('.');
+    let major: u32 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    let minor: u32 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    major > 7 || (major == 7 && minor >= 4)
+}
+
 /// Get detailed value of a specific key with pagination support
 #[tauri::command]
 pub async fn get_key_detail(
@@ -419,6 +427,7 @@ pub async fn get_key_detail(
     offset: Option<u64>,
     limit: Option<u64>,
     filter: Option<String>,
+    redis_version: Option<String>,
 ) -> Result<KeyDetail, String> {
     validate_connection_id(&connection_id)?;
     validate_key(&key)?;
@@ -526,17 +535,63 @@ pub async fn get_key_detail(
             let matched_count = if filter.is_some() { all_fields.len() } else { total_count };
             let fields: Vec<(Vec<u8>, Vec<u8>)> = all_fields.into_iter().skip(offset as usize).take(limit as usize).collect();
             let truncated = if filter.is_some() { false } else { total_count > (offset + limit) as usize };
+
+            // Fetch per-field TTLs via HTTL (Redis >= 7.4.0 only).
+            let fetch_field_ttl = redis_version
+                .as_deref()
+                .map(redis_supports_field_ttl)
+                .unwrap_or(false);
+            let field_ttls: Option<Vec<i64>> = if fetch_field_ttl && !fields.is_empty() {
+                let mut ttl_pipe = redis::pipe();
+                // HTTL supports up to ~128 fields per call; batch in chunks of 128
+                const HTTL_BATCH: usize = 128;
+                for chunk in fields.chunks(HTTL_BATCH) {
+                    ttl_pipe
+                        .cmd("HTTL")
+                        .arg(&key)
+                        .arg("FIELDS")
+                        .arg(chunk.len())
+                        .arg(chunk.iter().map(|(f, _)| f.as_slice()).collect::<Vec<_>>());
+                }
+                let ttl_vals: Vec<redis::Value> = ttl_pipe
+                    .query_async(&mut *conn)
+                    .await
+                    .unwrap_or_default();
+                // Flatten all batch results into a single Vec<i64>
+                let mut merged: Vec<i64> = Vec::with_capacity(fields.len());
+                let mut ok = true;
+                for v in &ttl_vals {
+                    match v {
+                        redis::Value::Array(arr) => {
+                            for item in arr {
+                                merged.push(redis::from_redis_value::<i64>(item).unwrap_or(-1));
+                            }
+                        }
+                        _ => { ok = false; break; }
+                    }
+                }
+                if ok && merged.len() == fields.len() { Some(merged) } else { None }
+            } else {
+                None
+            };
+
             let parts: Vec<&[u8]> = fields.iter().flat_map(|(f, v)| vec![f.as_slice(), v.as_slice()]).collect();
             let content_encoding = detect_multi_encoding(&parts);
             let fields_json: Vec<serde_json::Value> = fields
                 .iter()
-                .map(|(f, v)| {
+                .enumerate()
+                .map(|(i, (f, v))| {
                     let field = String::from_utf8_lossy(f).into_owned();
                     let value = String::from_utf8_lossy(v).into_owned();
-                    serde_json::json!({ "field": field, "value": value })
+                    let mut obj = serde_json::json!({ "field": field, "value": value });
+                    if let Some(ref ttls) = field_ttls {
+                        obj["ttl"] = serde_json::json!(ttls[i]);
+                    }
+                    obj
                 })
                 .collect();
-            serde_json::json!({ "type": "hash", "fields": fields_json, "encoding": encoding, "contentEncoding": content_encoding, "totalCount": matched_count, "truncated": truncated })
+            let has_field_ttl = field_ttls.is_some();
+            serde_json::json!({ "type": "hash", "fields": fields_json, "encoding": encoding, "contentEncoding": content_encoding, "totalCount": matched_count, "truncated": truncated, "hasFieldTtl": has_field_ttl })
         }
         "list" => {
             let (items, matched_count, truncated, original_indices) = if let Some(ref pattern) = filter {
@@ -697,6 +752,58 @@ pub async fn delete_key(
         .await
         .map_err(|e| format!("DEL error: {}", e))?;
     Ok(deleted > 0)
+}
+
+/// Set TTL on individual hash fields (Redis >= 7.4.0: HEXPIRE / HPERSIST).
+///
+/// `ttl > 0`  → HEXPIRE key ttl FIELDS 1 field
+/// `ttl == -1` → HPERSIST key FIELDS 1 field
+#[tauri::command]
+pub async fn set_hash_field_ttl(
+    state: State<'_, AppState>,
+    connection_id: String,
+    key: String,
+    field: String,
+    ttl: i64,
+) -> Result<bool, String> {
+    validate_connection_id(&connection_id)?;
+    validate_key(&key)?;
+    reject_null_bytes(&field, "field")?;
+    validate_ttl(ttl)?;
+
+    let pool = {
+        let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
+        pm.get_pool(&connection_id)?
+    };
+    let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
+
+    if ttl > 0 {
+        // HEXPIRE key seconds FIELDS numfields field [field ...]
+        let result: i64 = redis::cmd("HEXPIRE")
+            .arg(&key)
+            .arg(ttl)
+            .arg("FIELDS")
+            .arg(1)
+            .arg(&field)
+            .query_async(&mut *conn)
+            .await
+            .map_err(|e| format!("HEXPIRE error: {}", e))?;
+        // HEXPIRE returns 1 on success, 0 if field doesn't exist
+        Ok(result > 0)
+    } else if ttl == -1 {
+        // HPERSIST key FIELDS numfields field [field ...]
+        let result: i64 = redis::cmd("HPERSIST")
+            .arg(&key)
+            .arg("FIELDS")
+            .arg(1)
+            .arg(&field)
+            .query_async(&mut *conn)
+            .await
+            .map_err(|e| format!("HPERSIST error: {}", e))?;
+        Ok(result > 0)
+    } else {
+        Err("Invalid TTL value".to_string())
+    }
 }
 
 /// Set TTL on a key

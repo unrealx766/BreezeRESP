@@ -33,11 +33,13 @@ export interface StringValue {
 
 export interface HashValue {
   type: "hash";
-  fields: Array<{ field: string; value: string }>;
+  fields: Array<{ field: string; value: string; ttl?: number }>;
   encoding: string;
   contentEncoding?: string;
   totalCount?: number;
   truncated?: boolean;
+  /** True when Redis >= 7.4.0 returned per-field TTLs (HTTL supported) */
+  hasFieldTtl?: boolean;
 }
 
 export interface ListValue {

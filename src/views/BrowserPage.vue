@@ -243,6 +243,31 @@ async function saveRenameHashField(e: Event) {
 }
 function cancelRenameHashField() { renamingHashField.value = null; }
 
+// Hash field TTL edit (Redis >= 7.4.0)
+const editingFieldTtl = ref<string | null>(null);
+const fieldTtlTemp = ref('');
+function startEditFieldTtl(field: string, currentTtl?: number) {
+  editingFieldTtl.value = field;
+  fieldTtlTemp.value = currentTtl && currentTtl > 0 ? String(currentTtl) : '-1';
+}
+async function saveEditFieldTtl(e: Event) {
+  if (editingFieldTtl.value === null) return;
+  const val = parseInt(fieldTtlTemp.value, 10);
+  if (isNaN(val)) { editingFieldTtl.value = null; return; }
+  const ok = await handleSave(() => detail.setHashFieldTtl(editingFieldTtl.value!, val), e);
+  if (ok) editingFieldTtl.value = null;
+}
+function cancelEditFieldTtl() { editingFieldTtl.value = null; }
+
+function formatFieldTtl(ttl?: number): string {
+  if (ttl === undefined || ttl === -1) return t("detail.noExpiry");
+  if (ttl === -2) return "N/A";
+  if (ttl < 60) return `${ttl}s`;
+  if (ttl < 3600) return `${Math.floor(ttl / 60)}m ${ttl % 60}s`;
+  if (ttl < 86400) return `${Math.floor(ttl / 3600)}h ${Math.floor((ttl % 3600) / 60)}m`;
+  return `${Math.floor(ttl / 86400)}d ${Math.floor((ttl % 86400) / 3600)}h`;
+}
+
 // List item edit
 const editingListIndex = ref<number | null>(null);
 const listItemTemp = ref('');
@@ -343,6 +368,8 @@ function resetAllEditingState() {
   hashFieldTemp.value = '';
   renamingHashField.value = null;
   hashFieldRenameTemp.value = '';
+  editingFieldTtl.value = null;
+  fieldTtlTemp.value = '';
   editingListIndex.value = null;
   listItemTemp.value = '';
   editingSetMember.value = null;
@@ -743,7 +770,8 @@ onBeforeUnmount(() => {
               <table class="w-full text-sm table-fixed">
                 <thead class="sticky top-0 z-10"><tr class="bg-bg-primary">
                   <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border" style="width:35%;max-width:260px">{{ t("detail.field") }}</th>
-                  <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border">{{ t("detail.value") }}</th>
+                  <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border" :style="(detail.currentValue as any)?.hasFieldTtl ? 'width:55%' : ''">{{ t("detail.value") }}</th>
+                  <th v-if="(detail.currentValue as any)?.hasFieldTtl" class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border" style="width:15%;min-width:100px">{{ t("detail.fieldTtl") }}</th>
                 </tr></thead>
                 <tbody>
                   <tr v-for="(f, i) in (detail.currentValue as any).fields" :key="f.field" class="border-b border-border-light last:border-0" :class="i % 2 ? 'bg-bg-primary/50' : ''">
@@ -779,6 +807,25 @@ onBeforeUnmount(() => {
                           @dblclick.stop="startEditHash(f.field, f.value)"
                         >{{ f.value }}</span>
                         <button @click="startEditHash(f.field, f.value)" class="shrink-0 text-text-muted hover:text-text-primary opacity-0 group-hover/cell:opacity-100 transition-opacity">
+                          <Pencil :size="10" />
+                        </button>
+                      </div>
+                    </td>
+                    <td v-if="(detail.currentValue as any)?.hasFieldTtl" class="px-3 py-2 font-mono text-xs text-text-secondary overflow-hidden">
+                      <!-- Field TTL editing (Redis >= 7.4.0) -->
+                      <div v-if="editingFieldTtl === f.field" class="flex items-center gap-1.5">
+                        <input v-model="fieldTtlTemp" @keyup.enter="saveEditFieldTtl($event)" @keyup.escape="cancelEditFieldTtl"
+                          type="number"
+                          class="flex-1 text-xs font-mono px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-bg-secondary w-16"
+                          :placeholder="t('detail.setTtlPlaceholder')" />
+                        <button @click="saveEditFieldTtl($event)" class="shrink-0 text-success hover:text-success/80"><Save :size="11" /></button>
+                        <button @click="cancelEditFieldTtl" class="shrink-0 text-text-muted hover:text-text-primary"><X :size="11" /></button>
+                      </div>
+                      <div v-else class="flex items-center gap-1 group/ttl min-w-0">
+                        <span :class="f.ttl && f.ttl > 0 ? 'text-amber-400' : 'text-text-muted'" :title="f.ttl && f.ttl > 0 ? `${f.ttl}s` : ''">
+                          {{ formatFieldTtl(f.ttl) }}
+                        </span>
+                        <button @click="startEditFieldTtl(f.field, f.ttl)" class="shrink-0 text-text-muted hover:text-text-primary opacity-0 group-hover/ttl:opacity-100 transition-opacity">
                           <Pencil :size="10" />
                         </button>
                       </div>

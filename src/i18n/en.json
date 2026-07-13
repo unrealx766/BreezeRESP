@@ -104,7 +104,9 @@
     "itemCount": "1 item | {n} items",
     "memberCount": "1 member | {n} members",
     "truncated": "Showing first {shown} of {total} items (truncated to prevent UI freeze)",
-    "searchPlaceholder": "Search..."
+    "searchPlaceholder": "Search...",
+    "fieldTtl": "Field TTL",
+    "fieldTtlSet": "Set Field TTL"
   },
   "pipeline": {
     "title": "Pipeline Builder",

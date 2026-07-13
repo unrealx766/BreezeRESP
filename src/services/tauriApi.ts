@@ -143,8 +143,8 @@ export const tauriApi = {
         count,
       })),
 
-    getKeyDetail: (connectionId: string, key: string, offset?: number, limit?: number, filter?: string) =>
-      withConn(connectionId, () => invoke<RustKeyDetail>("get_key_detail", { connectionId, key, offset, limit, filter })),
+    getKeyDetail: (connectionId: string, key: string, offset?: number, limit?: number, filter?: string, redisVersion?: string) =>
+      withConn(connectionId, () => invoke<RustKeyDetail>("get_key_detail", { connectionId, key, offset, limit, filter, redisVersion })),
 
     deleteKey: (connectionId: string, key: string) =>
       withConn(connectionId, () => invoke<boolean>("delete_key", { connectionId, key })),
@@ -169,6 +169,9 @@ export const tauriApi = {
       score?: number;
       oldValue?: string;
     }) => withConn(params.connectionId, () => invoke<boolean>("set_value", params)),
+
+    setHashFieldTtl: (connectionId: string, key: string, field: string, ttl: number) =>
+      withConn(connectionId, () => invoke<boolean>("set_hash_field_ttl", { connectionId, key, field, ttl })),
   },
 
   pipeline: {

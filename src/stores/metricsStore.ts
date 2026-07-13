@@ -54,6 +54,21 @@ export const useMetricsStore = defineStore("metrics", () => {
   const memoryFormatted = computed(() => formatBytes(metrics.value.memoryUsed));
   const memoryTotalFormatted = computed(() => formatBytes(metrics.value.memoryTotal));
 
+  /**
+   * Whether the connected Redis server supports per-field TTL on hashes.
+   * Redis >= 7.4.0 introduced HEXPIRE / HTTL / HPERSIST.
+   */
+  const supportsFieldTtl = computed(() => {
+    const v = metrics.value.version;
+    if (!v) return false;
+    // Parse semver-like version string, e.g. "7.4.1" or "7.4.0-rc1"
+    const match = v.match(/^(\d+)\.(\d+)/);
+    if (!match) return false;
+    const major = parseInt(match[1], 10);
+    const minor = parseInt(match[2], 10);
+    return major > 7 || (major === 7 && minor >= 4);
+  });
+
   async function fetchMetrics() {
     const connStore = useConnectionStore();
     const connId = connStore.activeConnectionId;
@@ -119,6 +134,7 @@ export const useMetricsStore = defineStore("metrics", () => {
     uptimeFormatted,
     memoryFormatted,
     memoryTotalFormatted,
+    supportsFieldTtl,
     formatBytes,
     startMonitoring,
     stopMonitoring,

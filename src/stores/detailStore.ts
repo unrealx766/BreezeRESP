@@ -4,6 +4,7 @@ import type { KeyDetail, KeyValue, RedisDataType } from "@/types";
 import { tauriApi } from "@/services/tauriApi";
 import { useCascadeStore } from "./cascadeStore";
 import { useConnectionStore } from "./connectionStore";
+import { useMetricsStore } from "./metricsStore";
 
 export const useDetailStore = defineStore("detail", () => {
   const currentDetail = ref<KeyDetail | null>(null);
@@ -46,11 +47,12 @@ export const useDetailStore = defineStore("detail", () => {
       case "hash":
         keyValue = {
           type: "hash",
-          fields: (val.fields as Array<{ field: string; value: string }>) || [],
+          fields: (val.fields as Array<{ field: string; value: string; ttl?: number }>) || [],
           encoding: (val.encoding as string) || rust.encoding,
           contentEncoding: val.contentEncoding as string | undefined,
           totalCount: val.totalCount as number | undefined,
           truncated: val.truncated as boolean | undefined,
+          hasFieldTtl: val.hasFieldTtl as boolean | undefined,
         };
         break;
       case "list":
@@ -126,6 +128,7 @@ export const useDetailStore = defineStore("detail", () => {
 
   async function loadDetail(key: string, page = 0, filter?: string) {
     const connStore = useConnectionStore();
+    const metricsStore = useMetricsStore();
     const connId = connStore.activeConnectionId;
     if (!connId) return;
 
@@ -135,12 +138,14 @@ export const useDetailStore = defineStore("detail", () => {
 
     try {
       const offset = page * pageSize.value;
+      const redisVersion = metricsStore.version || undefined;
       const rustDetail = await tauriApi.cascade.getKeyDetail(
         connId,
         key,
         offset,
         pageSize.value,
-        filterPattern.value || undefined
+        filterPattern.value || undefined,
+        redisVersion
       );
       currentDetail.value = mapKeyDetail(rustDetail);
 
@@ -249,6 +254,22 @@ export const useDetailStore = defineStore("detail", () => {
       return true;
     } catch (e) {
       console.error("Failed to save hash field:", e);
+      return false;
+    }
+  }
+
+  /** Set TTL on an individual hash field (Redis >= 7.4.0) */
+  async function setHashFieldTtl(field: string, ttl: number) {
+    const connStore = useConnectionStore();
+    const connId = connStore.activeConnectionId;
+    const key = currentDetail.value?.key.key;
+    if (!connId || !key) return false;
+    try {
+      await tauriApi.cascade.setHashFieldTtl(connId, key, field, ttl);
+      await loadDetail(key, currentPage.value);
+      return true;
+    } catch (e) {
+      console.error("Failed to set hash field TTL:", e);
       return false;
     }
   }
@@ -419,6 +440,7 @@ export const useDetailStore = defineStore("detail", () => {
     refresh,
     saveStringValue,
     saveHashField,
+    setHashFieldTtl,
     renameHashField,
     saveListItem,
     saveSetMember,
