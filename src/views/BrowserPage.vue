@@ -223,7 +223,12 @@ function startEditList(index: number, value: string) {
 }
 async function saveEditList() {
   if (editingListIndex.value === null) return;
-  const globalIndex = detail.currentPage * detail.pageSize + editingListIndex.value;
+  const listValue = detail.currentValue as any;
+  // When filter is active, use originalIndices to get the real Redis index
+  const originalIndices = listValue?.originalIndices as number[] | undefined;
+  const globalIndex = originalIndices
+    ? originalIndices[editingListIndex.value]
+    : detail.currentPage * detail.pageSize + editingListIndex.value;
   const ok = await detail.saveListItem(globalIndex, listItemTemp.value);
   if (ok) editingListIndex.value = null;
 }
@@ -392,6 +397,10 @@ onBeforeUnmount(() => {
   if (searchDebounceTimer) {
     clearTimeout(searchDebounceTimer);
     searchDebounceTimer = null;
+  }
+  if (filterDebounceTimer) {
+    clearTimeout(filterDebounceTimer);
+    filterDebounceTimer = null;
   }
 });
 </script>
@@ -622,7 +631,7 @@ onBeforeUnmount(() => {
                 </tr></thead>
                 <tbody>
                   <tr v-for="(item, i) in (detail.currentValue as any).items" :key="i" class="border-b border-border-light last:border-0" :class="i % 2 ? 'bg-bg-primary/50' : ''">
-                    <td class="px-3 py-2 text-xs text-text-muted font-mono">{{ detail.currentPage * detail.pageSize + i }}</td>
+                    <td class="px-3 py-2 text-xs text-text-muted font-mono">{{ (detail.currentValue as any).originalIndices ? (detail.currentValue as any).originalIndices[i] : detail.currentPage * detail.pageSize + i }}</td>
                     <td class="px-3 py-2 font-mono text-xs text-text-primary truncate max-w-0">
                       <div v-if="editingListIndex === i" class="flex items-center gap-1.5">
                         <input v-model="listItemTemp" @keyup.enter="saveEditList" @keyup.escape="cancelEditList"
@@ -632,7 +641,7 @@ onBeforeUnmount(() => {
                       </div>
                       <span v-else
                         class="truncate block cursor-pointer hover:bg-bg-hover rounded px-1 -mx-1"
-                        @click="showCellPopup($event, item, `Index ${detail.currentPage * detail.pageSize + i}`)"
+                        @click="showCellPopup($event, item, `Index ${(detail.currentValue as any).originalIndices ? (detail.currentValue as any).originalIndices[i] : detail.currentPage * detail.pageSize + i}`)"
                         @dblclick.stop="startEditList(i, item)"
                       >{{ item }}</span>
                     </td>
@@ -669,7 +678,7 @@ onBeforeUnmount(() => {
             <div class="flex-1 min-h-0 overflow-y-auto space-y-1">
               <div v-for="(m, i) in (detail.currentValue as any).members" :key="m"
                 class="px-3 py-2 text-xs font-mono bg-bg-primary border border-border-light rounded-lg flex items-center gap-2">
-                <span class="text-text-muted w-6 text-right shrink-0">{{ i + 1 }}</span>
+                <span class="text-text-muted w-6 text-right shrink-0">{{ detail.currentPage * detail.pageSize + i + 1 }}</span>
                 <!-- Editing -->
                 <div v-if="editingSetMember === m" class="flex items-center gap-1.5 flex-1 min-w-0">
                   <input v-model="setMemberTemp" @keyup.enter="saveEditSet" @keyup.escape="cancelEditSet"
@@ -680,7 +689,7 @@ onBeforeUnmount(() => {
                 <!-- Display -->
                 <span v-else
                   class="text-text-primary truncate cursor-pointer hover:bg-bg-hover rounded px-1 -mx-1 flex-1 min-w-0"
-                  @click="showCellPopup($event, m, `Member ${i + 1}`)"
+                  @click="showCellPopup($event, m, `Member ${detail.currentPage * detail.pageSize + i + 1}`)"
                   @dblclick.stop="startEditSet(m)"
                 >{{ m }}</span>
               </div>

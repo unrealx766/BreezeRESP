@@ -332,7 +332,7 @@ pub async fn scan_keys(
         return Ok((next_cursor, result));
     }
 
-    // Pipeline: batch TYPE + TTL + MEMORY USAGE for all keys (3 round-trips total)
+    // Pipeline: batch TYPE + TTL for all keys (1 round-trip)
     let mut pipe = redis::pipe();
     for key in &keys {
         pipe.cmd("TYPE").arg(key);
@@ -340,12 +340,9 @@ pub async fn scan_keys(
     for key in &keys {
         pipe.cmd("TTL").arg(key);
     }
-    for key in &keys {
-        pipe.cmd("MEMORY").arg("USAGE").arg(key);
-    }
 
     let n = keys.len();
-    let expected = 3 * n;
+    let expected = 2 * n;
     let values: Vec<redis::Value> = pipe
         .query_async(&mut *conn)
         .await
@@ -377,6 +374,24 @@ pub async fn scan_keys(
         return Ok((next_cursor, result));
     }
 
+    // MEMORY USAGE may not exist on Redis < 4.0; query separately with graceful fallback
+    let sizes: Vec<u64> = {
+        let mut size_pipe = redis::pipe();
+        for key in &keys {
+            size_pipe.cmd("MEMORY").arg("USAGE").arg(key);
+        }
+        let size_vals: Vec<redis::Value> = size_pipe
+            .query_async(&mut *conn)
+            .await
+            .unwrap_or_default();
+        if size_vals.len() == n {
+            size_vals.iter().map(|v| redis::from_redis_value::<u64>(v).unwrap_or(0)).collect()
+        } else {
+            // MEMORY USAGE not supported or partial failure — all sizes default to 0
+            vec![0u64; n]
+        }
+    };
+
     for (i, key) in keys.iter().enumerate() {
         let type_str = redis::from_redis_value::<String>(&values[i])
             .unwrap_or_else(|_| "none".to_string());
@@ -384,14 +399,11 @@ pub async fn scan_keys(
         let ttl: i64 = redis::from_redis_value::<i64>(&values[n + i])
             .unwrap_or(-1);
 
-        let size: u64 = redis::from_redis_value::<u64>(&values[2 * n + i])
-            .unwrap_or(0);
-
         result.push(RedisKeyInfo {
             key: key.clone(),
             key_type: type_str,
             ttl,
-            size,
+            size: sizes[i],
         });
     }
 
@@ -421,29 +433,36 @@ pub async fn get_key_detail(
     };
     let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
 
-    // Step 1: TYPE + TTL + OBJECT ENCODING + MEMORY USAGE (safe commands, 1 round-trip)
-    let (type_str, ttl, encoding, size) = {
+    // Step 1: TYPE + TTL + OBJECT ENCODING (safe commands, 1 round-trip)
+    // MEMORY USAGE is queried separately because it doesn't exist on Redis < 4.0
+    let (type_str, ttl, encoding) = {
         let mut pipe = redis::pipe();
         pipe.cmd("TYPE").arg(&key)
             .cmd("TTL").arg(&key)
-            .cmd("OBJECT").arg("ENCODING").arg(&key)
-            .cmd("MEMORY").arg("USAGE").arg(&key);
+            .cmd("OBJECT").arg("ENCODING").arg(&key);
         let values: Vec<redis::Value> = pipe
             .query_async(&mut *conn)
             .await
             .map_err(|e| format!("Pipeline error: {}", e))?;
 
-        if values.len() < 4 {
-            return Err(format!("Failed to get key metadata: expected 4 results, got {}", values.len()));
+        if values.len() < 3 {
+            return Err(format!("Failed to get key metadata: expected 3 results, got {}", values.len()));
         }
 
         let type_str: String = redis::from_redis_value(&values[0])
             .map_err(|e| format!("TYPE error: {}", e))?;
         let ttl: i64 = redis::from_redis_value(&values[1]).unwrap_or(-1);
         let encoding: String = redis::from_redis_value(&values[2]).unwrap_or_else(|_| "unknown".to_string());
-        let size: u64 = redis::from_redis_value(&values[3]).unwrap_or(0);
-        (type_str, ttl, encoding, size)
+        (type_str, ttl, encoding)
     };
+
+    // MEMORY USAGE — graceful fallback for Redis < 4.0
+    let size: u64 = redis::cmd("MEMORY")
+        .arg("USAGE")
+        .arg(&key)
+        .query_async(&mut *conn)
+        .await
+        .unwrap_or(0);
 
     // Step 2: Send only the matching count command (avoids WRONGTYPE errors)
     let total_count: usize = match type_str.as_str() {
@@ -520,19 +539,21 @@ pub async fn get_key_detail(
             serde_json::json!({ "type": "hash", "fields": fields_json, "encoding": encoding, "contentEncoding": content_encoding, "totalCount": matched_count, "truncated": truncated })
         }
         "list" => {
-            let (items, matched_count, truncated) = if let Some(ref pattern) = filter {
-                // With filter: fetch all items and filter globally
+            let (items, matched_count, truncated, original_indices) = if let Some(ref pattern) = filter {
+                // With filter: fetch all items and filter globally, tracking original indices
                 let all: Vec<Vec<u8>> = conn
                     .lrange(&key, 0, -1)
                     .await
                     .map_err(|e| format!("LRANGE error: {}", e))?;
                 let pattern_lower = pattern.to_lowercase();
-                let filtered: Vec<Vec<u8>> = all.into_iter().filter(|b| {
+                let filtered: Vec<(usize, Vec<u8>)> = all.into_iter().enumerate().filter(|(_, b)| {
                     String::from_utf8_lossy(b).to_lowercase().contains(&pattern_lower)
                 }).collect();
                 let matched = filtered.len();
-                let page_items: Vec<Vec<u8>> = filtered.into_iter().skip(offset as usize).take(limit as usize).collect();
-                (page_items, matched, false)
+                let page_items: Vec<(usize, Vec<u8>)> = filtered.into_iter().skip(offset as usize).take(limit as usize).collect();
+                let indices: Vec<usize> = page_items.iter().map(|(idx, _)| *idx).collect();
+                let values: Vec<Vec<u8>> = page_items.into_iter().map(|(_, v)| v).collect();
+                (values, matched, false, Some(indices))
             } else {
                 // No filter: use LRANGE with offset/limit (efficient)
                 let page_items: Vec<Vec<u8>> = conn
@@ -540,7 +561,7 @@ pub async fn get_key_detail(
                     .await
                     .map_err(|e| format!("LRANGE error: {}", e))?;
                 let truncated = total_count > (offset + limit) as usize;
-                (page_items, total_count, truncated)
+                (page_items, total_count, truncated, None)
             };
             let parts: Vec<&[u8]> = items.iter().map(|b| b.as_slice()).collect();
             let content_encoding = detect_multi_encoding(&parts);
@@ -548,13 +569,18 @@ pub async fn get_key_detail(
                 .into_iter()
                 .map(|b| String::from_utf8_lossy(&b).into_owned())
                 .collect();
-            serde_json::json!({ "type": "list", "items": items, "encoding": encoding, "contentEncoding": content_encoding, "totalCount": matched_count, "truncated": truncated })
+            let mut list_json = serde_json::json!({ "type": "list", "items": items, "encoding": encoding, "contentEncoding": content_encoding, "totalCount": matched_count, "truncated": truncated });
+            if let Some(indices) = original_indices {
+                list_json["originalIndices"] = serde_json::json!(indices);
+            }
+            list_json
         }
         "set" => {
             // Use SSCAN for pagination with optional filter
             let mut all_members = Vec::new();
             let mut cursor: u64 = 0;
             let pattern_lower = filter.as_ref().map(|p| p.to_lowercase());
+            let need_count = if filter.is_some() { usize::MAX } else { (offset + limit) as usize };
             loop {
                 let (next_cursor, batch): (u64, Vec<Vec<u8>>) = redis::cmd("SSCAN")
                     .arg(&key)
@@ -577,7 +603,7 @@ pub async fn get_key_detail(
                 cursor = next_cursor;
                 if cursor == 0 { break; }
                 // Early exit if we have enough (only when no filter)
-                if pattern_lower.is_none() && all_members.len() >= (offset + limit) as usize {
+                if pattern_lower.is_none() && all_members.len() >= need_count {
                     break;
                 }
             }

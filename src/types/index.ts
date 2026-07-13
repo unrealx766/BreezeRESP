@@ -47,6 +47,8 @@ export interface ListValue {
   contentEncoding?: string;
   totalCount?: number;
   truncated?: boolean;
+  /** Original Redis indices for filtered results (needed for correct LSET) */
+  originalIndices?: number[];
 }
 
 export interface SetValue {

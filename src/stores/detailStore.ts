@@ -61,6 +61,7 @@ export const useDetailStore = defineStore("detail", () => {
           contentEncoding: val.contentEncoding as string | undefined,
           totalCount: val.totalCount as number | undefined,
           truncated: val.truncated as boolean | undefined,
+          originalIndices: val.originalIndices as number[] | undefined,
         };
         break;
       case "set":
@@ -167,14 +168,21 @@ export const useDetailStore = defineStore("detail", () => {
       currentDetail.value = null;
     } finally {
       loading.value = false;
+    }
+    // Only start TTL timer on successful load
+    if (currentDetail.value) {
       startTtlTimer();
     }
   }
 
-  /** Load a specific page */
+  /** Load a specific page (clamped to valid range) */
   function loadPage(page: number) {
     const key = currentDetail.value?.key.key ?? cascade.selectedKey;
-    if (key) loadDetail(key, page);
+    if (!key) return;
+    const total = (currentValue.value as any)?.totalCount ?? 0;
+    const maxPage = Math.max(0, Math.ceil(total / pageSize.value) - 1);
+    const clamped = Math.max(0, Math.min(page, maxPage));
+    loadDetail(key, clamped);
   }
 
   /** Search/filter within the key */
