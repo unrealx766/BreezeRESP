@@ -226,10 +226,20 @@ function startRenameHashField(field: string) {
 }
 async function saveRenameHashField(e: Event) {
   if (renamingHashField.value === null) return;
+  const oldName = renamingHashField.value;
   const newName = hashFieldRenameTemp.value.trim();
-  if (!newName || newName === renamingHashField.value) { renamingHashField.value = null; return; }
-  const ok = await handleSave(() => detail.renameHashField(renamingHashField.value!, newName), e);
-  if (ok) renamingHashField.value = null;
+  if (!newName || newName === oldName) { renamingHashField.value = null; return; }
+  const ok = await handleSave(() => detail.renameHashField(oldName, newName), e);
+  if (ok) {
+    renamingHashField.value = null;
+    // Sync floating window cellId after hash field rename
+    for (const win of floatingWindows) {
+      if (win.cellType === 'hash' && win.cellId === oldName) {
+        win.cellId = newName;
+        win.title = newName;
+      }
+    }
+  }
 }
 function cancelRenameHashField() { renamingHashField.value = null; }
 
@@ -261,8 +271,21 @@ function startEditSet(member: string) {
 }
 async function saveEditSet(e: Event) {
   if (editingSetMember.value === null) return;
-  const ok = await handleSave(() => detail.saveSetMember(editingSetMember.value!, setMemberTemp.value), e);
-  if (ok) editingSetMember.value = null;
+  const oldMember = editingSetMember.value;
+  const newMember = setMemberTemp.value;
+  const ok = await handleSave(() => detail.saveSetMember(oldMember, newMember), e);
+  if (ok) {
+    editingSetMember.value = null;
+    // Sync floating window cellId/content after set member rename
+    if (oldMember !== newMember) {
+      for (const win of floatingWindows) {
+        if (win.cellType === 'set' && win.cellId === oldMember) {
+          win.cellId = newMember;
+          win.content = newMember;
+        }
+      }
+    }
+  }
 }
 function cancelEditSet() { editingSetMember.value = null; }
 
@@ -277,8 +300,21 @@ function startEditZSet(member: string, score: number) {
 }
 async function saveEditZSet(e: Event) {
   if (editingZSetMember.value === null) return;
-  const ok = await handleSave(() => detail.saveZSetMember(editingZSetMember.value!, zsetMemberTemp.value, zsetScoreTemp.value), e);
-  if (ok) editingZSetMember.value = null;
+  const oldMember = editingZSetMember.value;
+  const newMember = zsetMemberTemp.value;
+  const ok = await handleSave(() => detail.saveZSetMember(oldMember, newMember, zsetScoreTemp.value), e);
+  if (ok) {
+    editingZSetMember.value = null;
+    // Sync floating window cellId/content after zset member rename
+    if (oldMember !== newMember) {
+      for (const win of floatingWindows) {
+        if (win.cellType === 'zset' && win.cellId === oldMember) {
+          win.cellId = newMember;
+          win.content = newMember;
+        }
+      }
+    }
+  }
 }
 function cancelEditZSet() { editingZSetMember.value = null; }
 
@@ -425,6 +461,50 @@ function focusWin(id: string) {
     win.zIndex = getNextZIndex();
   }
 }
+
+/** Sync floating window content when detail data changes (e.g. after inline save) */
+watch(
+  () => detail.currentValue,
+  (val) => {
+    if (!val || floatingWindows.length === 0) return;
+    for (const win of floatingWindows) {
+      if (!win.cellType || !win.cellId) continue;
+      switch (win.cellType) {
+        case 'hash': {
+          const field = (val as any).fields?.find((f: any) => f.field === win.cellId);
+          if (field) win.content = field.value;
+          break;
+        }
+        case 'list': {
+          const globalIdx = parseInt(win.cellId, 10);
+          const origIdx = (val as any).originalIndices as number[] | undefined;
+          let localIdx: number;
+          if (origIdx) {
+            localIdx = origIdx.indexOf(globalIdx);
+          } else {
+            localIdx = globalIdx - detail.currentPage * detail.pageSize;
+          }
+          if (localIdx >= 0 && localIdx < ((val as any).items?.length ?? 0)) {
+            win.content = (val as any).items[localIdx];
+          }
+          break;
+        }
+        case 'set': {
+          if ((val as any).members?.includes(win.cellId)) {
+            win.content = win.cellId;
+          }
+          break;
+        }
+        case 'zset': {
+          const member = (val as any).members?.find((m: any) => m.member === win.cellId);
+          if (member) win.content = member.member;
+          break;
+        }
+      }
+    }
+  },
+  { deep: true }
+);
 
 /** Handle content save from floating window edit mode */
 async function handleSaveContent(id: string, newContent: string) {
