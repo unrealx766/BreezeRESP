@@ -679,7 +679,17 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Center Panel: Key Detail -->
-    <div class="flex-1 flex flex-col min-w-0">
+    <div class="flex-1 flex flex-col min-w-0 relative">
+      <!-- Loading overlay -->
+      <div
+        v-if="detail.loading"
+        class="absolute inset-0 z-20 flex items-center justify-center bg-bg-primary/60 backdrop-blur-[1px] transition-opacity"
+      >
+        <div class="flex flex-col items-center gap-2">
+          <RefreshCw :size="20" class="animate-spin text-redis" />
+          <span class="text-xs text-text-muted">{{ t("common.loading") }}</span>
+        </div>
+      </div>
       <template v-if="detail.currentDetail">
         <!-- Header with editable key name -->
         <div class="px-4 py-3 border-b border-border-light flex items-center justify-between bg-bg-secondary">
