@@ -35,4 +35,4 @@ assignees: ''
 - **Redis 版本 (Redis Server Version)**: [e.g., Redis 7.2 / 云数据库]
 
 ## 📝 补充信息 / Additional Context
-<!-- 任何其他可能对解决此问题有帮助的信息或本地生成的错误日志。 -->
+<!-- 任何其他可能对解决此问题有帮助的信息。 -->
