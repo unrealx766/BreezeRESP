@@ -4,7 +4,7 @@ import { watch, onMounted, onBeforeUnmount, ref, reactive, computed, nextTick } 
 import { useCascadeStore } from "@/stores/cascadeStore";
 import { useDetailStore } from "@/stores/detailStore";
 import { useConnectionStore } from "@/stores/connectionStore";
-import type { RedisDataType } from "@/types";
+import type { RedisDataType, StringValue } from "@/types";
 import KeyTreeItem from "@/components/cascade/KeyTreeItem.vue";
 import TtlGauge from "@/components/charts/TtlGauge.vue";
 import FloatingWindow from "@/components/shared/FloatingWindow.vue";
@@ -206,10 +206,20 @@ function cancelEditKey() { editingKey.value = false; }
 const editingString = ref(false);
 const stringTemp = ref('');
 function startEditString() {
-  stringTemp.value = (detail.currentValue as any).value;
+  stringTemp.value = displayStringValue.value;
   editingString.value = true;
 }
 async function saveEditString(e: Event) {
+  // JSON mode: validate and minify before saving
+  if (viewMode.value === 'json') {
+    try {
+      const parsed = JSON.parse(stringTemp.value);
+      stringTemp.value = JSON.stringify(parsed);
+    } catch {
+      toast.error(t('detail.invalidJson'));
+      return;
+    }
+  }
   const ok = await handleSave(() => detail.saveStringValue(stringTemp.value), e);
   if (ok) editingString.value = false;
 }
@@ -396,8 +406,109 @@ function resetAllEditingState() {
 // Watch selected key change to reset editing state
 watch(
   () => cascade.selectedKey,
-  () => { resetAllEditingState(); }
+  () => {
+    resetAllEditingState();
+    // Auto-detect JSON content and switch to JSON view
+    viewMode.value = isJsonContent.value ? 'json' : 'text';
+  }
 );
+
+// ====== VALUE VIEW MODE (Text / Hex / JSON / ASCII) ======
+type ValueViewMode = 'text' | 'hex' | 'json' | 'ascii';
+const viewMode = ref<ValueViewMode>('text');
+
+/** Whether the current string value is valid JSON */
+const isJsonContent = computed(() => {
+  if (detail.currentValue?.type !== 'string') return false;
+  const val = (detail.currentValue as StringValue).value;
+  if (!val.trim()) return false;
+  try { JSON.parse(val); return true; } catch { return false; }
+});
+
+/** Format value as pretty-printed JSON */
+const formattedJson = computed(() => {
+  if (detail.currentValue?.type !== 'string') return '';
+  const val = (detail.currentValue as StringValue).value;
+  try { return JSON.stringify(JSON.parse(val), null, 2); } catch { return val; }
+});
+
+/** Convert raw bytes to ASCII representation (non-printable → '.') */
+const asciiDisplay = computed(() => {
+  if (detail.currentValue?.type !== 'string') return '';
+  const hex = (detail.currentValue as StringValue).valueHex || '';
+  let result = '';
+  for (let i = 0; i < hex.length; i += 2) {
+    const byte = parseInt(hex.substring(i, i + 2), 16);
+    result += (byte >= 0x20 && byte <= 0x7E) ? String.fromCharCode(byte) : '.';
+  }
+  return result;
+});
+
+/** Convert hex string to ASCII display (non-printable → '.') */
+function hexToAscii(hex: string): string {
+  let result = '';
+  for (let i = 0; i < hex.length; i += 2) {
+    const byte = parseInt(hex.substring(i, i + 2), 16);
+    result += (byte >= 0x20 && byte <= 0x7E) ? String.fromCharCode(byte) : '.';
+  }
+  return result;
+}
+
+/** Convert text to ASCII using lossy byte conversion */
+function textToAscii(text: string): string {
+  let result = '';
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    result += (code >= 0x20 && code <= 0x7E) ? text[i] : '.';
+  }
+  return result;
+}
+
+/** Composite type JSON serialization (entire structure) */
+const compositeJsonStr = computed(() => {
+  const val = detail.currentValue;
+  if (!val || val.type === 'string') return '';
+  try {
+    switch (val.type) {
+      case 'hash': {
+        const obj: Record<string, string> = {};
+        for (const f of (val as any).fields) obj[f.field] = f.value;
+        return JSON.stringify(obj, null, 2);
+      }
+      case 'list': return JSON.stringify((val as any).items, null, 2);
+      case 'set': return JSON.stringify((val as any).members, null, 2);
+      case 'zset': {
+        const arr = (val as any).members.map((m: any) => ({ member: m.member, score: m.score }));
+        return JSON.stringify(arr, null, 2);
+      }
+      default: return '';
+    }
+  } catch { return ''; }
+});
+
+/** Whether current view mode allows editing (string only for text/json) */
+const canEditString = computed(() => viewMode.value === 'text' || viewMode.value === 'json');
+
+/** Display value based on current view mode */
+const displayStringValue = computed(() => {
+  if (detail.currentValue?.type !== 'string') return '';
+  const sv = detail.currentValue as StringValue;
+  switch (viewMode.value) {
+    case 'hex': return sv.valueHex || '';
+    case 'json': return formattedJson.value;
+    case 'ascii': return asciiDisplay.value;
+    default: return sv.value;
+  }
+});
+
+// Cancel editing when switching to a read-only view mode
+watch(viewMode, () => {
+  if (editingString.value && !canEditString.value) {
+    editingString.value = false;
+  }
+  // Close all floating cell popups when switching view mode
+  floatingWindows.length = 0;
+});
 
 // Floating windows for cell value display
 interface FloatingWin {
@@ -742,6 +853,30 @@ onBeforeUnmount(() => {
             <div class="flex items-center justify-between mb-3 shrink-0">
               <label class="text-xs font-medium text-text-secondary">{{ t("detail.value") }}</label>
               <div class="flex items-center gap-1.5">
+                <!-- View mode toggle: Text / Hex / JSON / ASCII -->
+                <div class="flex items-center border border-border rounded-lg overflow-hidden mr-1">
+                  <button
+                    @click="viewMode = 'text'"
+                    class="px-2 py-0.5 text-[11px] transition-colors"
+                    :class="viewMode === 'text' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >Text</button>
+                  <button
+                    @click="viewMode = 'hex'"
+                    class="px-2 py-0.5 text-[11px] transition-colors border-l border-border"
+                    :class="viewMode === 'hex' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >Hex</button>
+                  <button
+                    @click="viewMode = 'json'"
+                    :disabled="!isJsonContent"
+                    class="px-2 py-0.5 text-[11px] transition-colors border-l border-border disabled:opacity-30 disabled:cursor-not-allowed"
+                    :class="viewMode === 'json' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >JSON</button>
+                  <button
+                    @click="viewMode = 'ascii'"
+                    class="px-2 py-0.5 text-[11px] transition-colors border-l border-border"
+                    :class="viewMode === 'ascii' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >ASCII</button>
+                </div>
                 <template v-if="editingString">
                   <button @click="saveEditString($event)" class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium bg-success/10 text-success rounded-lg hover:bg-success/20 transition-colors">
                     <Save :size="11" /> {{ t("detail.save") }}
@@ -750,13 +885,13 @@ onBeforeUnmount(() => {
                     <X :size="11" /> {{ t("detail.cancel") }}
                   </button>
                 </template>
-                <button v-else @click="startEditString" class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-text-secondary rounded-lg hover:bg-bg-hover transition-colors">
+                <button v-else @click="startEditString" :disabled="!canEditString" :title="!canEditString ? t('detail.hexReadOnly') : ''" class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-text-secondary rounded-lg hover:bg-bg-hover transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                   <Pencil :size="11" /> {{ t("detail.edit") }}
                 </button>
               </div>
             </div>
             <textarea
-              :value="editingString ? stringTemp : (detail.currentValue as any).value"
+              :value="editingString ? stringTemp : displayStringValue"
               @input="editingString && (stringTemp = ($event.target as HTMLTextAreaElement).value)"
               :readonly="!editingString"
               :class="[
@@ -773,6 +908,29 @@ onBeforeUnmount(() => {
             <div class="flex items-center justify-between mb-3 shrink-0">
               <label class="text-xs font-medium text-text-secondary">{{ t("detail.value") }} ({{ t("detail.fieldCount", (detail.currentValue as any).totalCount || (detail.currentValue as any).fields.length) }})</label>
               <div class="flex items-center gap-2">
+                <!-- View mode toggle: Text / Hex / JSON / ASCII -->
+                <div class="flex items-center border border-border rounded-lg overflow-hidden">
+                  <button
+                    @click="viewMode = 'text'"
+                    class="px-2 py-0.5 text-[11px] transition-colors"
+                    :class="viewMode === 'text' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >Text</button>
+                  <button
+                    @click="viewMode = 'hex'"
+                    class="px-2 py-0.5 text-[11px] transition-colors border-l border-border"
+                    :class="viewMode === 'hex' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >Hex</button>
+                  <button
+                    @click="viewMode = 'json'"
+                    class="px-2 py-0.5 text-[11px] transition-colors border-l border-border"
+                    :class="viewMode === 'json' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >JSON</button>
+                  <button
+                    @click="viewMode = 'ascii'"
+                    class="px-2 py-0.5 text-[11px] transition-colors border-l border-border"
+                    :class="viewMode === 'ascii' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >ASCII</button>
+                </div>
                 <input
                   type="text"
                   :placeholder="t('detail.searchPlaceholder')"
@@ -791,7 +949,10 @@ onBeforeUnmount(() => {
                 </div>
               </div>
             </div>
-            <div class="border border-border rounded-lg flex-1 min-h-0">
+            <!-- JSON view -->
+            <textarea v-if="viewMode === 'json'" :value="compositeJsonStr" readonly class="flex-1 w-full px-4 py-3 text-sm font-mono border border-border rounded-lg resize-none bg-bg-primary focus:outline-none min-h-[200px]" />
+            <!-- Table view for Text / Hex / ASCII -->
+            <div v-else class="border border-border rounded-lg flex-1 min-h-0">
               <div class="h-full overflow-y-auto">
               <table class="w-full text-sm table-fixed">
                 <thead class="sticky top-0 z-10"><tr class="bg-bg-primary">
@@ -811,8 +972,8 @@ onBeforeUnmount(() => {
                       </div>
                       <!-- Field name display with hover edit button -->
                       <div v-else class="flex items-center gap-1 group/field min-w-0">
-                        <span class="truncate" :title="f.field">{{ f.field }}</span>
-                        <button @click="startRenameHashField(f.field)" class="shrink-0 text-text-muted hover:text-text-primary opacity-0 group-hover/field:opacity-100 transition-opacity">
+                        <span class="truncate" :title="viewMode === 'hex' ? (f.fieldHex || f.field) : viewMode === 'ascii' ? (f.fieldHex ? hexToAscii(f.fieldHex) : textToAscii(f.field)) : f.field">{{ viewMode === 'hex' ? (f.fieldHex || f.field) : viewMode === 'ascii' ? (f.fieldHex ? hexToAscii(f.fieldHex) : textToAscii(f.field)) : f.field }}</span>
+                        <button v-if="viewMode === 'text'" @click="startRenameHashField(f.field)" class="shrink-0 text-text-muted hover:text-text-primary opacity-0 group-hover/field:opacity-100 transition-opacity">
                           <Pencil :size="10" />
                         </button>
                       </div>
@@ -829,10 +990,10 @@ onBeforeUnmount(() => {
                       <div v-else class="flex items-center gap-1 group/cell min-w-0">
                         <span
                           class="truncate cursor-pointer hover:bg-bg-hover rounded px-1 -mx-1 flex-1 min-w-0"
-                          @click="showCellPopup($event, f.value, f.field, 'hash', f.field)"
-                          @dblclick.stop="startEditHash(f.field, f.value)"
-                        >{{ f.value }}</span>
-                        <button @click="startEditHash(f.field, f.value)" class="shrink-0 text-text-muted hover:text-text-primary opacity-0 group-hover/cell:opacity-100 transition-opacity">
+                          @click="showCellPopup($event, viewMode === 'hex' ? (f.valueHex || f.value) : viewMode === 'ascii' ? (f.valueHex ? hexToAscii(f.valueHex) : textToAscii(f.value)) : f.value, f.field, 'hash', f.field)"
+                          @dblclick.stop="viewMode === 'text' && startEditHash(f.field, f.value)"
+                        >{{ viewMode === 'hex' ? (f.valueHex || f.value) : viewMode === 'ascii' ? (f.valueHex ? hexToAscii(f.valueHex) : textToAscii(f.value)) : f.value }}</span>
+                        <button v-if="viewMode === 'text'" @click="startEditHash(f.field, f.value)" class="shrink-0 text-text-muted hover:text-text-primary opacity-0 group-hover/cell:opacity-100 transition-opacity">
                           <Pencil :size="10" />
                         </button>
                       </div>
@@ -868,6 +1029,29 @@ onBeforeUnmount(() => {
             <div class="flex items-center justify-between mb-3 shrink-0">
               <label class="text-xs font-medium text-text-secondary">{{ t("detail.value") }} ({{ t("detail.itemCount", (detail.currentValue as any).totalCount || (detail.currentValue as any).items.length) }})</label>
               <div class="flex items-center gap-2">
+                <!-- View mode toggle: Text / Hex / JSON / ASCII -->
+                <div class="flex items-center border border-border rounded-lg overflow-hidden">
+                  <button
+                    @click="viewMode = 'text'"
+                    class="px-2 py-0.5 text-[11px] transition-colors"
+                    :class="viewMode === 'text' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >Text</button>
+                  <button
+                    @click="viewMode = 'hex'"
+                    class="px-2 py-0.5 text-[11px] transition-colors border-l border-border"
+                    :class="viewMode === 'hex' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >Hex</button>
+                  <button
+                    @click="viewMode = 'json'"
+                    class="px-2 py-0.5 text-[11px] transition-colors border-l border-border"
+                    :class="viewMode === 'json' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >JSON</button>
+                  <button
+                    @click="viewMode = 'ascii'"
+                    class="px-2 py-0.5 text-[11px] transition-colors border-l border-border"
+                    :class="viewMode === 'ascii' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >ASCII</button>
+                </div>
                 <input
                   type="text"
                   :placeholder="t('detail.searchPlaceholder')"
@@ -886,7 +1070,10 @@ onBeforeUnmount(() => {
                 </div>
               </div>
             </div>
-            <div class="border border-border rounded-lg flex-1 min-h-0">
+            <!-- JSON view -->
+            <textarea v-if="viewMode === 'json'" :value="compositeJsonStr" readonly class="flex-1 w-full px-4 py-3 text-sm font-mono border border-border rounded-lg resize-none bg-bg-primary focus:outline-none min-h-[200px]" />
+            <!-- Table view for Text / Hex / ASCII -->
+            <div v-else class="border border-border rounded-lg flex-1 min-h-0">
               <div class="h-full overflow-y-auto">
               <table class="w-full text-sm">
                 <thead class="sticky top-0 z-10"><tr class="bg-bg-primary">
@@ -906,10 +1093,10 @@ onBeforeUnmount(() => {
                       <div v-else class="flex items-center gap-1 group/cell min-w-0">
                         <span
                           class="truncate cursor-pointer hover:bg-bg-hover rounded px-1 -mx-1 flex-1 min-w-0"
-                          @click="showCellPopup($event, item, `Index ${(detail.currentValue as any).originalIndices ? (detail.currentValue as any).originalIndices[i] : detail.currentPage * detail.pageSize + i}`, 'list', String((detail.currentValue as any).originalIndices ? (detail.currentValue as any).originalIndices[i] : detail.currentPage * detail.pageSize + i))"
-                          @dblclick.stop="startEditList(i, item)"
-                        >{{ item }}</span>
-                        <button @click="startEditList(i, item)" class="shrink-0 text-text-muted hover:text-text-primary opacity-0 group-hover/cell:opacity-100 transition-opacity">
+                          @click="showCellPopup($event, viewMode === 'hex' ? ((detail.currentValue as any).itemsHex?.[i] || item) : viewMode === 'ascii' ? ((detail.currentValue as any).itemsHex?.[i] ? hexToAscii((detail.currentValue as any).itemsHex[i]) : textToAscii(item)) : item, `Index ${(detail.currentValue as any).originalIndices ? (detail.currentValue as any).originalIndices[i] : detail.currentPage * detail.pageSize + i}`, 'list', String((detail.currentValue as any).originalIndices ? (detail.currentValue as any).originalIndices[i] : detail.currentPage * detail.pageSize + i))"
+                          @dblclick.stop="viewMode === 'text' && startEditList(i, item)"
+                        >{{ viewMode === 'hex' ? ((detail.currentValue as any).itemsHex?.[i] || item) : viewMode === 'ascii' ? ((detail.currentValue as any).itemsHex?.[i] ? hexToAscii((detail.currentValue as any).itemsHex[i]) : textToAscii(item)) : item }}</span>
+                        <button v-if="viewMode === 'text'" @click="startEditList(i, item)" class="shrink-0 text-text-muted hover:text-text-primary opacity-0 group-hover/cell:opacity-100 transition-opacity">
                           <Pencil :size="10" />
                         </button>
                       </div>
@@ -926,6 +1113,29 @@ onBeforeUnmount(() => {
             <div class="flex items-center justify-between mb-3 shrink-0">
               <label class="text-xs font-medium text-text-secondary">{{ t("detail.value") }} ({{ t("detail.memberCount", (detail.currentValue as any).totalCount || (detail.currentValue as any).members.length) }})</label>
               <div class="flex items-center gap-2">
+                <!-- View mode toggle: Text / Hex -->
+                <div class="flex items-center border border-border rounded-lg overflow-hidden">
+                  <button
+                    @click="viewMode = 'text'"
+                    class="px-2 py-0.5 text-[11px] transition-colors"
+                    :class="viewMode === 'text' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >Text</button>
+                  <button
+                    @click="viewMode = 'hex'"
+                    class="px-2 py-0.5 text-[11px] transition-colors border-l border-border"
+                    :class="viewMode === 'hex' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >Hex</button>
+                  <button
+                    @click="viewMode = 'json'"
+                    class="px-2 py-0.5 text-[11px] transition-colors border-l border-border"
+                    :class="viewMode === 'json' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >JSON</button>
+                  <button
+                    @click="viewMode = 'ascii'"
+                    class="px-2 py-0.5 text-[11px] transition-colors border-l border-border"
+                    :class="viewMode === 'ascii' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >ASCII</button>
+                </div>
                 <input
                   type="text"
                   :placeholder="t('detail.searchPlaceholder')"
@@ -944,7 +1154,10 @@ onBeforeUnmount(() => {
                 </div>
               </div>
             </div>
-            <div class="flex-1 min-h-0 overflow-y-auto space-y-1">
+            <!-- JSON view -->
+            <textarea v-if="viewMode === 'json'" :value="compositeJsonStr" readonly class="flex-1 w-full px-4 py-3 text-sm font-mono border border-border rounded-lg resize-none bg-bg-primary focus:outline-none min-h-[200px]" />
+            <!-- List view for Text / Hex / ASCII -->
+            <div v-else class="flex-1 min-h-0 overflow-y-auto space-y-1">
               <div v-for="(m, i) in (detail.currentValue as any).members" :key="m"
                 class="px-3 py-2 text-xs font-mono bg-bg-primary border border-border-light rounded-lg flex items-center gap-2">
                 <span class="text-text-muted w-6 text-right shrink-0">{{ detail.currentPage * detail.pageSize + i + 1 }}</span>
@@ -959,10 +1172,10 @@ onBeforeUnmount(() => {
                 <div v-else class="flex items-center gap-1 flex-1 min-w-0 group/cell">
                   <span
                     class="text-text-primary truncate cursor-pointer hover:bg-bg-hover rounded px-1 -mx-1 flex-1 min-w-0"
-                    @click="showCellPopup($event, m, `Member ${detail.currentPage * detail.pageSize + i + 1}`, 'set', m)"
-                    @dblclick.stop="startEditSet(m)"
-                  >{{ m }}</span>
-                  <button @click="startEditSet(m)" class="shrink-0 text-text-muted hover:text-text-primary opacity-0 group-hover/cell:opacity-100 transition-opacity">
+                    @click="showCellPopup($event, viewMode === 'hex' ? ((detail.currentValue as any).membersHex?.[i] || m) : viewMode === 'ascii' ? ((detail.currentValue as any).membersHex?.[i] ? hexToAscii((detail.currentValue as any).membersHex[i]) : textToAscii(m)) : m, `Member ${detail.currentPage * detail.pageSize + i + 1}`, 'set', m)"
+                    @dblclick.stop="viewMode === 'text' && startEditSet(m)"
+                  >{{ viewMode === 'hex' ? ((detail.currentValue as any).membersHex?.[i] || m) : viewMode === 'ascii' ? ((detail.currentValue as any).membersHex?.[i] ? hexToAscii((detail.currentValue as any).membersHex[i]) : textToAscii(m)) : m }}</span>
+                  <button v-if="viewMode === 'text'" @click="startEditSet(m)" class="shrink-0 text-text-muted hover:text-text-primary opacity-0 group-hover/cell:opacity-100 transition-opacity">
                     <Pencil :size="10" />
                   </button>
                 </div>
@@ -975,6 +1188,29 @@ onBeforeUnmount(() => {
             <div class="flex items-center justify-between mb-3 shrink-0">
               <label class="text-xs font-medium text-text-secondary">{{ t("detail.value") }} ({{ t("detail.memberCount", (detail.currentValue as any).totalCount || (detail.currentValue as any).members.length) }})</label>
               <div class="flex items-center gap-2">
+                <!-- View mode toggle: Text / Hex -->
+                <div class="flex items-center border border-border rounded-lg overflow-hidden">
+                  <button
+                    @click="viewMode = 'text'"
+                    class="px-2 py-0.5 text-[11px] transition-colors"
+                    :class="viewMode === 'text' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >Text</button>
+                  <button
+                    @click="viewMode = 'hex'"
+                    class="px-2 py-0.5 text-[11px] transition-colors border-l border-border"
+                    :class="viewMode === 'hex' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >Hex</button>
+                  <button
+                    @click="viewMode = 'json'"
+                    class="px-2 py-0.5 text-[11px] transition-colors border-l border-border"
+                    :class="viewMode === 'json' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >JSON</button>
+                  <button
+                    @click="viewMode = 'ascii'"
+                    class="px-2 py-0.5 text-[11px] transition-colors border-l border-border"
+                    :class="viewMode === 'ascii' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >ASCII</button>
+                </div>
                 <input
                   type="text"
                   :placeholder="t('detail.searchPlaceholder')"
@@ -993,7 +1229,10 @@ onBeforeUnmount(() => {
                 </div>
               </div>
             </div>
-            <div class="border border-border rounded-lg flex-1 min-h-0">
+            <!-- JSON view -->
+            <textarea v-if="viewMode === 'json'" :value="compositeJsonStr" readonly class="flex-1 w-full px-4 py-3 text-sm font-mono border border-border rounded-lg resize-none bg-bg-primary focus:outline-none min-h-[200px]" />
+            <!-- Table view for Text / Hex / ASCII -->
+            <div v-else class="border border-border rounded-lg flex-1 min-h-0">
               <div class="h-full overflow-y-auto">
               <table class="w-full text-sm">
                 <thead class="sticky top-0 z-10"><tr class="bg-bg-primary">
@@ -1015,10 +1254,10 @@ onBeforeUnmount(() => {
                       <div v-else class="flex items-center gap-1 group/cell min-w-0">
                         <span
                           class="truncate cursor-pointer hover:bg-bg-hover rounded px-1 -mx-1 flex-1 min-w-0"
-                          @click="showCellPopup($event, m.member, `Score: ${m.score}`, 'zset', m.member)"
-                          @dblclick.stop="startEditZSet(m.member, m.score)"
-                        >{{ m.member }}</span>
-                        <button @click="startEditZSet(m.member, m.score)" class="shrink-0 text-text-muted hover:text-text-primary opacity-0 group-hover/cell:opacity-100 transition-opacity">
+                          @click="showCellPopup($event, viewMode === 'hex' ? (m.memberHex || m.member) : viewMode === 'ascii' ? (m.memberHex ? hexToAscii(m.memberHex) : textToAscii(m.member)) : m.member, `Score: ${m.score}`, 'zset', m.member)"
+                          @dblclick.stop="viewMode === 'text' && startEditZSet(m.member, m.score)"
+                        >{{ viewMode === 'hex' ? (m.memberHex || m.member) : viewMode === 'ascii' ? (m.memberHex ? hexToAscii(m.memberHex) : textToAscii(m.member)) : m.member }}</span>
+                        <button v-if="viewMode === 'text'" @click="startEditZSet(m.member, m.score)" class="shrink-0 text-text-muted hover:text-text-primary opacity-0 group-hover/cell:opacity-100 transition-opacity">
                           <Pencil :size="10" />
                         </button>
                       </div>

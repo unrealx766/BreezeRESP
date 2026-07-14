@@ -107,7 +107,9 @@
     "truncated": "仅显示前 {shown} 条，共 {total} 条（为防止页面卡顿已截断）",
     "searchPlaceholder": "搜索...",
     "fieldTtl": "字段 TTL",
-    "fieldTtlSet": "设置字段 TTL"
+    "fieldTtlSet": "设置字段 TTL",
+    "hexReadOnly": "当前视图为只读模式",
+    "invalidJson": "JSON 格式无效"
   },
   "pipeline": {
     "title": "Pipeline 构建器",

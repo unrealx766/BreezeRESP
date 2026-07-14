@@ -27,13 +27,15 @@ export interface RedisKey {
 export interface StringValue {
   type: "string";
   value: string;
+  /** Hex-encoded raw bytes for binary-safe multi-view display */
+  valueHex: string;
   encoding: string;
   contentEncoding?: string;
 }
 
 export interface HashValue {
   type: "hash";
-  fields: Array<{ field: string; value: string; ttl?: number }>;
+  fields: Array<{ field: string; fieldHex?: string; value: string; valueHex?: string; ttl?: number }>;
   encoding: string;
   contentEncoding?: string;
   totalCount?: number;
@@ -45,6 +47,8 @@ export interface HashValue {
 export interface ListValue {
   type: "list";
   items: string[];
+  /** Hex-encoded raw bytes for each item (parallel to items[]) */
+  itemsHex?: string[];
   encoding: string;
   contentEncoding?: string;
   totalCount?: number;
@@ -56,6 +60,8 @@ export interface ListValue {
 export interface SetValue {
   type: "set";
   members: string[];
+  /** Hex-encoded raw bytes for each member (parallel to members[]) */
+  membersHex?: string[];
   encoding: string;
   contentEncoding?: string;
   totalCount?: number;
@@ -64,7 +70,7 @@ export interface SetValue {
 
 export interface ZSetValue {
   type: "zset";
-  members: Array<{ member: string; score: number }>;
+  members: Array<{ member: string; memberHex?: string; score: number }>;
   encoding: string;
   contentEncoding?: string;
   totalCount?: number;

@@ -497,8 +497,10 @@ pub async fn get_key_detail(
                 .await
                 .map_err(|e| format!("GET error: {}", e))?;
             let content_encoding = detect_content_encoding(&val);
+            // Hex-encode raw bytes for binary-safe multi-view display (Text / Hex)
+            let value_hex: String = val.iter().map(|b| format!("{:02x}", b)).collect();
             let val = String::from_utf8_lossy(&val).into_owned();
-            serde_json::json!({ "type": "string", "value": val, "encoding": encoding, "contentEncoding": content_encoding })
+            serde_json::json!({ "type": "string", "value": val, "valueHex": value_hex, "encoding": encoding, "contentEncoding": content_encoding })
         }
         "hash" => {
             // Use HSCAN for pagination (avoids loading all data for large hashes)
@@ -582,8 +584,10 @@ pub async fn get_key_detail(
                 .enumerate()
                 .map(|(i, (f, v))| {
                     let field = String::from_utf8_lossy(f).into_owned();
+                    let field_hex: String = f.iter().map(|b| format!("{:02x}", b)).collect();
                     let value = String::from_utf8_lossy(v).into_owned();
-                    let mut obj = serde_json::json!({ "field": field, "value": value });
+                    let value_hex: String = v.iter().map(|b| format!("{:02x}", b)).collect();
+                    let mut obj = serde_json::json!({ "field": field, "fieldHex": field_hex, "value": value, "valueHex": value_hex });
                     if let Some(ref ttls) = field_ttls {
                         obj["ttl"] = serde_json::json!(ttls[i]);
                     }
@@ -620,11 +624,12 @@ pub async fn get_key_detail(
             };
             let parts: Vec<&[u8]> = items.iter().map(|b| b.as_slice()).collect();
             let content_encoding = detect_multi_encoding(&parts);
+            let items_hex: Vec<String> = items.iter().map(|b| b.iter().map(|byte| format!("{:02x}", byte)).collect()).collect();
             let items: Vec<String> = items
                 .into_iter()
                 .map(|b| String::from_utf8_lossy(&b).into_owned())
                 .collect();
-            let mut list_json = serde_json::json!({ "type": "list", "items": items, "encoding": encoding, "contentEncoding": content_encoding, "totalCount": matched_count, "truncated": truncated });
+            let mut list_json = serde_json::json!({ "type": "list", "items": items, "itemsHex": items_hex, "encoding": encoding, "contentEncoding": content_encoding, "totalCount": matched_count, "truncated": truncated });
             if let Some(indices) = original_indices {
                 list_json["originalIndices"] = serde_json::json!(indices);
             }
@@ -667,11 +672,12 @@ pub async fn get_key_detail(
             let truncated = if filter.is_some() { false } else { total_count > (offset + limit) as usize };
             let parts: Vec<&[u8]> = display_members.iter().map(|b| b.as_slice()).collect();
             let content_encoding = detect_multi_encoding(&parts);
+            let members_hex: Vec<String> = display_members.iter().map(|b| b.iter().map(|byte| format!("{:02x}", byte)).collect()).collect();
             let members: Vec<String> = display_members
                 .iter()
                 .map(|b| String::from_utf8_lossy(b).into_owned())
                 .collect();
-            serde_json::json!({ "type": "set", "members": members, "encoding": encoding, "contentEncoding": content_encoding, "totalCount": matched_count, "truncated": truncated })
+            serde_json::json!({ "type": "set", "members": members, "membersHex": members_hex, "encoding": encoding, "contentEncoding": content_encoding, "totalCount": matched_count, "truncated": truncated })
         }
         "zset" => {
             // Use ZSCAN for pagination (ZRANGE LIMIT only works with BYSCORE/BYLEX)
@@ -714,7 +720,8 @@ pub async fn get_key_detail(
                 .into_iter()
                 .map(|(m, s)| {
                     let member = String::from_utf8_lossy(&m).into_owned();
-                    serde_json::json!({ "member": member, "score": s })
+                    let member_hex: String = m.iter().map(|b| format!("{:02x}", b)).collect();
+                    serde_json::json!({ "member": member, "memberHex": member_hex, "score": s })
                 })
                 .collect();
             serde_json::json!({ "type": "zset", "members": members_json, "encoding": encoding, "contentEncoding": content_encoding, "totalCount": matched_count, "truncated": truncated })

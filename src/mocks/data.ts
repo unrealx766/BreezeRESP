@@ -88,6 +88,7 @@ export const mockKeyDetails: Record<string, KeyDetail> = {
     value: {
       type: "string",
       value: "John Doe",
+      valueHex: "4a6f686e20446f65",
       encoding: "embstr",
       contentEncoding: "ASCII",
     },
@@ -168,7 +169,7 @@ export function getMockKeyDetail(key: string): KeyDetail {
   };
   const type = redisKey.type;
   if (type === "string") {
-    return { key: redisKey, value: { type: "string", value: `value_of_${key}`, encoding: "embstr", contentEncoding: "UTF-8" } };
+    return { key: redisKey, value: { type: "string", value: `value_of_${key}`, valueHex: "", encoding: "embstr", contentEncoding: "UTF-8" } };
   } else if (type === "hash") {
     return {
       key: redisKey,

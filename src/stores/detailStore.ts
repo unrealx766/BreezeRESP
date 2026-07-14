@@ -40,6 +40,7 @@ export const useDetailStore = defineStore("detail", () => {
         keyValue = {
           type: "string",
           value: val.value as string,
+          valueHex: (val.valueHex as string) || "",
           encoding: (val.encoding as string) || rust.encoding,
           contentEncoding: val.contentEncoding as string | undefined,
         };
@@ -47,7 +48,7 @@ export const useDetailStore = defineStore("detail", () => {
       case "hash":
         keyValue = {
           type: "hash",
-          fields: (val.fields as Array<{ field: string; value: string; ttl?: number }>) || [],
+          fields: (val.fields as Array<{ field: string; fieldHex?: string; value: string; valueHex?: string; ttl?: number }>) || [],
           encoding: (val.encoding as string) || rust.encoding,
           contentEncoding: val.contentEncoding as string | undefined,
           totalCount: val.totalCount as number | undefined,
@@ -59,6 +60,7 @@ export const useDetailStore = defineStore("detail", () => {
         keyValue = {
           type: "list",
           items: (val.items as string[]) || [],
+          itemsHex: (val.itemsHex as string[]) || undefined,
           encoding: (val.encoding as string) || rust.encoding,
           contentEncoding: val.contentEncoding as string | undefined,
           totalCount: val.totalCount as number | undefined,
@@ -70,6 +72,7 @@ export const useDetailStore = defineStore("detail", () => {
         keyValue = {
           type: "set",
           members: (val.members as string[]) || [],
+          membersHex: (val.membersHex as string[]) || undefined,
           encoding: (val.encoding as string) || rust.encoding,
           contentEncoding: val.contentEncoding as string | undefined,
           totalCount: val.totalCount as number | undefined,
@@ -79,7 +82,7 @@ export const useDetailStore = defineStore("detail", () => {
       case "zset":
         keyValue = {
           type: "zset",
-          members: (val.members as Array<{ member: string; score: number }>) || [],
+          members: (val.members as Array<{ member: string; memberHex?: string; score: number }>) || [],
           encoding: (val.encoding as string) || rust.encoding,
           contentEncoding: val.contentEncoding as string | undefined,
           totalCount: val.totalCount as number | undefined,
@@ -90,6 +93,7 @@ export const useDetailStore = defineStore("detail", () => {
         keyValue = {
           type: "string",
           value: JSON.stringify(val),
+          valueHex: "",
           encoding: rust.encoding,
           contentEncoding: undefined,
         };

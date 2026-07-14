@@ -107,7 +107,9 @@
     "truncated": "Showing first {shown} of {total} items (truncated to prevent UI freeze)",
     "searchPlaceholder": "Search...",
     "fieldTtl": "Field TTL",
-    "fieldTtlSet": "Set Field TTL"
+    "fieldTtlSet": "Set Field TTL",
+    "hexReadOnly": "This view is read-only",
+    "invalidJson": "Invalid JSON format"
   },
   "pipeline": {
     "title": "Pipeline Builder",
