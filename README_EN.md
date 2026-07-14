@@ -11,8 +11,8 @@
 
 ## ✨ Features
 
-- **Connection Config** — Card-based multi-instance configuration, SSL/TLS encryption, system Keychain secret storage (AES-GCM), connectivity testing, 16 DB switching
-- **Data Browser** — `:`-delimited cascading tree directory with virtual scrolling, view & inline edit for String / Hash / List / Set / ZSet, TTL ring gauge, floating window for long values, debounced search
+- **Connection Config** — Card-based multi-instance configuration, SSL/TLS encryption, system Keychain secret storage (AES-GCM), connectivity testing, 16 DB switching, auto disconnect detection & status sync
+- **Data Browser** — `:`-delimited cascading tree directory with virtual scrolling, view & inline edit for String / Hash / List / Set / ZSet, Text / Hex / JSON / ASCII multi-view toggle, binary-safe (Bitmaps / HyperLogLog / Geospatial auto-adapted), per-field TTL for Hash (Redis ≥ 7.4), content encoding detection, TTL ring gauge, floating window for long values, debounced search
 - **Real-time Monitoring** — QPS trend chart, dashboard for memory / hit rate / CPU and other key metrics
 - **Pipeline** — Visual batch command orchestration, drag-and-drop sorting, per-command result & latency stats (with RTT savings), encrypted script save / load
 - **Sandbox Mode** — Pre-execution diff preview, built-in write command templates, snapshot & one-click rollback (auto-generated inverse operations), dangerous command frontend interception
