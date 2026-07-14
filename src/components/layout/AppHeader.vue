@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import { ref, computed } from "vue";
+import { ref, computed, nextTick } from "vue";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useCascadeStore } from "@/stores/cascadeStore";
 import { useDetailStore } from "@/stores/detailStore";
@@ -22,12 +22,30 @@ function openSettings() {
 // DB switching
 const switchingDb = ref(false);
 const showDbDropdown = ref(false);
+const dbDropdownEl = ref<HTMLElement | null>(null);
+const savedDbScrollTop = ref(0);
+
+async function toggleDbDropdown() {
+  if (showDbDropdown.value) {
+    // Save scroll position before closing
+    savedDbScrollTop.value = dbDropdownEl.value?.scrollTop ?? 0;
+    showDbDropdown.value = false;
+  } else {
+    showDbDropdown.value = true;
+    // Restore scroll position after DOM renders
+    await nextTick();
+    if (dbDropdownEl.value) {
+      dbDropdownEl.value.scrollTop = savedDbScrollTop.value;
+    }
+  }
+}
 
 const activeConnDb = computed(() => connStore.activeConnection?.db ?? 0);
 
 async function handleDbSwitch(db: number) {
   if (switchingDb.value) return;
   switchingDb.value = true;
+  savedDbScrollTop.value = dbDropdownEl.value?.scrollTop ?? 0;
   showDbDropdown.value = false;
   try {
     await connStore.switchDb(db);
@@ -89,7 +107,7 @@ const colorMap = {
         <!-- DB switcher -->
         <div v-if="connStore.activeConnection.status === 'connected'" class="relative shrink-0">
           <button
-            @click="showDbDropdown = !showDbDropdown"
+            @click="toggleDbDropdown"
             :disabled="switchingDb"
             class="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-mono font-semibold text-redis bg-redis/5 border border-redis/20 rounded-lg hover:border-redis/40 focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20 transition-colors disabled:opacity-50"
           >
@@ -99,10 +117,11 @@ const colorMap = {
             <ChevronDown v-else :size="11" class="text-redis/50 transition-transform" :class="showDbDropdown ? 'rotate-180' : ''" />
           </button>
           <!-- Backdrop -->
-          <div v-if="showDbDropdown" class="fixed inset-0 z-40" @click="showDbDropdown = false" />
+          <div v-if="showDbDropdown" class="fixed inset-0 z-40" @click="savedDbScrollTop = dbDropdownEl?.scrollTop ?? 0; showDbDropdown = false" />
           <!-- Dropdown -->
           <div
             v-if="showDbDropdown"
+            ref="dbDropdownEl"
             class="absolute top-full left-0 mt-1 w-28 bg-bg-secondary border border-border rounded-lg shadow-lg py-1 z-50 max-h-52 overflow-y-auto"
           >
             <div class="px-2.5 py-1 border-b border-border-light mb-0.5">

@@ -71,7 +71,7 @@ async function saveForm() {
         data.password = undefined as any; // signal to keep old password
       }
       const wasConnected = connStore.connections.find((c) => c.id === editingId.value)?.status === "connected";
-      await connStore.updateConnection(editingId.value, { ...data });
+      await connStore.updateConnection(editingId.value, { ...data }, !usePassword.value ? false : undefined);
       showForm.value = false;
       // Reconnect in background if was connected (card shows loading state)
       if (wasConnected) {

@@ -64,7 +64,9 @@ jobs:
             librsvg2-dev \
             patchelf \
             libsecret-1-dev \
-            libssl-dev
+            libssl-dev \
+            xdg-utils \
+            libfuse2
           if [[ "${{ matrix.args }}" == *rpm* ]]; then
             sudo apt-get install -y rpm
           fi

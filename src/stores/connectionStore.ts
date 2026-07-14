@@ -71,8 +71,12 @@ export const useConnectionStore = defineStore("connection", () => {
     }
   }
 
-  /** Build a Rust-side config from a local connection */
-  function toRustConfig(conn: RedisConnection): RustConnectionConfig {
+  /** Build a Rust-side config from a local connection
+   *  @param forceKeepPassword  true  → always set keepPassword (connect flow)
+   *                            false → never set keepPassword (save with password cleared)
+   *                            undefined → auto-detect (default, backward-compatible)
+   */
+  function toRustConfig(conn: RedisConnection, forceKeepPassword?: boolean): RustConnectionConfig {
     const config: RustConnectionConfig = {
       id: conn.id,
       name: conn.name,
@@ -85,7 +89,8 @@ export const useConnectionStore = defineStore("connection", () => {
     };
     // If frontend doesn't have the real password (always empty after load),
     // tell backend to preserve the stored password
-    if (!conn.password && !conn.id.startsWith("__form_test_")) {
+    const shouldKeep = forceKeepPassword ?? (!conn.password && !conn.id.startsWith("__form_test_"));
+    if (shouldKeep) {
       config.keepPassword = true;
     }
     return config;
@@ -109,7 +114,7 @@ export const useConnectionStore = defineStore("connection", () => {
     return newConn;
   }
 
-  async function updateConnection(id: string, patch: Partial<RedisConnection>) {
+  async function updateConnection(id: string, patch: Partial<RedisConnection>, forceKeepPassword?: boolean) {
     const idx = connections.value.findIndex((c) => c.id === id);
     if (idx !== -1) {
       // If password is undefined in patch, user didn't change it → set empty so toRustConfig adds keepPassword
@@ -117,9 +122,18 @@ export const useConnectionStore = defineStore("connection", () => {
         patch = { ...patch, password: "" };
       }
       connections.value[idx] = { ...connections.value[idx], ...patch };
+      // Sync hasPassword so card badge reflects actual state
+      // - New password provided → true
+      // - Explicitly cleared (forceKeepPassword === false) → false
+      // - Otherwise (keep old password) → preserve existing value
+      if (connections.value[idx].password) {
+        connections.value[idx].hasPassword = true;
+      } else if (forceKeepPassword === false) {
+        connections.value[idx].hasPassword = false;
+      }
       // Persist to disk (toRustConfig auto-sets keepPassword when password is empty)
       try {
-        await tauriApi.connection.saveConnection(toRustConfig(connections.value[idx]));
+        await tauriApi.connection.saveConnection(toRustConfig(connections.value[idx], forceKeepPassword));
       } catch (e) {
         console.error("Failed to save connection update:", e);
       }
