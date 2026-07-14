@@ -7,7 +7,6 @@ import { readFileSync } from "fs";
 const pkg = JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf-8"));
 const appVersion = `v${pkg.version}`;
 
-// @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
@@ -28,14 +27,14 @@ export default defineConfig(async () => ({
   clearScreen: false,
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
-    port: 1420,
+    port: 26714,
     strictPort: true,
     host: host || false,
     hmr: host
       ? {
           protocol: "ws",
           host,
-          port: 1421,
+          port: 26715,
         }
       : undefined,
     watch: {
