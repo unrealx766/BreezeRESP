@@ -26,13 +26,10 @@ jobs:
             args: ''
           - platform: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            args: '--bundles deb,appimage'
+            args: '--bundles deb,appimage,rpm'
           - platform: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-            args: '--bundles deb,appimage'
-          - platform: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            args: '--bundles rpm'
+            args: '--bundles deb,appimage,rpm'
 
     runs-on: ${{ matrix.platform }}
     steps:
