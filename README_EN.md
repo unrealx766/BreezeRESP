@@ -69,7 +69,26 @@ BreezeRESP/
 
 ## 🚀 Quick Start
 
-**Prerequisites:** [Node.js](https://nodejs.org/) >= 18 · [Rust](https://www.rust-lang.org/tools/install) >= 1.77 · [Tauri Prerequisites](https://v2.tauri.app/start/prerequisites/)
+### System Requirements
+
+**Development Toolchain:**
+
+| Tool | Minimum Version | Notes |
+|------|----------------|-------|
+| [Node.js](https://nodejs.org/) | >= 18 | Frontend build |
+| [Rust](https://www.rust-lang.org/tools/install) | >= 1.85 | Required by `edition = "2024"` |
+| [Tauri CLI](https://v2.tauri.app/) | >= 2 | Desktop app build |
+
+**Operating System:**
+
+| Platform | Minimum Version | Notes |
+|----------|----------------|-------|
+| Windows | 10 (1809+) | x86_64 |
+| macOS | 10.15 (Catalina) | Intel / Apple Silicon |
+| Linux (Debian-based) | Ubuntu 22.04 / Debian 12 | Requires WebKitGTK 4.1 |
+| Linux (RPM-based) | Fedora 36 / CentOS Stream 9 | Requires WebKitGTK 4.1 |
+
+### Install & Run
 
 ```bash
 npm install          # Install dependencies

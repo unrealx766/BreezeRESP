@@ -69,15 +69,34 @@ BreezeRESP/
 
 ## 🚀 快速开始
 
-**环境要求：** [Node.js](https://nodejs.org/) >= 18 · [Rust](https://www.rust-lang.org/tools/install) >= 1.77 · [Tauri Prerequisites](https://v2.tauri.app/start/prerequisites/)
+### 系统要求
+
+**开发工具链：**
+
+| 工具 | 最低版本 | 说明 |
+|------|---------|------|
+| [Node.js](https://nodejs.org/) | >= 18 | 前端构建 |
+| [Rust](https://www.rust-lang.org/tools/install) | >= 1.85 | `edition = "2024"` 要求 |
+| [Tauri CLI](https://v2.tauri.app/) | >= 2 | 桌面应用构建 |
+
+**操作系统：**
+
+| 平台 | 最低版本 | 说明 |
+|------|---------|------|
+| Windows | 10 (1809+) | x86_64 |
+| macOS | 10.15 (Catalina) | Intel / Apple Silicon |
+| Linux (Debian 系) | Ubuntu 22.04 / Debian 12 | 需 WebKitGTK 4.1 |
+| Linux (RPM 系) | Fedora 36 / CentOS Stream 9 | 需 WebKitGTK 4.1 |
+
+### 安装与运行
 
 ```bash
 npm install          # 安装依赖
 npm run tauri:dev    # 开发运行
-npm run tauri:build  # 构建生产包
+npm run tauri:build  # 构建安装包
 ```
 
-产物位于 `src-tauri/target/release/bundle/`。仅前端调试可用 `npm run dev`。
+构建安装包位于 `src-tauri/target/release/bundle/`。仅前端调试可用 `npm run dev`。
 
 ## 📦 构建产物
 
