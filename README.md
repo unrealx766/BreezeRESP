@@ -23,7 +23,7 @@
 
 | 连接管理 | 暗黑模式 |
 |:---:|:---:|
-| ![连接管理](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/home.png) | ![暗黑模式](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/dark_mode.png) |
+| ![连接管理](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/Connection.png) | ![暗黑模式](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/dark_mode.png) |
 
 | 数据浏览器 | Pipeline 构建器 |
 |:---:|:---:|

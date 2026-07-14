@@ -23,7 +23,7 @@
 
 | Connection Management | Dark Mode |
 |:---:|:---:|
-| ![Connection Management](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/home.png) | ![Dark Mode](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/dark_mode.png) |
+| ![Connection Management](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/Connection.png) | ![Dark Mode](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/dark_mode.png) |
 
 | Data Browser | Pipeline Builder |
 |:---:|:---:|
