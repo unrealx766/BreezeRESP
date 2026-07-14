@@ -1,7 +1,7 @@
 {
   "app": {
     "title": "BreezeRESP",
-    "subtitle": "Redis 桌面客户端",
+    "subtitle": "Redis 桌面可视化工具",
     "copyright": "Copyright © 2026 unrealx766. All Rights Reserved."
   },
   "nav": {

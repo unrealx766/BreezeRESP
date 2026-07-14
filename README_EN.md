@@ -117,7 +117,7 @@ Build output is located in `src-tauri/target/release/bundle/`. Use `npm run dev`
 
 ## ⚠️ Disclaimer
 
-1. **Data Safety** — BreezeRESP is a Redis client tool that directly performs read/write operations on target databases. Users assume all data risks, including but not limited to data loss, corruption, or service interruption caused by misoperation. It is recommended to back up data before operating on production environments.
+1. **Data Safety** — BreezeRESP is a Redis visualization tool that directly performs read/write operations on target databases. Users assume all data risks, including but not limited to data loss, corruption, or service interruption caused by misoperation. It is recommended to back up data before operating on production environments.
 2. **Sandbox & Rollback** — The preview and rollback features in Sandbox mode are provided for reference only and are not guaranteed to be fully accurate in all scenarios. Users should carefully review changes before executing write operations and verify rollback results.
 3. **Connection Security** — This tool uses AES-256-GCM encryption to store connection information and manages keys via the system Keychain. However, it assumes no responsibility for information disclosure resulting from improper OS security configurations, third-party malware, or network attacks.
 4. **Third-Party Dependencies** — This project depends on multiple open-source components (Tauri, Vue, Rust crates, etc.). The security and stability of each component are the responsibility of their respective maintainers.

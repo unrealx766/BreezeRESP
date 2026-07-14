@@ -1,7 +1,7 @@
 {
   "app": {
     "title": "BreezeRESP",
-    "subtitle": "Desktop Client for Redis",
+    "subtitle": "Desktop Visualization Tool for Redis",
     "copyright": "Copyright © 2026 unrealx766. All Rights Reserved."
   },
   "nav": {

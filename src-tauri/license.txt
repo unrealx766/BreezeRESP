@@ -12,7 +12,7 @@ This software is distributed under the Apache License 2.0.
 【中文】
 
 1. 数据安全
-   BreezeRESP 是一款 Redis 客户端工具，直接对目标数据库执行读写操作。
+   BreezeRESP 是一款 Redis 可视化工具，直接对目标数据库执行读写操作。
    用户在使用过程中应自行承担数据风险，包括但不限于误操作导致的数据
    丢失、数据损坏或业务中断。建议在操作生产环境前做好数据备份。
 
@@ -39,7 +39,7 @@ This software is distributed under the Apache License 2.0.
 【English】
 
 1. Data Safety
-   BreezeRESP is a Redis client tool that directly performs read/write
+   BreezeRESP is a Redis visualization tool that directly performs read/write
    operations on target databases. Users assume all data risks, including
    but not limited to data loss, corruption, or service interruption caused
    by misoperation. Back up data before operating on production environments.
