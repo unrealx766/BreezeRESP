@@ -493,7 +493,8 @@ async function submitNewKey() {
   if (!name) { toast.error(t('browser.keyNameRequired')); return; }
   newKeyLoading.value = true;
   try {
-    const ttl = newKeyTtl.value.trim() ? parseInt(newKeyTtl.value.trim(), 10) : undefined;
+    const ttlRaw = String(newKeyTtl.value ?? '').trim();
+    const ttl = ttlRaw ? parseInt(ttlRaw, 10) : undefined;
     const batchText = newKeyBatchData.value.trim();
     const initialData = batchText ? parseBatchData(newKeyType.value, batchText) : undefined;
     const ok = await detail.createKey({
@@ -595,7 +596,8 @@ async function submitAddFieldDialog() {
   try {
     const items = parseAddBatchData(type, batchText);
     if (!items.length) { toast.error(t('browser.keyNameRequired')); addFieldLoading.value = false; return; }
-    const fieldTtl = addFieldTtl.value.trim() ? parseInt(addFieldTtl.value.trim(), 10) : undefined;
+    const fieldTtlRaw = String(addFieldTtl.value ?? '').trim();
+    const fieldTtl = fieldTtlRaw ? parseInt(fieldTtlRaw, 10) : undefined;
     const ok = await detail.batchAddFields({
       keyType: type,
       items,
