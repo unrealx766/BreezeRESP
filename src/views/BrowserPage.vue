@@ -1061,7 +1061,7 @@ onBeforeUnmount(() => {
             </template>
             <template v-else>
               <span
-                class="text-sm font-medium text-text-primary truncate max-w-[40%] cursor-pointer hover:text-redis transition-colors"
+                class="text-sm font-medium text-text-primary truncate max-w-[70%] cursor-pointer hover:text-redis transition-colors"
                 @dblclick="startEditKey"
                 :title="detail.currentKey!.key"
               >{{ detail.currentKey!.key }}</span>
