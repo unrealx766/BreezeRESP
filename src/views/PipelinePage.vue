@@ -340,6 +340,36 @@ function resetDrag() {
         </button>
       </div>
 
+      <!-- Results Summary Panel -->
+      <div class="w-64 shrink-0" v-if="pipeline.hasResults">
+        <div class="card p-4 space-y-4">
+          <h3 class="text-sm font-semibold text-text-primary">{{ t("pipeline.resultsSummary") }}</h3>
+
+          <div class="space-y-3">
+            <div class="flex justify-between text-xs">
+              <span class="text-text-muted flex items-center gap-1"><Clock :size="11" /> {{ t("pipeline.totalLatency") }}</span>
+              <span class="font-mono font-semibold text-text-primary">{{ pipeline.totalLatency?.toFixed(1) }}ms</span>
+            </div>
+            <div class="flex justify-between text-xs">
+              <span class="text-text-muted">{{ t("pipeline.individualSum") }}</span>
+              <span class="font-mono text-text-secondary">{{ pipeline.individualLatencySum?.toFixed(1) }}ms</span>
+            </div>
+            <div class="divider" />
+            <div class="flex justify-between text-xs">
+              <span class="text-text-muted flex items-center gap-1"><ArrowUpDown :size="11" /> {{ t("pipeline.rttSaving") }}</span>
+              <span class="font-mono font-semibold" :class="(pipeline.rttSaving ?? 0) > 0 ? 'text-success' : 'text-text-muted'">
+                {{ pipeline.rttSaving !== null ? `${pipeline.rttSaving}%` : '-' }}
+              </span>
+            </div>
+          </div>
+
+          <div class="bg-success/5 border border-success/20 rounded-lg p-3 text-center">
+            <p class="text-lg font-bold text-success">{{ pipeline.executedCount }}/{{ pipeline.commandCount }}</p>
+            <p class="text-[11px] text-text-muted">{{ t("pipeline.success") }}</p>
+          </div>
+        </div>
+      </div>
+
       <!-- Saved Pipelines Panel -->
       <div class="w-64 shrink-0 flex flex-col min-h-0" v-if="showSavedList">
         <div class="card p-4 flex flex-col min-h-0">
@@ -371,36 +401,6 @@ function resetDrag() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Results Summary Panel -->
-      <div class="w-64 shrink-0" v-if="pipeline.hasResults">
-        <div class="card p-4 space-y-4">
-          <h3 class="text-sm font-semibold text-text-primary">{{ t("pipeline.resultsSummary") }}</h3>
-
-          <div class="space-y-3">
-            <div class="flex justify-between text-xs">
-              <span class="text-text-muted flex items-center gap-1"><Clock :size="11" /> {{ t("pipeline.totalLatency") }}</span>
-              <span class="font-mono font-semibold text-text-primary">{{ pipeline.totalLatency?.toFixed(1) }}ms</span>
-            </div>
-            <div class="flex justify-between text-xs">
-              <span class="text-text-muted">{{ t("pipeline.individualSum") }}</span>
-              <span class="font-mono text-text-secondary">{{ pipeline.individualLatencySum?.toFixed(1) }}ms</span>
-            </div>
-            <div class="divider" />
-            <div class="flex justify-between text-xs">
-              <span class="text-text-muted flex items-center gap-1"><ArrowUpDown :size="11" /> {{ t("pipeline.rttSaving") }}</span>
-              <span class="font-mono font-semibold" :class="(pipeline.rttSaving ?? 0) > 0 ? 'text-success' : 'text-text-muted'">
-                {{ pipeline.rttSaving !== null ? `${pipeline.rttSaving}%` : '-' }}
-              </span>
-            </div>
-          </div>
-
-          <div class="bg-success/5 border border-success/20 rounded-lg p-3 text-center">
-            <p class="text-lg font-bold text-success">{{ pipeline.executedCount }}/{{ pipeline.commandCount }}</p>
-            <p class="text-[11px] text-text-muted">{{ t("pipeline.success") }}</p>
           </div>
         </div>
       </div>
