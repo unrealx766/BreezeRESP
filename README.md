@@ -103,8 +103,8 @@ npm run tauri:build  # 构建安装包
 | 平台 | 格式 | 命令 | 说明 |
 |------|------|------|------|
 | Windows | `.exe` (NSIS) | `npm run tauri:build:win` | 安装向导支持自定义路径 |
-| macOS (Intel) | `.dmg` / `.app` | `npm run tauri:build:mac` | x86_64 |
-| macOS (Apple Silicon) | `.dmg` / `.app` | `npm run tauri:build:mac-arm` | aarch64 |
+| macOS (Intel) | `.dmg` | `npm run tauri:build:mac` | x86_64 |
+| macOS (Apple Silicon) | `.dmg` | `npm run tauri:build:mac-arm` | aarch64 |
 | Linux (Debian 系) | `.deb` / `.AppImage` | `npm run tauri:build:linux` | 统信 UOS / Ubuntu / Deepin |
 | Linux (RPM 系) | `.rpm` | `npm run tauri:build:linux-rpm` | CentOS / 银河麒麟 / openEuler |
 | Linux ARM64 | `.deb` / `.AppImage` | `npm run tauri:build:linux-arm` | aarch64 |
