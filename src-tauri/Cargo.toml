@@ -1,6 +1,6 @@
 [package]
 name = "BreezeResp"
-version = "1.0.0"
+version = "1.1.0"
 description = "redis view"
 authors = ["unrealx766"]
 license = "Apache-2.0"

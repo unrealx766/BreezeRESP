@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "BreezeResp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "identifier": "BreezeResp",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -27,7 +27,14 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "app", "dmg", "deb", "rpm", "appimage"],
+    "targets": [
+      "nsis",
+      "app",
+      "dmg",
+      "deb",
+      "rpm",
+      "appimage"
+    ],
     "licenseFile": "license.txt",
     "icon": [
       "icons/32x32.png",
@@ -41,7 +48,10 @@
       "nsis": {
         "installMode": "perMachine",
         "displayLanguageSelector": false,
-        "languages": ["English", "SimpChinese"],
+        "languages": [
+          "English",
+          "SimpChinese"
+        ],
         "installerIcon": "icons/icon.ico",
         "uninstallerIcon": "icons/icon.ico"
       }
