@@ -50,7 +50,7 @@ defineExpose({ open });
     <Transition name="fade">
       <div v-if="visible" class="fixed inset-0 z-[10000] flex items-center justify-center">
         <!-- Backdrop -->
-        <div class="absolute inset-0 bg-black/30 backdrop-blur-[1px]" @click="onCancel" />
+        <div class="absolute inset-0 bg-black/40" @click="onCancel" />
 
         <!-- Dialog -->
         <div class="relative bg-bg-secondary rounded-xl shadow-2xl border border-border w-[400px] max-w-[90vw] p-5 animate-in">

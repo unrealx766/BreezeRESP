@@ -146,6 +146,8 @@
     "batchAddPlaceholderZset": "每行一个成员，格式：\"分数\":\"成员\"",
     "batchAddSuccess": "批量添加成功",
     "batchAddFailed": "批量添加失败",
+    "createKeySuccess": "Key \"{key}\" 创建成功",
+    "addFieldSuccess": "\"{key}\" 字段添加成功",
     "addFieldTtl": "字段 TTL（秒）",
     "addFieldTtlPlaceholder": "字段级过期时间（Redis >= 7.4）"
   },

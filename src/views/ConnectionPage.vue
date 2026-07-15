@@ -304,7 +304,7 @@ function statusColor(status: string) {
     <!-- Form Modal -->
     <Teleport to="body">
       <div v-if="showForm" class="fixed inset-0 z-50 flex items-center justify-center">
-        <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" @click="showForm = false" />
+        <div class="absolute inset-0 bg-black/40" @click="showForm = false" />
         <div class="relative bg-bg-secondary rounded-xl shadow-xl w-[440px] max-h-[90vh] overflow-y-auto p-6 group">
           <div class="flex items-center justify-between mb-5">
             <h3 class="text-base font-semibold text-text-primary">

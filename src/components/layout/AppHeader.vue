@@ -195,8 +195,8 @@ const colorMap = {
               <div class="flex-1 min-w-0">
                 <p class="text-xs text-text-primary break-all leading-relaxed">{{ msg.message }}</p>
                 <div class="flex items-center gap-2 mt-0.5">
-                  <span class="text-[10px] font-medium truncate" :title="msg.connectionName || t('notifications.noConnection')"
-                    :class="msg.connectionName ? 'text-redis/60' : 'text-text-muted/60'">{{ msg.connectionName || t('notifications.noConnection') }}</span>
+                  <span class="text-[10px] font-medium truncate" :title="(msg.connectionName || t('notifications.noConnection')) + (msg.db !== undefined ? ` (DB ${msg.db})` : '')"
+                    :class="msg.connectionName ? 'text-redis/60' : 'text-text-muted/60'">{{ msg.connectionName || t('notifications.noConnection') }}<template v-if="msg.db !== undefined">/{{ msg.db }}</template></span>
                   <span class="text-[10px] text-text-muted">{{ formatTime(msg.timestamp) }}</span>
                 </div>
               </div>

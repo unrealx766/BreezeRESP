@@ -503,7 +503,7 @@ async function submitNewKey() {
       initialData,
     });
     if (ok) {
-      toast.success(t('detail.saveSuccess'));
+      toast.success(t('detail.createKeySuccess', { key: name }));
       showNewKeyDialog.value = false;
     } else {
       toast.error(t('detail.saveFailed'));
@@ -602,7 +602,7 @@ async function submitAddFieldDialog() {
       fieldTtl: fieldTtl && fieldTtl > 0 ? fieldTtl : undefined,
     });
     if (ok) {
-      toast.success(t('detail.batchAddSuccess'));
+      toast.success(t('detail.addFieldSuccess', { key: detail.currentKey }));
       showAddFieldDialog.value = false;
     } else {
       toast.error(t('detail.batchAddFailed'));
@@ -1619,8 +1619,8 @@ onBeforeUnmount(() => {
 
     <!-- New Key Dialog -->
     <Teleport to="body">
-      <div v-if="showNewKeyDialog" class="fixed inset-0 z-[9998] flex items-center justify-center" @click.self="closeNewKeyDialog">
-        <div class="absolute inset-0 bg-black/50 backdrop-blur-[3px]" />
+      <div v-if="showNewKeyDialog" class="fixed inset-0 z-[9990] flex items-center justify-center" @click.self="closeNewKeyDialog">
+        <div class="absolute inset-0 bg-black/60" />
         <div class="relative z-[9999] bg-bg-secondary border border-border rounded-2xl shadow-[0_20px_60px_-10px_rgba(0,0,0,0.3)] w-[480px] max-w-[92vw] max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
           <!-- Header -->
           <div class="flex items-center gap-3 px-6 py-4 border-b border-border shrink-0 bg-gradient-to-r from-redis/5 to-transparent">
@@ -1689,8 +1689,8 @@ onBeforeUnmount(() => {
 
     <!-- Add Field Dialog -->
     <Teleport to="body">
-      <div v-if="showAddFieldDialog" class="fixed inset-0 z-[9998] flex items-center justify-center" @click.self="closeAddFieldDialog">
-        <div class="absolute inset-0 bg-black/50 backdrop-blur-[3px]" />
+      <div v-if="showAddFieldDialog" class="fixed inset-0 z-[9990] flex items-center justify-center" @click.self="closeAddFieldDialog">
+        <div class="absolute inset-0 bg-black/60" />
         <div class="relative z-[9999] bg-bg-secondary border border-border rounded-2xl shadow-[0_20px_60px_-10px_rgba(0,0,0,0.3)] w-[480px] max-w-[92vw] max-h-[78vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
           <!-- Header -->
           <div class="flex items-center gap-3 px-6 py-4 border-b border-border shrink-0 bg-gradient-to-r from-redis/5 to-transparent">

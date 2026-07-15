@@ -6,7 +6,7 @@ import StatusBar from "@/components/layout/StatusBar.vue";
 import ToastContainer from "@/components/shared/ToastContainer.vue";
 import { useMetricsStore } from "@/stores/metricsStore";
 import { useConnectionStore } from "@/stores/connectionStore";
-import { setConnectionNameGetter } from "@/utils/toast";
+import { setConnectionNameGetter, setConnectionDbGetter } from "@/utils/toast";
 import { emit } from "@tauri-apps/api/event";
 
 const metricsStore = useMetricsStore();
@@ -14,6 +14,7 @@ const connStore = useConnectionStore();
 
 // Register active connection name for toast message history
 setConnectionNameGetter(() => connStore.activeConnection?.name);
+setConnectionDbGetter(() => connStore.activeConnection?.db);
 
 onMounted(async () => {
   metricsStore.startMonitoring();

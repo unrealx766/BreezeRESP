@@ -146,6 +146,8 @@
     "batchAddPlaceholderZset": "One member per line, format: \"score\":\"member\"",
     "batchAddSuccess": "Batch added successfully",
     "batchAddFailed": "Batch add failed",
+    "createKeySuccess": "Key \"{key}\" created successfully",
+    "addFieldSuccess": "Fields added to \"{key}\" successfully",
     "addFieldTtl": "Field TTL (seconds)",
     "addFieldTtlPlaceholder": "Per-field expiry (Redis >= 7.4)"
   },

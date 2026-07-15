@@ -17,6 +17,7 @@ export interface MessageEntry {
   message: string;
   timestamp: number;
   connectionName?: string;
+  db?: number;
 }
 
 type Listener = (event: ToastEvent) => void;
@@ -26,8 +27,12 @@ const listeners = new Set<Listener>();
 
 /** Lazy getter for active connection name (avoids circular import) */
 let getConnectionName: (() => string | undefined) | null = null;
+let getConnectionDb: (() => number | undefined) | null = null;
 export function setConnectionNameGetter(fn: () => string | undefined) {
   getConnectionName = fn;
+}
+export function setConnectionDbGetter(fn: () => number | undefined) {
+  getConnectionDb = fn;
 }
 
 /** Reactive message history for the notification panel */
@@ -37,9 +42,10 @@ function emit(type: ToastType, message: string, duration: number, connNameOverri
   const id = nextId++;
   const event: ToastEvent = { id, type, message, duration };
   listeners.forEach((fn) => fn(event));
-  // Record to history with connection context (override takes precedence)
+  // Record to history with connection context
   const connName = connNameOverride ?? getConnectionName?.();
-  messageHistory.value.unshift({ id, type, message, timestamp: Date.now(), connectionName: connName });
+  const db = getConnectionDb?.();
+  messageHistory.value.unshift({ id, type, message, timestamp: Date.now(), connectionName: connName, db });
 }
 
 /** Clear all message history */
