@@ -1,9 +1,11 @@
 [package]
 name = "BreezeResp"
 version = "1.1.0"
-description = "redis view"
+description = "A Redis visualization tool for managing and exploring Redis data"
 authors = ["unrealx766"]
 license = "Apache-2.0"
+homepage = "https://github.com/unrealx766/BreezeRESP"
+repository = "https://github.com/unrealx766/BreezeRESP"
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

@@ -2,9 +2,15 @@
   "name": "BreezeResp",
   "private": true,
   "version": "1.1.0",
+  "description": "A Redis visualization tool for managing and exploring Redis data",
   "license": "Apache-2.0",
   "author": {
     "name": "unrealx766"
+  },
+  "homepage": "https://github.com/unrealx766/BreezeRESP",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/unrealx766/BreezeRESP.git"
   },
   "type": "module",
   "scripts": {
