@@ -371,6 +371,86 @@ export const useDetailStore = defineStore("detail", () => {
     }
   }
 
+  /** Delete a sub-element from hash/list/set/zset */
+  async function deleteField(params: { keyType: string; field?: string; value?: string }) {
+    const connStore = useConnectionStore();
+    const connId = connStore.activeConnectionId;
+    const key = currentDetail.value?.key.key;
+    if (!connId || !key) return false;
+    try {
+      await tauriApi.cascade.setValue({
+        connectionId: connId,
+        key,
+        keyType: params.keyType,
+        action: "delete_field",
+        field: params.field,
+        value: params.value,
+      });
+      await loadDetail(key, currentPage.value);
+      return true;
+    } catch (e) {
+      console.error("Failed to delete field:", e);
+      return false;
+    }
+  }
+
+  /** Create a new key (string/hash/list/set/zset) with optional TTL and initial data */
+  async function createKey(params: {
+    keyName: string;
+    keyType: string;
+    ttl?: number;
+    initialData?: any;
+    fieldTtl?: number;
+  }) {
+    const connStore = useConnectionStore();
+    const connId = connStore.activeConnectionId;
+    if (!connId || !params.keyName) return false;
+    try {
+      await tauriApi.cascade.createKey({
+        connectionId: connId,
+        key: params.keyName,
+        keyType: params.keyType,
+        ttl: params.ttl,
+        initialData: params.initialData,
+        fieldTtl: params.fieldTtl,
+      });
+      // Refresh key list and select the new key
+      const cascadeStore = useCascadeStore();
+      await cascadeStore.refreshKeys(true);
+      cascadeStore.selectKey(params.keyName);
+      return true;
+    } catch (e) {
+      console.error("Failed to create key:", e);
+      return false;
+    }
+  }
+
+  /** Batch add fields/members/items to hash/list/set/zset */
+  async function batchAddFields(params: {
+    keyType: string;
+    items: any;
+    fieldTtl?: number;
+  }) {
+    const connStore = useConnectionStore();
+    const connId = connStore.activeConnectionId;
+    const key = currentDetail.value?.key.key;
+    if (!connId || !key) return false;
+    try {
+      await tauriApi.cascade.batchAddFields({
+        connectionId: connId,
+        key,
+        keyType: params.keyType,
+        items: params.items,
+        fieldTtl: params.fieldTtl,
+      });
+      await loadDetail(key, currentPage.value);
+      return true;
+    } catch (e) {
+      console.error("Failed to batch add fields:", e);
+      return false;
+    }
+  }
+
   /** Rename key */
   async function renameKey(newKey: string) {
     const connStore = useConnectionStore();
@@ -449,6 +529,9 @@ export const useDetailStore = defineStore("detail", () => {
     saveListItem,
     saveSetMember,
     saveZSetMember,
+    deleteField,
+    createKey,
+    batchAddFields,
     renameKey,
     setTtl,
   };

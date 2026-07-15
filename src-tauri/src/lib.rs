@@ -82,6 +82,8 @@ pub fn run() {
             commands::cascade::db_size,
             commands::cascade::set_value,
             commands::cascade::set_hash_field_ttl,
+            commands::cascade::create_key,
+            commands::cascade::batch_add_fields,
             // Pipeline commands
             commands::pipeline::execute_pipeline,
             commands::pipeline::save_pipeline,

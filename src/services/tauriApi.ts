@@ -172,6 +172,36 @@ export const tauriApi = {
 
     setHashFieldTtl: (connectionId: string, key: string, field: string, ttl: number) =>
       withConn(connectionId, () => invoke<boolean>("set_hash_field_ttl", { connectionId, key, field, ttl })),
+
+    createKey: (params: {
+      connectionId: string;
+      key: string;
+      keyType: string;
+      ttl?: number;
+      initialData?: any;
+      fieldTtl?: number;
+    }) => withConn(params.connectionId, () => invoke<boolean>("create_key", {
+      connectionId: params.connectionId,
+      key: params.key,
+      keyType: params.keyType,
+      ttl: params.ttl ?? null,
+      initialData: params.initialData ?? null,
+      fieldTtl: params.fieldTtl ?? null,
+    })),
+
+    batchAddFields: (params: {
+      connectionId: string;
+      key: string;
+      keyType: string;
+      items: any;
+      fieldTtl?: number;
+    }) => withConn(params.connectionId, () => invoke<boolean>("batch_add_fields", {
+      connectionId: params.connectionId,
+      key: params.key,
+      keyType: params.keyType,
+      items: params.items,
+      fieldTtl: params.fieldTtl ?? null,
+    })),
   },
 
   pipeline: {

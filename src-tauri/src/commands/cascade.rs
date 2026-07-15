@@ -1147,3 +1147,419 @@ pub async fn set_value(
         _ => Err(format!("Unknown action: {}", action)),
     }
 }
+
+/// Create a new key with optional initial data and TTL.
+///
+/// `initial_data` is a JSON value whose shape depends on `key_type`:
+///   - string: `"some value"` (a JSON string)
+///   - hash:   `[["field","value"], ...]` (array of pairs)
+///   - list:   `["item1","item2",...]` (array of strings)
+///   - set:    `["m1","m2",...]` (array of strings)
+///   - zset:   `[["member",1.0],...]` (array of [member, score] pairs)
+///
+/// `field_ttl` is only used for hash type (Redis >= 7.4) to set per-field expiry
+/// right after creation. Value is in seconds.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn create_key(
+    state: State<'_, AppState>,
+    connection_id: String,
+    key: String,
+    key_type: String,
+    ttl: Option<i64>,
+    initial_data: Option<serde_json::Value>,
+    field_ttl: Option<i64>,
+) -> Result<bool, String> {
+    validate_connection_id(&connection_id)?;
+    validate_key(&key)?;
+    if let Some(t) = ttl {
+        validate_ttl(t)?;
+    }
+
+    let pool = {
+        let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
+        pm.get_pool(&connection_id)?
+    };
+    let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
+
+    match key_type.as_str() {
+        "string" => {
+            let val = match initial_data {
+                Some(serde_json::Value::String(s)) => s,
+                _ => String::new(),
+            };
+            let _: () = redis::cmd("SET")
+                .arg(&key)
+                .arg(&val)
+                .query_async(&mut *conn)
+                .await
+                .map_err(|e| format!("SET error: {}", e))?;
+        }
+        "hash" => {
+            // Accept [[field, value], ...] or {field: value, ...}
+            let pairs: Vec<(String, String)> = match initial_data {
+                Some(serde_json::Value::Array(arr)) => {
+                    let mut result = Vec::new();
+                    for item in arr {
+                        if let serde_json::Value::Array(pair) = item {
+                            if pair.len() >= 2 {
+                                let f = pair[0].as_str().unwrap_or("").to_string();
+                                let v = pair[1].as_str().unwrap_or("").to_string();
+                                if !f.is_empty() {
+                                    reject_null_bytes(&f, "field")?;
+                                    reject_null_bytes(&v, "value")?;
+                                    result.push((f, v));
+                                }
+                            }
+                        }
+                    }
+                    result
+                }
+                Some(serde_json::Value::Object(map)) => {
+                    let mut result = Vec::new();
+                    for (f, v) in map {
+                        let v_str = v.as_str().unwrap_or("").to_string();
+                        reject_null_bytes(&f, "field")?;
+                        reject_null_bytes(&v_str, "value")?;
+                        result.push((f, v_str));
+                    }
+                    result
+                }
+                _ => Vec::new(),
+            };
+            if !pairs.is_empty() {
+                let mut pipe = redis::pipe();
+                for (f, v) in &pairs {
+                    pipe.cmd("HSET").arg(&key).arg(f).arg(v);
+                }
+                let _: Vec<redis::Value> = pipe
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("HSET error: {}", e))?;
+            } else {
+                // Ensure key exists even with no data
+                let _: () = redis::cmd("HSETNX")
+                    .arg(&key)
+                    .arg("__init__")
+                    .arg("")
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("HSET error: {}", e))?;
+                let _: i64 = redis::cmd("HDEL")
+                    .arg(&key)
+                    .arg("__init__")
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("HDEL error: {}", e))?;
+            }
+            // Set field TTL for hash fields (Redis >= 7.4)
+            if let Some(fttl) = field_ttl {
+                if fttl > 0 && !pairs.is_empty() {
+                    let fields: Vec<&str> = pairs.iter().map(|(f, _)| f.as_str()).collect();
+                    let _: i64 = redis::cmd("HEXPIRE")
+                        .arg(&key)
+                        .arg(fttl)
+                        .arg("FIELDS")
+                        .arg(fields.len())
+                        .arg(&fields)
+                        .query_async(&mut *conn)
+                        .await
+                        .map_err(|e| format!("HEXPIRE error: {}", e))?;
+                }
+            }
+        }
+        "list" => {
+            let items: Vec<String> = match initial_data {
+                Some(serde_json::Value::Array(arr)) => {
+                    arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect()
+                }
+                _ => Vec::new(),
+            };
+            if !items.is_empty() {
+                let mut pipe = redis::pipe();
+                for item in &items {
+                    reject_null_bytes(item, "value")?;
+                    pipe.cmd("RPUSH").arg(&key).arg(item);
+                }
+                let _: Vec<redis::Value> = pipe
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("RPUSH error: {}", e))?;
+            } else {
+                // Create empty list key
+                let _: i64 = redis::cmd("RPUSH")
+                    .arg(&key)
+                    .arg("__init__")
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("RPUSH error: {}", e))?;
+                let _: i64 = redis::cmd("LREM")
+                    .arg(&key)
+                    .arg(1)
+                    .arg("__init__")
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("LREM error: {}", e))?;
+            }
+        }
+        "set" => {
+            let members: Vec<String> = match initial_data {
+                Some(serde_json::Value::Array(arr)) => {
+                    arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect()
+                }
+                _ => Vec::new(),
+            };
+            if !members.is_empty() {
+                let mut pipe = redis::pipe();
+                for m in &members {
+                    reject_null_bytes(m, "value")?;
+                    pipe.cmd("SADD").arg(&key).arg(m);
+                }
+                let _: Vec<redis::Value> = pipe
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("SADD error: {}", e))?;
+            } else {
+                // Create empty set key
+                let _: i64 = redis::cmd("SADD")
+                    .arg(&key)
+                    .arg("__init__")
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("SADD error: {}", e))?;
+                let _: i64 = redis::cmd("SREM")
+                    .arg(&key)
+                    .arg("__init__")
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("SREM error: {}", e))?;
+            }
+        }
+        "zset" => {
+            // Accept [[member, score], ...]
+            let pairs: Vec<(String, f64)> = match initial_data {
+                Some(serde_json::Value::Array(arr)) => {
+                    let mut result = Vec::new();
+                    for item in arr {
+                        if let serde_json::Value::Array(pair) = item {
+                            if pair.len() >= 2 {
+                                let m = pair[0].as_str().unwrap_or("").to_string();
+                                let s = pair[1].as_f64().unwrap_or(0.0);
+                                if !m.is_empty() {
+                                    reject_null_bytes(&m, "value")?;
+                                    result.push((m, s));
+                                }
+                            }
+                        }
+                    }
+                    result
+                }
+                _ => Vec::new(),
+            };
+            if !pairs.is_empty() {
+                let mut pipe = redis::pipe();
+                for (m, s) in &pairs {
+                    pipe.cmd("ZADD").arg(&key).arg(s).arg(m);
+                }
+                let _: Vec<redis::Value> = pipe
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("ZADD error: {}", e))?;
+            } else {
+                // Create empty zset key
+                let _: () = redis::cmd("ZADD")
+                    .arg(&key)
+                    .arg(0)
+                    .arg("__init__")
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("ZADD error: {}", e))?;
+                let _: i64 = redis::cmd("ZREM")
+                    .arg(&key)
+                    .arg("__init__")
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("ZREM error: {}", e))?;
+            }
+        }
+        _ => return Err(format!("Unsupported key type: {}", key_type)),
+    }
+
+    // Set key TTL if provided
+    if let Some(t) = ttl {
+        if t > 0 {
+            let _: bool = redis::cmd("EXPIRE")
+                .arg(&key)
+                .arg(t)
+                .query_async(&mut *conn)
+                .await
+                .map_err(|e| format!("EXPIRE error: {}", e))?;
+        }
+    }
+
+    Ok(true)
+}
+
+/// Batch add fields/members/items to an existing key.
+///
+/// `items` is a JSON array whose shape depends on `key_type`:
+///   - hash: `[["field","value"], ...]`
+///   - list: `["item1","item2",...]`
+///   - set:  `["m1","m2",...]`
+///   - zset: `[["member",1.0],...]`
+///
+/// `field_ttl` is only for hash type (Redis >= 7.4), sets per-field TTL in seconds.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn batch_add_fields(
+    state: State<'_, AppState>,
+    connection_id: String,
+    key: String,
+    key_type: String,
+    items: serde_json::Value,
+    field_ttl: Option<i64>,
+) -> Result<bool, String> {
+    validate_connection_id(&connection_id)?;
+    validate_key(&key)?;
+
+    let pool = {
+        let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
+        pm.get_pool(&connection_id)?
+    };
+    let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
+
+    match key_type.as_str() {
+        "hash" => {
+            let pairs: Vec<(String, String)> = match items {
+                serde_json::Value::Array(arr) => {
+                    let mut result = Vec::new();
+                    for item in arr {
+                        if let serde_json::Value::Array(pair) = item {
+                            if pair.len() >= 2 {
+                                let f = pair[0].as_str().unwrap_or("").to_string();
+                                let v = pair[1].as_str().unwrap_or("").to_string();
+                                if !f.is_empty() {
+                                    reject_null_bytes(&f, "field")?;
+                                    reject_null_bytes(&v, "value")?;
+                                    result.push((f, v));
+                                }
+                            }
+                        }
+                    }
+                    result
+                }
+                _ => return Err("items must be an array".to_string()),
+            };
+            if pairs.is_empty() {
+                return Ok(true);
+            }
+            let mut pipe = redis::pipe();
+            for (f, v) in &pairs {
+                pipe.cmd("HSET").arg(&key).arg(f).arg(v);
+            }
+            let _: Vec<redis::Value> = pipe
+                .query_async(&mut *conn)
+                .await
+                .map_err(|e| format!("HSET error: {}", e))?;
+            // Set field TTL if provided (Redis >= 7.4)
+            if let Some(fttl) = field_ttl {
+                if fttl > 0 {
+                    let fields: Vec<&str> = pairs.iter().map(|(f, _)| f.as_str()).collect();
+                    let _: i64 = redis::cmd("HEXPIRE")
+                        .arg(&key)
+                        .arg(fttl)
+                        .arg("FIELDS")
+                        .arg(fields.len())
+                        .arg(&fields)
+                        .query_async(&mut *conn)
+                        .await
+                        .map_err(|e| format!("HEXPIRE error: {}", e))?;
+                }
+            }
+        }
+        "list" => {
+            let vals: Vec<String> = match items {
+                serde_json::Value::Array(arr) => {
+                    let mut result = Vec::new();
+                    for v in arr {
+                        if let Some(s) = v.as_str() {
+                            let s = s.to_string();
+                            reject_null_bytes(&s, "value")?;
+                            result.push(s);
+                        }
+                    }
+                    result
+                }
+                _ => return Err("items must be an array".to_string()),
+            };
+            if !vals.is_empty() {
+                let mut pipe = redis::pipe();
+                for v in &vals {
+                    pipe.cmd("RPUSH").arg(&key).arg(v);
+                }
+                let _: Vec<redis::Value> = pipe
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("RPUSH error: {}", e))?;
+            }
+        }
+        "set" => {
+            let members: Vec<String> = match items {
+                serde_json::Value::Array(arr) => {
+                    let mut result = Vec::new();
+                    for v in arr {
+                        if let Some(s) = v.as_str() {
+                            let s = s.to_string();
+                            reject_null_bytes(&s, "value")?;
+                            result.push(s);
+                        }
+                    }
+                    result
+                }
+                _ => return Err("items must be an array".to_string()),
+            };
+            if !members.is_empty() {
+                let _: i64 = redis::cmd("SADD")
+                    .arg(&key)
+                    .arg(&members)
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("SADD error: {}", e))?;
+            }
+        }
+        "zset" => {
+            let pairs: Vec<(String, f64)> = match items {
+                serde_json::Value::Array(arr) => {
+                    let mut result = Vec::new();
+                    for item in arr {
+                        if let serde_json::Value::Array(pair) = item {
+                            if pair.len() >= 2 {
+                                let m = pair[0].as_str().unwrap_or("").to_string();
+                                let s = pair[1].as_f64().unwrap_or(0.0);
+                                if !m.is_empty() {
+                                    reject_null_bytes(&m, "value")?;
+                                    result.push((m, s));
+                                }
+                            }
+                        }
+                    }
+                    result
+                }
+                _ => return Err("items must be an array".to_string()),
+            };
+            if !pairs.is_empty() {
+                let mut pipe = redis::pipe();
+                for (m, s) in &pairs {
+                    pipe.cmd("ZADD").arg(&key).arg(s).arg(m);
+                }
+                let _: Vec<redis::Value> = pipe
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| format!("ZADD error: {}", e))?;
+            }
+        }
+        _ => return Err(format!("batch_add_fields not supported for type: {}", key_type)),
+    }
+
+    Ok(true)
+}

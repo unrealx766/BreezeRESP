@@ -4,25 +4,28 @@ import { watch, onMounted, onBeforeUnmount, ref, reactive, computed, nextTick } 
 import { useCascadeStore } from "@/stores/cascadeStore";
 import { useDetailStore } from "@/stores/detailStore";
 import { useConnectionStore } from "@/stores/connectionStore";
+import { useMetricsStore } from "@/stores/metricsStore";
 import type { RedisDataType, StringValue } from "@/types";
 import KeyTreeItem from "@/components/cascade/KeyTreeItem.vue";
 import TtlGauge from "@/components/charts/TtlGauge.vue";
 import FloatingWindow from "@/components/shared/FloatingWindow.vue";
 import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
+import NumberedTextarea from "@/components/shared/NumberedTextarea.vue";
 import { useCopyTip } from "@/utils/copyTip";
 import { useSaveTip } from "@/utils/saveTip";
 import { toast } from "@/utils/toast";
 import {
-  Search, RefreshCw, Trash2, Copy, Tag,
+  Search, RefreshCw, Trash2, Copy, Tag, Plus, Key,
   Type, Hash, List, CircleDot, BarChart3,
   AlertTriangle, X, Pencil, Save,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Clock, Database, Code2,
 } from "lucide-vue-next";
 
 const { t } = useI18n();
 const cascade = useCascadeStore();
 const detail = useDetailStore();
 const connStore = useConnectionStore();
+const metricsStore = useMetricsStore();
 
 const confirmDialog = ref<InstanceType<typeof ConfirmDialog>>();
 
@@ -132,6 +135,10 @@ const typeColors: Record<RedisDataType, string> = {
 
 const typeIcons: Record<RedisDataType, any> = {
   string: Type, hash: Hash, list: List, set: CircleDot, zset: BarChart3,
+};
+
+const typeBorderColors: Record<RedisDataType, string> = {
+  string: '#8b5cf6', hash: '#0ea5e9', list: '#10b981', set: '#f59e0b', zset: '#ef4444',
 };
 
 function formatTtl(ttl: number): string {
@@ -365,6 +372,26 @@ async function saveEditZSet(e: Event) {
 }
 function cancelEditZSet() { editingZSetMember.value = null; }
 
+// Delete a sub-element (hash field / list item / set member / zset member)
+async function deleteSubField(keyType: string, params: { field?: string; value?: string }) {
+  const confirmed = await confirmDialog.value?.open({
+    title: t("common.confirmDeleteTitle"),
+    message: t("detail.confirmDeleteField"),
+    confirmLabel: t("common.delete"),
+    cancelLabel: t("common.cancel"),
+    danger: true,
+  });
+  if (!confirmed) return;
+  try {
+    const ok = await detail.deleteField({ keyType, ...params });
+    if (ok) toast.success(t("detail.saveSuccess"));
+    else toast.error(t("detail.saveFailed"));
+  } catch (e) {
+    console.error("Delete field failed:", e);
+    toast.error(typeof e === 'string' ? e : "Failed to delete");
+  }
+}
+
 // TTL edit
 const editingTtl = ref(false);
 const ttlTemp = ref('');
@@ -379,6 +406,213 @@ async function saveEditTtl(e: Event) {
   if (ok) editingTtl.value = false;
 }
 function cancelEditTtl() { editingTtl.value = false; }
+
+// ====== NEW KEY DIALOG ======
+const showNewKeyDialog = ref(false);
+const newKeyType = ref<RedisDataType>('string');
+const newKeyName = ref('');
+const newKeyTtl = ref('');
+const newKeyBatchData = ref('');
+const newKeyLoading = ref(false);
+
+function openNewKeyDialog() {
+  newKeyType.value = 'string';
+  newKeyName.value = '';
+  newKeyTtl.value = '';
+  newKeyBatchData.value = '';
+  showNewKeyDialog.value = true;
+}
+function closeNewKeyDialog() { showNewKeyDialog.value = false; }
+
+/** Strip surrounding quotes from a string */
+function stripQuotes(s: string): string {
+  const t = s.trim();
+  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) {
+    return t.slice(1, -1);
+  }
+  return t;
+}
+
+/** Parse batch text data into the format expected by the backend */
+function parseBatchData(type: RedisDataType, text: string): any {
+  const lines = text.split('\n').filter(l => l.trim());
+  switch (type) {
+    case 'string':
+      return text; // raw string
+    case 'hash':
+      return lines.map(line => {
+        const idx = line.indexOf(':');
+        if (idx <= 0) return [stripQuotes(line), ''];
+        return [stripQuotes(line.slice(0, idx)), stripQuotes(line.slice(idx + 1))];
+      }).filter(([f]) => f);
+    case 'list':
+      return lines.map(l => l.trim()).filter(Boolean);
+    case 'set':
+      return lines.map(l => l.trim()).filter(Boolean);
+    case 'zset':
+      return lines.map((line, i) => {
+        const idx = line.indexOf(':');
+        if (idx <= 0) {
+          const raw = stripQuotes(line);
+          return [raw, 0];
+        }
+        const scoreStr = stripQuotes(line.slice(0, idx));
+        const score = Number(scoreStr);
+        if (!Number.isFinite(score)) throw new Error(t('browser.zsetScoreInvalid', { line: i + 1, value: scoreStr }));
+        const member = stripQuotes(line.slice(idx + 1));
+        return [member, score];
+      }).filter(([m]) => m);
+    default:
+      return undefined;
+  }
+}
+
+const newKeyBatchHint = computed(() => {
+  switch (newKeyType.value) {
+    case 'string': return t('browser.batchHintString');
+    case 'hash': return t('browser.batchHintHash');
+    case 'list': return t('browser.batchHintList');
+    case 'set': return t('browser.batchHintSet');
+    case 'zset': return t('browser.batchHintZset');
+    default: return '';
+  }
+});
+
+const newKeyBatchPlaceholder = computed(() => {
+  switch (newKeyType.value) {
+    case 'hash': return '"name":"John"\n"age":"30"\n"city":"Beijing"';
+    case 'zset': return '"100":"player1"\n"200":"player2"\n"300":"player3"';
+    case 'list': return 'item1\nitem2\nitem3';
+    case 'set': return 'member1\nmember2\nmember3';
+    default: return '';
+  }
+});
+
+async function submitNewKey() {
+  const name = newKeyName.value.trim();
+  if (!name) { toast.error(t('browser.keyNameRequired')); return; }
+  newKeyLoading.value = true;
+  try {
+    const ttl = newKeyTtl.value.trim() ? parseInt(newKeyTtl.value.trim(), 10) : undefined;
+    const batchText = newKeyBatchData.value.trim();
+    const initialData = batchText ? parseBatchData(newKeyType.value, batchText) : undefined;
+    const ok = await detail.createKey({
+      keyName: name,
+      keyType: newKeyType.value,
+      ttl: ttl && ttl > 0 ? ttl : undefined,
+      initialData,
+    });
+    if (ok) {
+      toast.success(t('detail.saveSuccess'));
+      showNewKeyDialog.value = false;
+    } else {
+      toast.error(t('detail.saveFailed'));
+    }
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : typeof e === 'string' ? e : 'Failed to create key');
+  } finally {
+    newKeyLoading.value = false;
+  }
+}
+
+// ====== ADD FIELD DIALOG (hash/list/set/zset) ======
+const showAddFieldDialog = ref(false);
+const addFieldBatchData = ref('');
+const addFieldTtl = ref('');
+const addFieldLoading = ref(false);
+
+function openAddFieldDialog() {
+  addFieldBatchData.value = '';
+  addFieldTtl.value = '';
+  showAddFieldDialog.value = true;
+}
+function closeAddFieldDialog() { showAddFieldDialog.value = false; }
+
+const addFieldBatchHint = computed(() => {
+  const type = detail.currentValue?.type;
+  switch (type) {
+    case 'hash': return t('detail.batchAddPlaceholderHash');
+    case 'list': return t('detail.batchAddPlaceholderList');
+    case 'set': return t('detail.batchAddPlaceholderSet');
+    case 'zset': return t('detail.batchAddPlaceholderZset');
+    default: return '';
+  }
+});
+
+const addFieldBatchPlaceholder = computed(() => {
+  const type = detail.currentValue?.type;
+  switch (type) {
+    case 'hash': return '"name":"John"\n"age":"30"';
+    case 'zset': return '"100":"player1"\n"200":"player2"';
+    case 'list': return 'item1\nitem2';
+    case 'set': return 'member1\nmember2';
+    default: return '';
+  }
+});
+
+const addFieldSupportsTtl = computed(() => {
+  return detail.currentValue?.type === 'hash' && metricsStore.supportsFieldTtl;
+});
+
+/** Parse batch add data based on current key type */
+function parseAddBatchData(type: string, text: string): any {
+  const lines = text.split('\n').filter(l => l.trim());
+  switch (type) {
+    case 'hash':
+      return lines.map(line => {
+        const idx = line.indexOf(':');
+        if (idx <= 0) return [stripQuotes(line), ''];
+        return [stripQuotes(line.slice(0, idx)), stripQuotes(line.slice(idx + 1))];
+      }).filter(([f]) => f);
+    case 'list':
+      return lines.map(l => l.trim()).filter(Boolean);
+    case 'set':
+      return lines.map(l => l.trim()).filter(Boolean);
+    case 'zset':
+      return lines.map((line, i) => {
+        const idx = line.indexOf(':');
+        if (idx <= 0) {
+          const raw = stripQuotes(line);
+          return [raw, 0];
+        }
+        const scoreStr = stripQuotes(line.slice(0, idx));
+        const score = Number(scoreStr);
+        if (!Number.isFinite(score)) throw new Error(t('browser.zsetScoreInvalid', { line: i + 1, value: scoreStr }));
+        const member = stripQuotes(line.slice(idx + 1));
+        return [member, score];
+      }).filter(([m]) => m);
+    default:
+      return [];
+  }
+}
+
+async function submitAddFieldDialog() {
+  const type = detail.currentValue?.type;
+  if (!type || !['hash', 'list', 'set', 'zset'].includes(type)) return;
+  const batchText = addFieldBatchData.value.trim();
+  if (!batchText) { toast.error(t('browser.keyNameRequired')); return; }
+  addFieldLoading.value = true;
+  try {
+    const items = parseAddBatchData(type, batchText);
+    if (!items.length) { toast.error(t('browser.keyNameRequired')); addFieldLoading.value = false; return; }
+    const fieldTtl = addFieldTtl.value.trim() ? parseInt(addFieldTtl.value.trim(), 10) : undefined;
+    const ok = await detail.batchAddFields({
+      keyType: type,
+      items,
+      fieldTtl: fieldTtl && fieldTtl > 0 ? fieldTtl : undefined,
+    });
+    if (ok) {
+      toast.success(t('detail.batchAddSuccess'));
+      showAddFieldDialog.value = false;
+    } else {
+      toast.error(t('detail.batchAddFailed'));
+    }
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : typeof e === 'string' ? e : 'Failed to add');
+  } finally {
+    addFieldLoading.value = false;
+  }
+}
 
 // Reset all editing state when switching keys
 function resetAllEditingState() {
@@ -401,6 +635,7 @@ function resetAllEditingState() {
   zsetScoreTemp.value = 0;
   editingTtl.value = false;
   ttlTemp.value = '';
+  showAddFieldDialog.value = false;
 }
 
 // Watch selected key change to reset editing state
@@ -750,6 +985,9 @@ onBeforeUnmount(() => {
           <button @click="cascade.refreshKeys()" :disabled="!isConnected" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-bg-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
             <RefreshCw :size="14" :class="cascade.loading ? 'animate-spin' : ''" class="text-text-muted" />
           </button>
+          <button @click="openNewKeyDialog" :disabled="!isConnected" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-redis/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" :title="t('browser.addKey')">
+            <Plus :size="14" class="text-redis" />
+          </button>
         </div>
         <div class="text-[11px] text-text-muted flex items-center justify-between">
           <span>
@@ -840,6 +1078,9 @@ onBeforeUnmount(() => {
             </button>
             <button @click="detail.refresh()" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-bg-hover" :title="t('browser.refresh')">
               <RefreshCw :size="13" class="text-text-muted" />
+            </button>
+            <button v-if="detail.currentKey && ['hash','list','set','zset'].includes(detail.currentKey.type)" @click="openAddFieldDialog" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-bg-hover" :title="t('detail.addFieldTitle')">
+              <Plus :size="13" class="text-redis" />
             </button>
             <button @click="deleteKey" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-danger/10" :title="t('browser.deleteKey')">
               <Trash2 :size="13" class="text-danger" />
@@ -996,6 +1237,9 @@ onBeforeUnmount(() => {
                         <button v-if="viewMode === 'text'" @click="startEditHash(f.field, f.value)" class="shrink-0 text-text-muted hover:text-text-primary opacity-0 group-hover/cell:opacity-100 transition-opacity">
                           <Pencil :size="10" />
                         </button>
+                        <button v-if="viewMode === 'text'" @click="deleteSubField('hash', { field: f.field })" class="shrink-0 text-text-muted hover:text-danger opacity-0 group-hover/cell:opacity-100 transition-opacity" :title="t('detail.deleteField')">
+                          <Trash2 :size="10" />
+                        </button>
                       </div>
                     </td>
                     <td v-if="(detail.currentValue as any)?.hasFieldTtl" class="px-3 py-2 font-mono text-xs text-text-secondary overflow-hidden">
@@ -1099,6 +1343,9 @@ onBeforeUnmount(() => {
                         <button v-if="viewMode === 'text'" @click="startEditList(i, item)" class="shrink-0 text-text-muted hover:text-text-primary opacity-0 group-hover/cell:opacity-100 transition-opacity">
                           <Pencil :size="10" />
                         </button>
+                        <button v-if="viewMode === 'text'" @click="deleteSubField('list', { value: item })" class="shrink-0 text-text-muted hover:text-danger opacity-0 group-hover/cell:opacity-100 transition-opacity" :title="t('detail.deleteField')">
+                          <Trash2 :size="10" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -1177,6 +1424,9 @@ onBeforeUnmount(() => {
                   >{{ viewMode === 'hex' ? ((detail.currentValue as any).membersHex?.[i] || m) : viewMode === 'ascii' ? ((detail.currentValue as any).membersHex?.[i] ? hexToAscii((detail.currentValue as any).membersHex[i]) : textToAscii(m)) : m }}</span>
                   <button v-if="viewMode === 'text'" @click="startEditSet(m)" class="shrink-0 text-text-muted hover:text-text-primary opacity-0 group-hover/cell:opacity-100 transition-opacity">
                     <Pencil :size="10" />
+                  </button>
+                  <button v-if="viewMode === 'text'" @click="deleteSubField('set', { value: m })" class="shrink-0 text-text-muted hover:text-danger opacity-0 group-hover/cell:opacity-100 transition-opacity" :title="t('detail.deleteField')">
+                    <Trash2 :size="10" />
                   </button>
                 </div>
               </div>
@@ -1259,6 +1509,9 @@ onBeforeUnmount(() => {
                         >{{ viewMode === 'hex' ? (m.memberHex || m.member) : viewMode === 'ascii' ? (m.memberHex ? hexToAscii(m.memberHex) : textToAscii(m.member)) : m.member }}</span>
                         <button v-if="viewMode === 'text'" @click="startEditZSet(m.member, m.score)" class="shrink-0 text-text-muted hover:text-text-primary opacity-0 group-hover/cell:opacity-100 transition-opacity">
                           <Pencil :size="10" />
+                        </button>
+                        <button v-if="viewMode === 'text'" @click="deleteSubField('zset', { value: m.member })" class="shrink-0 text-text-muted hover:text-danger opacity-0 group-hover/cell:opacity-100 transition-opacity" :title="t('detail.deleteField')">
+                          <Trash2 :size="10" />
                         </button>
                       </div>
                     </td>
@@ -1362,6 +1615,128 @@ onBeforeUnmount(() => {
         @focus="focusWin"
         :on-save-content="handleSaveContent"
       />
+    </Teleport>
+
+    <!-- New Key Dialog -->
+    <Teleport to="body">
+      <div v-if="showNewKeyDialog" class="fixed inset-0 z-[9998] flex items-center justify-center" @click.self="closeNewKeyDialog">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-[3px]" />
+        <div class="relative z-[9999] bg-bg-secondary border border-border rounded-2xl shadow-[0_20px_60px_-10px_rgba(0,0,0,0.3)] w-[480px] max-w-[92vw] max-h-[88vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <!-- Header -->
+          <div class="flex items-center gap-3 px-6 py-4 border-b border-border shrink-0 bg-gradient-to-r from-redis/5 to-transparent">
+            <div class="w-8 h-8 rounded-lg bg-redis/10 flex items-center justify-center shrink-0">
+              <Database :size="16" class="text-redis" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <h3 class="text-sm font-semibold text-text-primary">{{ t('browser.addKeyTitle') }}</h3>
+              <p class="text-[11px] text-text-muted mt-0.5">{{ t('browser.keyType') }}: <span class="font-mono font-medium text-text-secondary">{{ newKeyType.toUpperCase() }}</span></p>
+            </div>
+            <button @click="closeNewKeyDialog" class="w-7 h-7 flex items-center justify-center rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors"><X :size="15" /></button>
+          </div>
+          <!-- Body (scrollable) -->
+          <div class="px-6 py-5 space-y-5 overflow-y-auto flex-1 min-h-0">
+            <!-- Key Type Selector -->
+            <div>
+              <label class="block text-xs font-medium text-text-secondary mb-2">{{ t('browser.keyType') }}</label>
+              <div class="flex gap-1.5">
+                <button v-for="tp in (['string','hash','list','set','zset'] as RedisDataType[])" :key="tp" @click="newKeyType = tp"
+                  class="group flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg border transition-all duration-200"
+                  :style="newKeyType === tp ? { borderColor: typeBorderColors[tp], backgroundColor: typeBorderColors[tp] + '14' } : undefined"
+                  :class="newKeyType === tp ? '' : 'border-border bg-bg-primary hover:bg-bg-hover'">
+                  <component :is="typeIcons[tp]" :size="14" :class="newKeyType === tp ? `text-type-${tp}` : 'text-text-muted group-hover:text-text-secondary'" class="transition-colors shrink-0" />
+                  <span class="text-[11px] font-semibold uppercase tracking-wide" :class="newKeyType === tp ? `text-type-${tp}` : 'text-text-muted group-hover:text-text-secondary'">{{ tp }}</span>
+                </button>
+              </div>
+            </div>
+            <!-- Key Name -->
+            <div>
+              <label class="block text-xs font-medium text-text-secondary mb-1.5">{{ t('browser.keyName') }}</label>
+              <div class="relative">
+                <Key :size="14" class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+                <input v-model="newKeyName" :placeholder="t('browser.keyNamePlaceholder')" class="w-full pl-9 pr-3 py-2.5 text-sm font-mono bg-bg-primary border border-border rounded-xl focus:outline-none focus:border-redis focus:ring-2 focus:ring-redis/20 transition-all" @keyup.enter="submitNewKey" />
+              </div>
+            </div>
+            <!-- TTL -->
+            <div>
+              <label class="block text-xs font-medium text-text-secondary mb-1.5">{{ t('browser.ttl') }}</label>
+              <div class="relative">
+                <Clock :size="14" class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+                <input v-model="newKeyTtl" type="number" min="1" :placeholder="t('browser.ttlPlaceholder')" class="w-full pl-9 pr-3 py-2.5 text-sm font-mono bg-bg-primary border border-border rounded-xl focus:outline-none focus:border-redis focus:ring-2 focus:ring-redis/20 transition-all" />
+              </div>
+            </div>
+            <!-- Initial Data -->
+            <div>
+              <label class="block text-xs font-medium text-text-secondary mb-1.5">{{ t('browser.batchData') }}</label>
+              <p class="text-[11px] text-text-muted mb-2 flex items-center gap-1">
+                <Code2 :size="11" class="shrink-0 opacity-60" />
+                {{ newKeyBatchHint }}
+              </p>
+              <NumberedTextarea v-model="newKeyBatchData" :placeholder="newKeyBatchPlaceholder || newKeyBatchHint" :rows="5" />
+            </div>
+          </div>
+          <!-- Footer -->
+          <div class="flex items-center justify-end gap-2.5 px-6 py-3.5 border-t border-border bg-bg-primary/30 shrink-0">
+            <button @click="closeNewKeyDialog" class="px-4 py-2 text-xs font-medium text-text-muted rounded-xl hover:bg-bg-hover hover:text-text-primary transition-colors">{{ t('common.cancel') }}</button>
+            <button @click="submitNewKey" :disabled="newKeyLoading" class="px-5 py-2 text-xs font-semibold text-white bg-redis rounded-xl hover:bg-redis/90 hover:shadow-md hover:shadow-redis/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
+              <RefreshCw v-if="newKeyLoading" :size="12" class="animate-spin" />
+              <Plus v-else :size="12" />
+              {{ newKeyLoading ? t('common.loading') : t('common.add') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Add Field Dialog -->
+    <Teleport to="body">
+      <div v-if="showAddFieldDialog" class="fixed inset-0 z-[9998] flex items-center justify-center" @click.self="closeAddFieldDialog">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-[3px]" />
+        <div class="relative z-[9999] bg-bg-secondary border border-border rounded-2xl shadow-[0_20px_60px_-10px_rgba(0,0,0,0.3)] w-[480px] max-w-[92vw] max-h-[78vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <!-- Header -->
+          <div class="flex items-center gap-3 px-6 py-4 border-b border-border shrink-0 bg-gradient-to-r from-redis/5 to-transparent">
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" :class="`bg-type-${detail.currentKey?.type}/10`">
+              <component :is="typeIcons[detail.currentKey?.type || 'string']" :size="16" :class="`text-type-${detail.currentKey?.type}`" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <h3 class="text-sm font-semibold text-text-primary">{{ t('detail.addFieldTitle') }}</h3>
+              <p class="text-[11px] text-text-muted mt-0.5 font-mono">{{ detail.currentKey?.type?.toUpperCase() }} · {{ detail.currentKey?.key }}</p>
+            </div>
+            <button @click="closeAddFieldDialog" class="w-7 h-7 flex items-center justify-center rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors"><X :size="15" /></button>
+          </div>
+          <!-- Body -->
+          <div class="px-6 py-5 space-y-5 overflow-y-auto flex-1 min-h-0">
+            <!-- Batch Data -->
+            <div>
+              <label class="block text-xs font-medium text-text-secondary mb-1.5">{{ t('browser.batchData') }}</label>
+              <p class="text-[11px] text-text-muted mb-2 flex items-center gap-1">
+                <Code2 :size="11" class="shrink-0 opacity-60" />
+                {{ addFieldBatchHint }}
+              </p>
+              <NumberedTextarea v-model="addFieldBatchData" :placeholder="addFieldBatchPlaceholder || addFieldBatchHint" :rows="7" />
+            </div>
+            <!-- Field TTL (hash only, Redis >= 7.4) -->
+            <div v-if="addFieldSupportsTtl" class="pt-1">
+              <div class="flex items-center gap-2 mb-1.5">
+                <label class="text-xs font-medium text-text-secondary">{{ t('detail.addFieldTtl') }}</label>
+                <span class="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-500 font-medium">Redis ≥ 7.4</span>
+              </div>
+              <div class="relative">
+                <Clock :size="14" class="absolute left-3 top-1/2 -translate-y-1/2 text-amber-500/60 pointer-events-none" />
+                <input v-model="addFieldTtl" type="number" min="1" :placeholder="t('detail.addFieldTtlPlaceholder')" class="w-full pl-9 pr-3 py-2.5 text-sm font-mono bg-bg-primary border border-border rounded-xl focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all" />
+              </div>
+            </div>
+          </div>
+          <!-- Footer -->
+          <div class="flex items-center justify-end gap-2.5 px-6 py-3.5 border-t border-border bg-bg-primary/30 shrink-0">
+            <button @click="closeAddFieldDialog" class="px-4 py-2 text-xs font-medium text-text-muted rounded-xl hover:bg-bg-hover hover:text-text-primary transition-colors">{{ t('common.cancel') }}</button>
+            <button @click="submitAddFieldDialog" :disabled="addFieldLoading" class="px-5 py-2 text-xs font-semibold text-white bg-redis rounded-xl hover:bg-redis/90 hover:shadow-md hover:shadow-redis/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
+              <RefreshCw v-if="addFieldLoading" :size="12" class="animate-spin" />
+              <Plus v-else :size="12" />
+              {{ addFieldLoading ? t('common.loading') : t('common.add') }}
+            </button>
+          </div>
+        </div>
+      </div>
     </Teleport>
 
     <ConfirmDialog ref="confirmDialog" />
