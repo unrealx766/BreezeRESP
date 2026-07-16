@@ -28,6 +28,7 @@
     "db": "Database",
     "ssl": "SSL/TLS",
     "sessions": "Sessions",
+    "noSessions": "No active sessions",
     "connected": "Connected",
     "disconnected": "Disconnected",
     "connecting": "Connecting...",
