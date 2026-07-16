@@ -8,7 +8,8 @@
     "connections": "Connections",
     "browser": "Browser",
     "pipeline": "Pipeline",
-    "sandbox": "Sandbox"
+    "sandbox": "Sandbox",
+    "history": "Command History"
   },
   "connection": {
     "title": "Connection Manager",
@@ -183,6 +184,10 @@
     "saveSuccess": "Pipeline saved successfully",
     "loadSuccess": "Pipeline loaded successfully",
     "resultsSummary": "Results Summary"
+  },
+  "history": {
+    "title": "Command History",
+    "comingSoon": "Coming soon, stay tuned"
   },
   "sandbox": {
     "title": "Command Sandbox",

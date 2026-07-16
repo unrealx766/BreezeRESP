@@ -3,6 +3,7 @@ import ConnectionPage from "@/views/ConnectionPage.vue";
 import BrowserPage from "@/views/BrowserPage.vue";
 import PipelinePage from "@/views/PipelinePage.vue";
 import SandboxPage from "@/views/SandboxPage.vue";
+import HistoryPage from "@/views/HistoryPage.vue";
 
 const routes: RouteRecordRaw[] = [
   {
@@ -24,6 +25,11 @@ const routes: RouteRecordRaw[] = [
     path: "/sandbox",
     name: "sandbox",
     component: SandboxPage,
+  },
+  {
+    path: "/history",
+    name: "history",
+    component: HistoryPage,
   },
 ];
 

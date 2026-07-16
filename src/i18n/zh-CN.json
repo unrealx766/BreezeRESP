@@ -8,7 +8,8 @@
     "connections": "连接管理",
     "browser": "数据浏览器",
     "pipeline": "流水线",
-    "sandbox": "命令沙盒"
+    "sandbox": "命令沙盒",
+    "history": "命令记录"
   },
   "connection": {
     "title": "连接管理",
@@ -183,6 +184,10 @@
     "saveSuccess": "流水线保存成功",
     "loadSuccess": "流水线加载成功",
     "resultsSummary": "结果概览"
+  },
+  "history": {
+    "title": "命令历史",
+    "comingSoon": "功能开发中，敬请期待"
   },
   "sandbox": {
     "title": "命令沙盒",

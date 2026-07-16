@@ -3,7 +3,7 @@ import { computed, ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useConnectionStore } from "@/stores/connectionStore";
-import { Database, Server, Layers, FlaskConical, Plus, Unplug, X, Pin } from "lucide-vue-next";
+import { Database, Server, Layers, FlaskConical, History, Plus, Unplug, X, Pin } from "lucide-vue-next";
 import { toast } from "@/utils/toast";
 
 const router = useRouter();
@@ -16,6 +16,7 @@ const navItems = computed(() => [
   { name: "browser", icon: Database, label: t("nav.browser"), path: "/browser" },
   { name: "pipeline", icon: Layers, label: t("nav.pipeline"), path: "/pipeline" },
   { name: "sandbox", icon: FlaskConical, label: t("nav.sandbox"), path: "/sandbox" },
+  { name: "history", icon: History, label: t("nav.history"), path: "/history" },
 ]);
 
 function isActive(path: string) {
