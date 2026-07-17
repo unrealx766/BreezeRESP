@@ -3,6 +3,7 @@ import { ref, computed } from "vue";
 import type { RedisKey, RedisDataType, KeyTreeNode, SortField, SortOrder } from "@/types";
 import { tauriApi } from "@/services/tauriApi";
 import { useConnectionStore } from "./connectionStore";
+import { useHistoryStore } from "./historyStore";
 
 export const useCascadeStore = defineStore("cascade", () => {
   const keys = ref<RedisKey[]>([]);
@@ -192,9 +193,12 @@ export const useCascadeStore = defineStore("cascade", () => {
     const connStore = useConnectionStore();
     const connId = connStore.activeConnectionId;
     if (!connId) return;
+    const history = useHistoryStore();
 
     try {
-      await tauriApi.cascade.deleteKey(connId, key);
+      await history.execAndRecord(`DEL ${key}`, "browser", () =>
+        tauriApi.cascade.deleteKey(connId, key)
+      );
       keys.value = keys.value.filter((k) => k.key !== key);
       if (selectedKey.value === key) selectedKey.value = null;
     } catch (e) {

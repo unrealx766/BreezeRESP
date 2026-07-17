@@ -26,7 +26,7 @@
     "password": "Password",
     "requirePassword": "Require Password",
     "noPassword": "No Password",
-    "db": "Database",
+    "db": "Default Database",
     "ssl": "SSL/TLS",
     "sessions": "Sessions",
     "noSessions": "No active sessions",
@@ -79,6 +79,7 @@
     "initialValue": "Initial Value",
     "initialValuePlaceholder": "Enter initial value (optional)...",
     "keyNameRequired": "Key name is required",
+        "initialDataRequired": "Initial data is required for Hash/List/Set/ZSet types",
     "ttl": "TTL (seconds)",
     "ttlPlaceholder": "Leave empty for no expiry",
     "fieldTtl": "Field TTL (seconds)",
@@ -188,7 +189,19 @@
   },
   "history": {
     "title": "Command History",
-    "comingSoon": "Coming soon, stay tuned"
+    "clearAll": "Clear All",
+    "clearConfirm": "Are you sure to clear all command history?",
+    "searchPlaceholder": "Search commands...",
+    "allDb": "All DBs",
+    "noHistory": "No command history",
+    "noConnection": "Please connect to Redis first",
+    "sourceBrowser": "Data Browser",
+    "sourcePipeline": "Pipeline",
+    "sourceSandbox": "Command Sandbox",
+    "success": "Success",
+    "failed": "Failed",
+    "copyCommand": "Copy Command",
+    "totalRecords": "{count} records"
   },
   "sandbox": {
     "title": "Command Sandbox",

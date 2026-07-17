@@ -26,7 +26,7 @@
     "password": "密码",
     "requirePassword": "需要密码",
     "noPassword": "无需密码",
-    "db": "数据库",
+    "db": "默认连接数据库",
     "ssl": "SSL/TLS",
     "sessions": "会话",
     "noSessions": "暂无活跃会话",
@@ -79,6 +79,7 @@
     "initialValue": "初始值",
     "initialValuePlaceholder": "输入初始值（可选）...",
     "keyNameRequired": "Key 名称不能为空",
+        "initialDataRequired": "Hash/List/Set/ZSet 类型必须填写初始数据",
     "ttl": "TTL（秒）",
     "ttlPlaceholder": "留空表示永不过期",
     "fieldTtl": "字段 TTL（秒）",
@@ -188,7 +189,19 @@
   },
   "history": {
     "title": "命令历史",
-    "comingSoon": "功能开发中，敬请期待"
+    "clearAll": "清空全部",
+    "clearConfirm": "确定清空所有命令历史吗？",
+    "searchPlaceholder": "搜索命令...",
+    "allDb": "全部 DB",
+    "noHistory": "暂无命令记录",
+    "noConnection": "请先连接 Redis",
+    "sourceBrowser": "数据浏览器",
+    "sourcePipeline": "流水线",
+    "sourceSandbox": "命令沙盒",
+    "success": "成功",
+    "failed": "失败",
+    "copyCommand": "复制命令",
+    "totalRecords": "共 {count} 条记录"
   },
   "sandbox": {
     "title": "命令沙盒",

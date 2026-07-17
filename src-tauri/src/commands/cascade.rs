@@ -1188,12 +1188,15 @@ pub async fn create_key(
                 Some(serde_json::Value::String(s)) => s,
                 _ => String::new(),
             };
-            let _: () = redis::cmd("SET")
-                .arg(&key)
-                .arg(&val)
-                .query_async(&mut *conn)
-                .await
-                .map_err(|e| format!("SET error: {}", e))?;
+            // Use SET key value EX ttl for atomic creation with TTL
+            let mut cmd = redis::cmd("SET");
+            cmd.arg(&key).arg(&val);
+            if let Some(t) = ttl {
+                if t > 0 {
+                    cmd.arg("EX").arg(t);
+                }
+            }
+            let _: () = cmd.query_async(&mut *conn).await.map_err(|e| format!("SET error: {}", e))?;
         }
         "hash" => {
             // Accept [[field, value], ...] or {field: value, ...}
@@ -1227,31 +1230,22 @@ pub async fn create_key(
                 }
                 _ => Vec::new(),
             };
+            let mut pipe = redis::pipe();
             if !pairs.is_empty() {
-                let mut pipe = redis::pipe();
                 for (f, v) in &pairs {
                     pipe.cmd("HSET").arg(&key).arg(f).arg(v);
                 }
-                let _: Vec<redis::Value> = pipe
-                    .query_async(&mut *conn)
-                    .await
-                    .map_err(|e| format!("HSET error: {}", e))?;
             } else {
                 // Ensure key exists even with no data
-                let _: () = redis::cmd("HSETNX")
-                    .arg(&key)
-                    .arg("__init__")
-                    .arg("")
-                    .query_async(&mut *conn)
-                    .await
-                    .map_err(|e| format!("HSET error: {}", e))?;
-                let _: i64 = redis::cmd("HDEL")
-                    .arg(&key)
-                    .arg("__init__")
-                    .query_async(&mut *conn)
-                    .await
-                    .map_err(|e| format!("HDEL error: {}", e))?;
+                pipe.cmd("HSETNX").arg(&key).arg("__init__").arg("");
+                pipe.cmd("HDEL").arg(&key).arg("__init__");
             }
+            if let Some(t) = ttl {
+                if t > 0 {
+                    pipe.cmd("EXPIRE").arg(&key).arg(t);
+                }
+            }
+            let _: Vec<redis::Value> = pipe.query_async(&mut *conn).await.map_err(|e| format!("HSET error: {}", e))?;
             // Set field TTL for hash fields (Redis >= 7.4)
             if let Some(fttl) = field_ttl {
                 if fttl > 0 && !pairs.is_empty() {
@@ -1275,32 +1269,23 @@ pub async fn create_key(
                 }
                 _ => Vec::new(),
             };
+            let mut pipe = redis::pipe();
             if !items.is_empty() {
-                let mut pipe = redis::pipe();
                 for item in &items {
                     reject_null_bytes(item, "value")?;
                     pipe.cmd("RPUSH").arg(&key).arg(item);
                 }
-                let _: Vec<redis::Value> = pipe
-                    .query_async(&mut *conn)
-                    .await
-                    .map_err(|e| format!("RPUSH error: {}", e))?;
             } else {
                 // Create empty list key
-                let _: i64 = redis::cmd("RPUSH")
-                    .arg(&key)
-                    .arg("__init__")
-                    .query_async(&mut *conn)
-                    .await
-                    .map_err(|e| format!("RPUSH error: {}", e))?;
-                let _: i64 = redis::cmd("LREM")
-                    .arg(&key)
-                    .arg(1)
-                    .arg("__init__")
-                    .query_async(&mut *conn)
-                    .await
-                    .map_err(|e| format!("LREM error: {}", e))?;
+                pipe.cmd("RPUSH").arg(&key).arg("__init__");
+                pipe.cmd("LREM").arg(&key).arg(1).arg("__init__");
             }
+            if let Some(t) = ttl {
+                if t > 0 {
+                    pipe.cmd("EXPIRE").arg(&key).arg(t);
+                }
+            }
+            let _: Vec<redis::Value> = pipe.query_async(&mut *conn).await.map_err(|e| format!("RPUSH error: {}", e))?;
         }
         "set" => {
             let members: Vec<String> = match initial_data {
@@ -1309,31 +1294,23 @@ pub async fn create_key(
                 }
                 _ => Vec::new(),
             };
+            let mut pipe = redis::pipe();
             if !members.is_empty() {
-                let mut pipe = redis::pipe();
                 for m in &members {
                     reject_null_bytes(m, "value")?;
                     pipe.cmd("SADD").arg(&key).arg(m);
                 }
-                let _: Vec<redis::Value> = pipe
-                    .query_async(&mut *conn)
-                    .await
-                    .map_err(|e| format!("SADD error: {}", e))?;
             } else {
                 // Create empty set key
-                let _: i64 = redis::cmd("SADD")
-                    .arg(&key)
-                    .arg("__init__")
-                    .query_async(&mut *conn)
-                    .await
-                    .map_err(|e| format!("SADD error: {}", e))?;
-                let _: i64 = redis::cmd("SREM")
-                    .arg(&key)
-                    .arg("__init__")
-                    .query_async(&mut *conn)
-                    .await
-                    .map_err(|e| format!("SREM error: {}", e))?;
+                pipe.cmd("SADD").arg(&key).arg("__init__");
+                pipe.cmd("SREM").arg(&key).arg("__init__");
             }
+            if let Some(t) = ttl {
+                if t > 0 {
+                    pipe.cmd("EXPIRE").arg(&key).arg(t);
+                }
+            }
+            let _: Vec<redis::Value> = pipe.query_async(&mut *conn).await.map_err(|e| format!("SADD error: {}", e))?;
         }
         "zset" => {
             // Accept [[member, score], ...]
@@ -1356,45 +1333,24 @@ pub async fn create_key(
                 }
                 _ => Vec::new(),
             };
+            let mut pipe = redis::pipe();
             if !pairs.is_empty() {
-                let mut pipe = redis::pipe();
                 for (m, s) in &pairs {
                     pipe.cmd("ZADD").arg(&key).arg(s).arg(m);
                 }
-                let _: Vec<redis::Value> = pipe
-                    .query_async(&mut *conn)
-                    .await
-                    .map_err(|e| format!("ZADD error: {}", e))?;
             } else {
                 // Create empty zset key
-                let _: () = redis::cmd("ZADD")
-                    .arg(&key)
-                    .arg(0)
-                    .arg("__init__")
-                    .query_async(&mut *conn)
-                    .await
-                    .map_err(|e| format!("ZADD error: {}", e))?;
-                let _: i64 = redis::cmd("ZREM")
-                    .arg(&key)
-                    .arg("__init__")
-                    .query_async(&mut *conn)
-                    .await
-                    .map_err(|e| format!("ZREM error: {}", e))?;
+                pipe.cmd("ZADD").arg(&key).arg(0).arg("__init__");
+                pipe.cmd("ZREM").arg(&key).arg("__init__");
             }
+            if let Some(t) = ttl {
+                if t > 0 {
+                    pipe.cmd("EXPIRE").arg(&key).arg(t);
+                }
+            }
+            let _: Vec<redis::Value> = pipe.query_async(&mut *conn).await.map_err(|e| format!("ZADD error: {}", e))?;
         }
         _ => return Err(format!("Unsupported key type: {}", key_type)),
-    }
-
-    // Set key TTL if provided
-    if let Some(t) = ttl {
-        if t > 0 {
-            let _: bool = redis::cmd("EXPIRE")
-                .arg(&key)
-                .arg(t)
-                .query_async(&mut *conn)
-                .await
-                .map_err(|e| format!("EXPIRE error: {}", e))?;
-        }
     }
 
     Ok(true)

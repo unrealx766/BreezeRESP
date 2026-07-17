@@ -4,6 +4,7 @@ import type { DiffEntry, SandboxHistoryItem } from "@/types";
 import { tauriApi } from "@/services/tauriApi";
 import { useConnectionStore } from "./connectionStore";
 import { useCascadeStore } from "./cascadeStore";
+import { useHistoryStore } from "./historyStore";
 import { toast } from "@/utils/toast";
 import { computeInverseCommands } from "@/utils/rollbackInverse";
 
@@ -266,6 +267,18 @@ export const useSandboxStore = defineStore("sandbox", () => {
       if (history.value.length > MAX_HISTORY) {
         history.value = history.value.slice(0, MAX_HISTORY);
       }
+
+      // Record to command history
+      const connStore = useConnectionStore();
+      const conn = connStore.connections.find((c) => c.id === connId);
+      useHistoryStore().addRecord({
+        connectionId: connId,
+        connectionName: conn?.name ?? "",
+        db: connStore.getActiveDb(connId),
+        command: cmd,
+        source: "sandbox",
+        success: true,
+      });
 
       // Refresh keys after apply
       try {

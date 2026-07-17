@@ -40,7 +40,10 @@ async function toggleDbDropdown() {
   }
 }
 
-const activeConnDb = computed(() => connStore.activeConnection?.db ?? 0);
+const activeConnDb = computed(() => {
+  const id = connStore.activeConnectionId;
+  return id ? connStore.getActiveDb(id) : 0;
+});
 
 async function handleDbSwitch(db: number) {
   if (switchingDb.value) return;

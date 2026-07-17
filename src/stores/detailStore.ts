@@ -5,6 +5,7 @@ import { tauriApi } from "@/services/tauriApi";
 import { useCascadeStore } from "./cascadeStore";
 import { useConnectionStore } from "./connectionStore";
 import { useMetricsStore } from "./metricsStore";
+import { useHistoryStore } from "./historyStore";
 
 export const useDetailStore = defineStore("detail", () => {
   const currentDetail = ref<KeyDetail | null>(null);
@@ -17,6 +18,34 @@ export const useDetailStore = defineStore("detail", () => {
   const filterPattern = ref("");
 
   const cascade = useCascadeStore();
+  const history = useHistoryStore();
+
+  /** Build a readable command string from structured initialData/items */
+  function buildCommandStr(cmd: string, keyName: string, keyType: string, data: any): string {
+    if (data == null) return `${cmd} ${keyName}`;
+    switch (keyType) {
+      case "string":
+        return `${cmd} ${keyName} ${data}`;
+      case "hash":
+        if (Array.isArray(data)) {
+          const pairs = data.map(([f, v]: [string, string]) => `${f} ${v}`).join(" ");
+          return `${cmd} ${keyName} ${pairs}`;
+        }
+        return `${cmd} ${keyName} ${JSON.stringify(data)}`;
+      case "list":
+      case "set":
+        if (Array.isArray(data)) return `${cmd} ${keyName} ${data.join(" ")}`;
+        return `${cmd} ${keyName} ${JSON.stringify(data)}`;
+      case "zset":
+        if (Array.isArray(data)) {
+          const pairs = data.map(([member, score]: [string, number]) => `${score} ${member}`).join(" ");
+          return `${cmd} ${keyName} ${pairs}`;
+        }
+        return `${cmd} ${keyName} ${JSON.stringify(data)}`;
+      default:
+        return `${cmd} ${keyName}`;
+    }
+  }
 
   const currentKey = computed(() => currentDetail.value?.key ?? null);
   const currentValue = computed<KeyValue | null>(() => currentDetail.value?.value ?? null);
@@ -224,13 +253,9 @@ export const useDetailStore = defineStore("detail", () => {
     const key = currentDetail.value?.key.key;
     if (!connId || !key) return false;
     try {
-      await tauriApi.cascade.setValue({
-        connectionId: connId,
-        key,
-        keyType: "string",
-        action: "set",
-        value: newValue,
-      });
+      await history.execAndRecord(`SET ${key} ${newValue}`, "browser", () =>
+        tauriApi.cascade.setValue({ connectionId: connId, key, keyType: "string", action: "set", value: newValue })
+      );
       await loadDetail(key, currentPage.value);
       return true;
     } catch (e) {
@@ -246,14 +271,9 @@ export const useDetailStore = defineStore("detail", () => {
     const key = currentDetail.value?.key.key;
     if (!connId || !key) return false;
     try {
-      await tauriApi.cascade.setValue({
-        connectionId: connId,
-        key,
-        keyType: "hash",
-        action: "set",
-        field,
-        value: newValue,
-      });
+      await history.execAndRecord(`HSET ${key} ${field} ${newValue}`, "browser", () =>
+        tauriApi.cascade.setValue({ connectionId: connId, key, keyType: "hash", action: "set", field, value: newValue })
+      );
       await loadDetail(key, currentPage.value);
       return true;
     } catch (e) {
@@ -269,7 +289,9 @@ export const useDetailStore = defineStore("detail", () => {
     const key = currentDetail.value?.key.key;
     if (!connId || !key) return false;
     try {
-      await tauriApi.cascade.setHashFieldTtl(connId, key, field, ttl);
+      await history.execAndRecord(`HEXPIRE ${key} ${ttl} FIELDS 1 ${field}`, "browser", () =>
+        tauriApi.cascade.setHashFieldTtl(connId, key, field, ttl)
+      );
       await loadDetail(key, currentPage.value);
       return true;
     } catch (e) {
@@ -285,14 +307,9 @@ export const useDetailStore = defineStore("detail", () => {
     const key = currentDetail.value?.key.key;
     if (!connId || !key || oldField === newField) return false;
     try {
-      await tauriApi.cascade.setValue({
-        connectionId: connId,
-        key,
-        keyType: "hash",
-        action: "rename_field",
-        field: newField,
-        oldValue: oldField,
-      });
+      await history.execAndRecord(`HREN ${key} ${oldField} ${newField}`, "browser", () =>
+        tauriApi.cascade.setValue({ connectionId: connId, key, keyType: "hash", action: "rename_field", field: newField, oldValue: oldField })
+      );
       await loadDetail(key, currentPage.value);
       return true;
     } catch (e) {
@@ -308,14 +325,9 @@ export const useDetailStore = defineStore("detail", () => {
     const key = currentDetail.value?.key.key;
     if (!connId || !key) return false;
     try {
-      await tauriApi.cascade.setValue({
-        connectionId: connId,
-        key,
-        keyType: "list",
-        action: "set",
-        index,
-        value: newValue,
-      });
+      await history.execAndRecord(`LSET ${key} ${index} ${newValue}`, "browser", () =>
+        tauriApi.cascade.setValue({ connectionId: connId, key, keyType: "list", action: "set", index, value: newValue })
+      );
       await loadDetail(key, currentPage.value);
       return true;
     } catch (e) {
@@ -331,14 +343,9 @@ export const useDetailStore = defineStore("detail", () => {
     const key = currentDetail.value?.key.key;
     if (!connId || !key) return false;
     try {
-      await tauriApi.cascade.setValue({
-        connectionId: connId,
-        key,
-        keyType: "set",
-        action: "set",
-        value: newValue,
-        oldValue,
-      });
+      await history.execAndRecord(`SREM ${key} ${oldValue} + SADD ${key} ${newValue}`, "browser", () =>
+        tauriApi.cascade.setValue({ connectionId: connId, key, keyType: "set", action: "set", value: newValue, oldValue })
+      );
       await loadDetail(key, currentPage.value);
       return true;
     } catch (e) {
@@ -354,15 +361,9 @@ export const useDetailStore = defineStore("detail", () => {
     const key = currentDetail.value?.key.key;
     if (!connId || !key) return false;
     try {
-      await tauriApi.cascade.setValue({
-        connectionId: connId,
-        key,
-        keyType: "zset",
-        action: "set",
-        value: newMember,
-        score,
-        oldValue: oldMember,
-      });
+      await history.execAndRecord(`ZREM ${key} ${oldMember} + ZADD ${key} ${score} ${newMember}`, "browser", () =>
+        tauriApi.cascade.setValue({ connectionId: connId, key, keyType: "zset", action: "set", value: newMember, score, oldValue: oldMember })
+      );
       await loadDetail(key, currentPage.value);
       return true;
     } catch (e) {
@@ -377,15 +378,19 @@ export const useDetailStore = defineStore("detail", () => {
     const connId = connStore.activeConnectionId;
     const key = currentDetail.value?.key.key;
     if (!connId || !key) return false;
+
+    const cmdMap: Record<string, string> = {
+      hash: `HDEL ${key} ${params.field ?? ""}`,
+      list: `LREM ${key} 1 ${params.value ?? ""}`,
+      set: `SREM ${key} ${params.value ?? ""}`,
+      zset: `ZREM ${key} ${params.value ?? ""}`,
+    };
+    const cmdStr = cmdMap[params.keyType] ?? `DEL ${key}`;
+
     try {
-      await tauriApi.cascade.setValue({
-        connectionId: connId,
-        key,
-        keyType: params.keyType,
-        action: "delete_field",
-        field: params.field,
-        value: params.value,
-      });
+      await history.execAndRecord(cmdStr, "browser", () =>
+        tauriApi.cascade.setValue({ connectionId: connId, key, keyType: params.keyType, action: "delete_field", field: params.field, value: params.value })
+      );
       await loadDetail(key, currentPage.value);
       return true;
     } catch (e) {
@@ -405,23 +410,31 @@ export const useDetailStore = defineStore("detail", () => {
     const connStore = useConnectionStore();
     const connId = connStore.activeConnectionId;
     if (!connId || !params.keyName) return false;
+
+    // Build a single combined command string (atomic operation)
+    let cmdStr: string;
+    const hasTtl = params.ttl != null && params.ttl > 0;
+    if (params.keyType === "string" && hasTtl) {
+      // String supports SET key value EX ttl natively
+      const val = params.initialData != null ? ` ${params.initialData}` : "";
+      cmdStr = `SET ${params.keyName}${val} EX ${params.ttl}`;
+    } else {
+      const baseCmd = { hash: "HSET", list: "RPUSH", set: "SADD", zset: "ZADD" }[params.keyType] ?? "SET";
+      cmdStr = buildCommandStr(baseCmd, params.keyName, params.keyType, params.initialData);
+      if (hasTtl) cmdStr += ` + EXPIRE ${params.keyName} ${params.ttl}`;
+    }
+
     try {
-      await tauriApi.cascade.createKey({
-        connectionId: connId,
-        key: params.keyName,
-        keyType: params.keyType,
-        ttl: params.ttl,
-        initialData: params.initialData,
-        fieldTtl: params.fieldTtl,
-      });
-      // Refresh key list and select the new key
+      await history.execAndRecord(cmdStr, "browser", () =>
+        tauriApi.cascade.createKey({ connectionId: connId, key: params.keyName, keyType: params.keyType, ttl: params.ttl, initialData: params.initialData, fieldTtl: params.fieldTtl })
+      );
       const cascadeStore = useCascadeStore();
       await cascadeStore.refreshKeys(true);
       cascadeStore.selectKey(params.keyName);
       return true;
     } catch (e) {
       console.error("Failed to create key:", e);
-      return false;
+      throw e;
     }
   }
 
@@ -435,14 +448,16 @@ export const useDetailStore = defineStore("detail", () => {
     const connId = connStore.activeConnectionId;
     const key = currentDetail.value?.key.key;
     if (!connId || !key) return false;
+
+    const cmdStr = buildCommandStr(
+      { hash: "HMSET", list: "RPUSH", set: "SADD", zset: "ZADD" }[params.keyType] ?? "HMSET",
+      key, params.keyType, params.items
+    );
+
     try {
-      await tauriApi.cascade.batchAddFields({
-        connectionId: connId,
-        key,
-        keyType: params.keyType,
-        items: params.items,
-        fieldTtl: params.fieldTtl,
-      });
+      await history.execAndRecord(cmdStr, "browser", () =>
+        tauriApi.cascade.batchAddFields({ connectionId: connId, key, keyType: params.keyType, items: params.items, fieldTtl: params.fieldTtl })
+      );
       await loadDetail(key, currentPage.value);
       return true;
     } catch (e) {
@@ -458,13 +473,13 @@ export const useDetailStore = defineStore("detail", () => {
     const oldKey = currentDetail.value?.key.key;
     if (!connId || !oldKey || oldKey === newKey) return false;
     try {
-      await tauriApi.cascade.renameKey(connId, oldKey, newKey);
-      // Update cascade store
+      await history.execAndRecord(`RENAME ${oldKey} ${newKey}`, "browser", () =>
+        tauriApi.cascade.renameKey(connId, oldKey, newKey)
+      );
       const cascadeStore = useCascadeStore();
       const k = cascadeStore.keys.find((k) => k.key === oldKey);
       if (k) k.key = newKey;
       cascade.selectedKey = newKey;
-      // Reset pagination for renamed key
       filterPattern.value = "";
       currentPage.value = 0;
       await loadDetail(newKey);
@@ -482,7 +497,9 @@ export const useDetailStore = defineStore("detail", () => {
     const key = currentDetail.value?.key.key;
     if (!connId || !key) return false;
     try {
-      await tauriApi.cascade.setKeyTtl(connId, key, ttl);
+      await history.execAndRecord(`EXPIRE ${key} ${ttl}`, "browser", () =>
+        tauriApi.cascade.setKeyTtl(connId, key, ttl)
+      );
       await loadDetail(key, currentPage.value);
       return true;
     } catch (e) {

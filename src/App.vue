@@ -14,7 +14,10 @@ const connStore = useConnectionStore();
 
 // Register active connection name for toast message history
 setConnectionNameGetter(() => connStore.activeConnection?.name);
-setConnectionDbGetter(() => connStore.activeConnection?.db);
+setConnectionDbGetter(() => {
+  const id = connStore.activeConnectionId;
+  return id ? connStore.getActiveDb(id) : undefined;
+});
 
 onMounted(async () => {
   metricsStore.startMonitoring();

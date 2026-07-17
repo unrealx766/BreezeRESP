@@ -491,11 +491,15 @@ const newKeyBatchPlaceholder = computed(() => {
 async function submitNewKey() {
   const name = newKeyName.value.trim();
   if (!name) { toast.error(t('browser.keyNameRequired')); return; }
+  const batchText = newKeyBatchData.value.trim();
+  if (newKeyType.value !== 'string' && !batchText) {
+    toast.error(t('browser.initialDataRequired'));
+    return;
+  }
   newKeyLoading.value = true;
   try {
     const ttlRaw = String(newKeyTtl.value ?? '').trim();
     const ttl = ttlRaw ? parseInt(ttlRaw, 10) : undefined;
-    const batchText = newKeyBatchData.value.trim();
     const initialData = batchText ? parseBatchData(newKeyType.value, batchText) : undefined;
     const ok = await detail.createKey({
       keyName: name,
@@ -1655,7 +1659,7 @@ onBeforeUnmount(() => {
               <label class="block text-xs font-medium text-text-secondary mb-1.5">{{ t('browser.keyName') }}</label>
               <div class="relative">
                 <Key :size="14" class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
-                <input v-model="newKeyName" :placeholder="t('browser.keyNamePlaceholder')" class="w-full pl-9 pr-3 py-2.5 text-sm font-mono bg-bg-primary border border-border rounded-xl focus:outline-none focus:border-redis focus:ring-2 focus:ring-redis/20 transition-all" @keyup.enter="submitNewKey" />
+                <input v-model="newKeyName" placeholder="" class="w-full pl-9 pr-3 py-2 text-sm font-mono bg-bg-primary border border-border rounded-xl focus:outline-none focus:border-redis focus:ring-2 focus:ring-redis/20 transition-all" @keyup.enter="submitNewKey" />
               </div>
             </div>
             <!-- TTL -->
@@ -1663,7 +1667,7 @@ onBeforeUnmount(() => {
               <label class="block text-xs font-medium text-text-secondary mb-1.5">{{ t('browser.ttl') }}</label>
               <div class="relative">
                 <Clock :size="14" class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
-                <input v-model="newKeyTtl" type="number" min="1" :placeholder="t('browser.ttlPlaceholder')" class="w-full pl-9 pr-3 py-2.5 text-sm font-mono bg-bg-primary border border-border rounded-xl focus:outline-none focus:border-redis focus:ring-2 focus:ring-redis/20 transition-all" />
+                <input v-model="newKeyTtl" type="number" min="1" :placeholder="t('browser.ttlPlaceholder')" class="w-full pl-9 pr-3 py-2 text-sm font-mono bg-bg-primary border border-border rounded-xl focus:outline-none focus:border-redis focus:ring-2 focus:ring-redis/20 transition-all" />
               </div>
             </div>
             <!-- Initial Data -->

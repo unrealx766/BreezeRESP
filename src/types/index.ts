@@ -169,6 +169,21 @@ export interface KeyTreeNode {
   expanded: boolean;
 }
 
+// Command History
+export type CommandSource = "browser" | "pipeline" | "sandbox";
+
+export interface CommandHistoryItem {
+  id: string;
+  connectionId: string;
+  connectionName: string;
+  db: number;
+  command: string;
+  source: CommandSource;
+  success: boolean;
+  error?: string;
+  timestamp: number;
+}
+
 // UI types
 export type ViewMode = "tree" | "list";
 export type SortField = "name" | "type" | "ttl" | "size";

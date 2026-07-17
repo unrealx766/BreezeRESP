@@ -4,6 +4,7 @@ import type { PipelineCommand, SavedPipeline } from "@/types";
 import { tauriApi } from "@/services/tauriApi";
 import { useConnectionStore } from "./connectionStore";
 import { useCascadeStore } from "./cascadeStore";
+import { useHistoryStore } from "./historyStore";
 import { toast } from "@/utils/toast";
 
 export const usePipelineStore = defineStore("pipeline", () => {
@@ -94,6 +95,37 @@ export const usePipelineStore = defineStore("pipeline", () => {
 
       totalLatency.value = response.totalLatencyMs;
       individualLatencySum.value = response.individualSumMs;
+
+      // Record each successful write command to history
+      const WRITE_COMMANDS = new Set([
+        "SET", "SETNX", "SETEX", "PSETEX", "MSET", "MSETNX", "GETSET",
+        "APPEND", "INCR", "DECR", "INCRBY", "DECRBY", "INCRBYFLOAT",
+        "HSET", "HSETNX", "HMSET", "HINCRBY", "HINCRBYFLOAT", "HDEL",
+        "LPUSH", "RPUSH", "LPOP", "RPOP", "LSET", "LINSERT", "LREM", "LTRIM",
+        "SADD", "SREM", "SPOP", "SMOVE", "SINTERSTORE", "SUNIONSTORE", "SDIFFSTORE",
+        "ZADD", "ZREM", "ZINCRBY", "ZINTERSTORE", "ZUNIONSTORE", "ZRANGESTORE",
+        "DEL", "EXPIRE", "EXPIREAT", "PEXPIRE", "PEXPIREAT", "PERSIST",
+        "RENAME", "RENAMENX", "COPY", "MOVE",
+      ]);
+      const connStore = useConnectionStore();
+      const conn = connStore.connections.find((c) => c.id === connId);
+      const historyStore = useHistoryStore();
+      for (let i = 0; i < validCommands.length && i < response.results.length; i++) {
+        const cmd = validCommands[i];
+        const result = response.results[i];
+        const cmdName = cmd.command.trim().toUpperCase();
+        if (WRITE_COMMANDS.has(cmdName) && result.success) {
+          const argsStr = cmd.args.join(" ");
+          historyStore.addRecord({
+            connectionId: connId,
+            connectionName: conn?.name ?? "",
+            db: connStore.getActiveDb(connId),
+            command: `${cmdName} ${argsStr}`.trim(),
+            source: "pipeline",
+            success: true,
+          });
+        }
+      }
 
       // Refresh browser keys after pipeline execution (data may have changed)
       try {

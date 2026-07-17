@@ -13,6 +13,8 @@ export const useConnectionStore = defineStore("connection", () => {
   const lastError = ref<string | null>(null);
   /** IDs of connections that have been connected during this session (persists until app exit) */
   const sessionConnectedIds = ref<Set<string>>(new Set());
+  /** Tracks the currently active DB per connection (separate from the default DB in conn.db) */
+  const activeDbMap = ref<Record<string, number>>({});
 
   // ── Cancellation support ──
   const _cancellers = new Map<string, () => void>();
@@ -147,6 +149,7 @@ export const useConnectionStore = defineStore("connection", () => {
       console.error("Failed to delete connection:", e);
     }
     connections.value = connections.value.filter((c) => c.id !== id);
+    delete activeDbMap.value[id];
     if (activeConnectionId.value === id) activeConnectionId.value = null;
   }
 
@@ -191,6 +194,16 @@ export const useConnectionStore = defineStore("connection", () => {
       activeConnectionId.value = id;
       conn.lastUsed = Date.now();
       sessionConnectedIds.value = new Set([...sessionConnectedIds.value, id]);
+      // Restore last active DB if it differs from the default (session persistence across reconnect)
+      const savedDb = activeDbMap.value[id];
+      if (savedDb !== undefined && savedDb !== conn.db) {
+        try {
+          await tauriApi.connection.switchDb(id, savedDb);
+        } catch (e) {
+          console.warn("Failed to restore active DB on reconnect:", e);
+          delete activeDbMap.value[id];
+        }
+      }
       return true;
     } catch (e) {
       const msg = typeof e === "string" ? e : (e as Error)?.message || String(e);
@@ -288,6 +301,12 @@ export const useConnectionStore = defineStore("connection", () => {
     }
   }
 
+  /** Get the currently active DB for a connection (falls back to default conn.db) */
+  function getActiveDb(id: string): number {
+    const conn = connections.value.find((c) => c.id === id);
+    return activeDbMap.value[id] ?? conn?.db ?? 0;
+  }
+
   /** Switch the active database for a connected session */
   async function switchDb(db: number) {
     const id = activeConnectionId.value;
@@ -295,8 +314,7 @@ export const useConnectionStore = defineStore("connection", () => {
 
     try {
       await tauriApi.connection.switchDb(id, db);
-      const conn = connections.value.find((c) => c.id === id);
-      if (conn) conn.db = db;
+      activeDbMap.value = { ...activeDbMap.value, [id]: db };
     } catch (e) {
       console.error("Switch DB failed:", e);
       throw e;
@@ -348,6 +366,7 @@ export const useConnectionStore = defineStore("connection", () => {
     cancelTest,
     cancelFormTest,
     switchDb,
+    getActiveDb,
     togglePin,
     dismissSession,
     loadSavedConnections,
