@@ -125,7 +125,6 @@
     "deleteField": "删除",
     "confirmDeleteField": "确定删除此项吗？此操作不可撤销。",
     "addField": "添加",
-    "addFieldSuccess": "添加成功",
     "addFieldFailed": "添加失败",
     "fieldNamePlaceholder": "字段名",
     "fieldValuePlaceholder": "值...",

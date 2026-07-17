@@ -125,7 +125,6 @@
     "deleteField": "Delete",
     "confirmDeleteField": "Are you sure to delete this item? This action cannot be undone.",
     "addField": "Add",
-    "addFieldSuccess": "Added successfully",
     "addFieldFailed": "Failed to add",
     "fieldNamePlaceholder": "Field name",
     "fieldValuePlaceholder": "Value...",
