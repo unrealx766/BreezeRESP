@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, reactive } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { Database, Server, Layers, FlaskConical, History, Plus, Unplug, X, Pin } from "lucide-vue-next";
+import type { RedisConnection } from "@/types";
 import { toast } from "@/utils/toast";
 
 const router = useRouter();
@@ -29,22 +30,32 @@ function navigate(path: string) {
 
 async function handleSidebarConnect(id: string) {
   const conn = connStore.connections.find((c) => c.id === id);
-  if (!conn || conn.status === "connecting") return;
+  if (!conn || conn.status === "connecting" || conn.status === "connected") return;
   const ok = await connStore.connect(id);
   if (!ok) {
     toast.error(connStore.lastError || t("connection.connectFailed"), 5000, conn.name);
   }
 }
 
-const disconnectingIds = ref<Set<string>>(new Set());
+function handleConnectionClick(conn: RedisConnection) {
+  if (conn.status === "connected") {
+    if (connStore.activeConnectionId !== conn.id) {
+      connStore.activeConnectionId = conn.id;
+    }
+  } else {
+    handleSidebarConnect(conn.id);
+  }
+}
+
+const disconnectingIds = reactive<Record<string, boolean>>({});
 
 async function handleSidebarDisconnect(id: string) {
-  if (disconnectingIds.value.has(id)) return;
-  disconnectingIds.value.add(id);
+  if (disconnectingIds[id]) return;
+  disconnectingIds[id] = true;
   try {
     await connStore.disconnect(id);
   } finally {
-    disconnectingIds.value.delete(id);
+    delete disconnectingIds[id];
   }
 }
 </script>
@@ -89,13 +100,16 @@ async function handleSidebarDisconnect(id: string) {
           <Plus :size="12" class="text-text-muted" />
         </button>
       </div>
-      <div class="space-y-0.5 max-h-48 overflow-y-auto">
+      <div v-if="connStore.statusBarConnections.length === 0" class="px-3 py-3 text-center text-text-muted text-xs">
+        {{ t("connection.noSessions") }}
+      </div>
+      <div v-else class="space-y-0.5 max-h-48 overflow-y-auto">
         <div
           v-for="conn in connStore.statusBarConnections"
           :key="conn.id"
           class="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs cursor-pointer hover:bg-bg-hover transition-colors"
           :class="connStore.activeConnectionId === conn.id ? 'bg-bg-active' : ''"
-          @click="conn.status === 'connected' ? (connStore.activeConnectionId = conn.id) : handleSidebarConnect(conn.id)"
+          @click="handleConnectionClick(conn)"
         >
           <span
             class="w-2 h-2 rounded-full shrink-0"

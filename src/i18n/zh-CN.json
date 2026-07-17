@@ -29,6 +29,7 @@
     "db": "数据库",
     "ssl": "SSL/TLS",
     "sessions": "会话",
+    "noSessions": "暂无活跃会话",
     "connected": "已连接",
     "disconnected": "未连接",
     "connecting": "连接中...",
