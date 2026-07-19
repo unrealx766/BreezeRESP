@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useConnectionStore } from "@/stores/connectionStore";
@@ -8,14 +8,36 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
 import { toast } from "@/utils/toast";
 import {
   Plus, Server, Plug, Unplug, Trash2, Edit3, Zap,
-  X, Loader2, Lock, Unlock, Pin, PinOff, Check,
+  X, Loader2, Lock, Unlock, Pin, PinOff, Check, Palette,
 } from "lucide-vue-next";
+import { getDotColor, setDotColor, DOT_COLOR_PRESETS, DEFAULT_DOT_COLOR } from "@/utils/uiSettings";
 
 const router = useRouter();
 const { t } = useI18n();
 const connStore = useConnectionStore();
 
 const confirmDialog = ref<InstanceType<typeof ConfirmDialog>>();
+
+// ── Per-connection color picker popover ──
+const colorPickerId = ref<string | null>(null);
+const colorPickerRef = ref<HTMLElement | null>(null);
+
+function toggleColorPicker(id: string) {
+  colorPickerId.value = colorPickerId.value === id ? null : id;
+}
+
+function closeColorPicker() {
+  colorPickerId.value = null;
+}
+
+function onClickOutsideColorPicker(e: MouseEvent) {
+  if (colorPickerRef.value && !colorPickerRef.value.contains(e.target as Node)) {
+    closeColorPicker();
+  }
+}
+
+onMounted(() => document.addEventListener("mousedown", onClickOutsideColorPicker));
+onBeforeUnmount(() => document.removeEventListener("mousedown", onClickOutsideColorPicker));
 
 const showForm = ref(false);
 const editingId = ref<string | null>(null);
@@ -228,15 +250,63 @@ function statusColor(status: string) {
               <p class="text-xs text-text-muted">{{ conn.host }}:{{ conn.port }}</p>
             </div>
           </div>
-          <span
-            class="w-2.5 h-2.5 rounded-full mt-1"
-            :class="{
-              'bg-gray-300': conn.status === 'disconnected',
-              'bg-warning animate-pulse': conn.status === 'connecting',
-              'bg-danger': conn.status === 'error',
-            }"
-            :style="conn.status === 'connected' ? { backgroundColor: 'var(--dot-connected)' } : undefined"
-          />
+          <div class="flex items-center gap-2 mt-0.5 relative">
+            <span
+              class="w-2.5 h-2.5 rounded-full transition-all duration-300"
+              :class="{
+                'bg-gray-300': conn.status === 'disconnected',
+                'bg-warning animate-dot-pulse': conn.status === 'connecting',
+                'bg-danger': conn.status === 'error',
+              }"
+              :style="conn.status === 'connected' ? { backgroundColor: getDotColor(conn.id) } : undefined"
+            />
+            <!-- Per-connection color picker trigger -->
+            <button
+              @click.stop="toggleColorPicker(conn.id)"
+              class="w-5 h-5 rounded flex items-center justify-center hover:bg-bg-hover transition-colors cursor-pointer opacity-0 group-hover:opacity-100"
+              :title="t('connection.customizeDotColor')"
+            >
+              <Palette :size="11" class="text-text-muted" />
+            </button>
+            <!-- Color picker popover -->
+            <div
+              v-if="colorPickerId === conn.id"
+              :ref="(el: any) => { if (el) colorPickerRef = el as HTMLElement }"
+              class="absolute right-0 top-full mt-1 z-50 p-3 bg-bg-secondary border border-border rounded-lg shadow-lg min-w-[140px]"
+              @click.stop
+            >
+              <div class="grid grid-cols-4 gap-3 mb-3">
+                <button
+                  v-for="preset in DOT_COLOR_PRESETS"
+                  :key="preset.color"
+                  @click="setDotColor(conn.id, preset.color)"
+                  class="w-7 h-7 rounded-full border-2 transition-transform hover:scale-110"
+                  :style="{ backgroundColor: preset.color }"
+                  :class="getDotColor(conn.id) === preset.color ? 'border-white shadow-sm' : 'border-transparent'"
+                  :title="t(`connection.color${preset.name}`)"
+                />
+              </div>
+              <!-- Custom color picker -->
+              <label class="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-bg-hover cursor-pointer transition-colors whitespace-nowrap">
+                <span class="w-4 h-4 rounded border border-border shrink-0" :style="{ backgroundColor: getDotColor(conn.id) }" />
+                <span class="text-[11px] text-text-muted">{{ t('connection.customColor') }}</span>
+                <input
+                  type="color"
+                  :value="getDotColor(conn.id)"
+                  @input="(e: Event) => setDotColor(conn.id, (e.target as HTMLInputElement).value)"
+                  class="absolute w-0 h-0 opacity-0 pointer-events-none"
+                />
+              </label>
+              <!-- Reset to default -->
+              <button
+                v-if="getDotColor(conn.id) !== DEFAULT_DOT_COLOR"
+                @click="setDotColor(conn.id, DEFAULT_DOT_COLOR)"
+                class="w-full mt-1 px-1.5 py-1 text-[11px] text-text-muted hover:text-text-secondary rounded hover:bg-bg-hover transition-colors text-left whitespace-nowrap"
+              >
+                {{ t('connection.resetDotColor') }}
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- Info -->

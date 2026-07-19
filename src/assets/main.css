@@ -185,3 +185,13 @@
   60%  { opacity: 1; }
   100% { opacity: 0; transform: translate(-50%, -100%) translateY(-6px); }
 }
+
+/* Dot pulse animation — scale only, no opacity change to avoid flash on removal */
+@keyframes dot-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.4); }
+}
+
+.animate-dot-pulse {
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}

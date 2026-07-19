@@ -54,7 +54,18 @@
     "summary": "{total} 个连接, {active} 个活跃",
     "pin": "固定到状态栏",
     "unpin": "取消固定",
-    "dismissSession": "从会话列表移除"
+    "dismissSession": "从会话列表移除",
+    "customizeDotColor": "自定义状态点颜色",
+    "customColor": "自定义连接颜色",
+    "resetDotColor": "重置为默认颜色",
+    "colorGreen": "绿色",
+    "colorBlue": "蓝色",
+    "colorCyan": "青色",
+    "colorPurple": "紫色",
+    "colorPink": "粉色",
+    "colorOrange": "橙色",
+    "colorYellow": "黄色",
+    "colorIndigo": "靛蓝"
   },
   "browser": {
     "title": "数据浏览器",
@@ -256,9 +267,6 @@
     "themeDesc": "选择应用程序的外观主题",
     "themeLight": "浅色",
     "themeDark": "深色",
-    "dotColor": "连接状态颜色",
-    "dotColorDesc": "自定义连接成功时状态点的显示颜色",
-    "dotColorReset": "重置",
     "general": "通用",
     "about": "关于"
   },

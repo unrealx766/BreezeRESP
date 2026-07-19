@@ -5,6 +5,7 @@ import { useConnectionStore } from "@/stores/connectionStore";
 import { useCascadeStore } from "@/stores/cascadeStore";
 import { useDetailStore } from "@/stores/detailStore";
 import { messageHistory, clearMessageHistory } from "@/utils/toast";
+import { getDotColor } from "@/utils/uiSettings";
 import SettingsDialog from "@/components/shared/SettingsDialog.vue";
 import { Database, ChevronDown, Check, RefreshCw, Bell, BellDot, Trash2, CheckCircle, XCircle, AlertTriangle, Info, Settings } from "lucide-vue-next";
 
@@ -97,13 +98,13 @@ const colorMap = {
     <div class="flex items-center gap-3 min-w-0">
       <template v-if="connStore.activeConnection">
         <span
-          class="w-2 h-2 rounded-full shrink-0"
+          class="w-2 h-2 rounded-full shrink-0 transition-all duration-300"
           :class="{
             'bg-text-muted': connStore.activeConnection.status === 'disconnected',
-            'bg-warning animate-pulse': connStore.activeConnection.status === 'connecting',
+            'bg-warning animate-dot-pulse': connStore.activeConnection.status === 'connecting',
             'bg-danger': connStore.activeConnection.status === 'error',
           }"
-          :style="connStore.activeConnection.status === 'connected' ? { backgroundColor: 'var(--dot-connected)' } : undefined"
+          :style="connStore.activeConnection.status === 'connected' ? { backgroundColor: getDotColor(connStore.activeConnection.id) } : undefined"
         />
         <span class="text-sm font-medium text-text-primary truncate max-w-[40%]" :title="connStore.activeConnection.name">{{ connStore.activeConnection.name }}</span>
         <span class="text-xs text-text-muted whitespace-nowrap shrink-0">{{ connStore.activeConnection.host }}:{{ connStore.activeConnection.port }}</span>

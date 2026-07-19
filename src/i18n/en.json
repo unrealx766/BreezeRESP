@@ -54,7 +54,18 @@
     "summary": "{total} connections, {active} active",
     "pin": "Pin to Status Bar",
     "unpin": "Unpin from Status Bar",
-    "dismissSession": "Remove from Session List"
+    "dismissSession": "Remove from Session List",
+    "customizeDotColor": "Customize Status Dot Color",
+    "customColor": "Custom Connection Color",
+    "resetDotColor": "Reset to Default",
+    "colorGreen": "Green",
+    "colorBlue": "Blue",
+    "colorCyan": "Cyan",
+    "colorPurple": "Purple",
+    "colorPink": "Pink",
+    "colorOrange": "Orange",
+    "colorYellow": "Yellow",
+    "colorIndigo": "Indigo"
   },
   "browser": {
     "title": "Data Browser",
@@ -256,9 +267,6 @@
     "themeDesc": "Choose the appearance for the application",
     "themeLight": "Light",
     "themeDark": "Dark",
-    "dotColor": "Status Dot Color",
-    "dotColorDesc": "Customize the color of the connection status dot when connected",
-    "dotColorReset": "Reset",
     "general": "General",
     "about": "About"
   },
