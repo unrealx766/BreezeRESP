@@ -1,7 +1,7 @@
 {
   "name": "BreezeResp",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "A Redis visualization tool for managing and exploring Redis data",
   "license": "Apache-2.0",
   "author": {
