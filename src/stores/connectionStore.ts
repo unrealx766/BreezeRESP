@@ -6,6 +6,7 @@ import { toast } from "@/utils/toast";
 import { i18n } from "@/i18n";
 import { useCascadeStore } from "@/stores/cascadeStore";
 import { useDetailStore } from "@/stores/detailStore";
+import { useHistoryStore } from "@/stores/historyStore";
 
 export const useConnectionStore = defineStore("connection", () => {
   const connections = ref<RedisConnection[]>([]);
@@ -151,6 +152,9 @@ export const useConnectionStore = defineStore("connection", () => {
     connections.value = connections.value.filter((c) => c.id !== id);
     delete activeDbMap.value[id];
     if (activeConnectionId.value === id) activeConnectionId.value = null;
+    // Clean up orphaned history records for the removed connection
+    const historyStore = useHistoryStore();
+    historyStore.clearHistory(id);
   }
 
   function setStatus(id: string, status: ConnectionStatus) {
