@@ -60,68 +60,77 @@ export const useDetailStore = defineStore("detail", () => {
   function mapKeyDetail(rust: any): KeyDetail {
     const rk = rust.key || {};
     const keyType = (rk.keyType || rk.key_type || "string") as RedisDataType;
-    const val = rust.value as Record<string, unknown>;
+    // Defensive: if Tauri IPC returns value as a JSON string (possible with serde_json::Value), parse it
+    let val = rust.value as unknown;
+    if (typeof val === "string") {
+      console.warn("[mapKeyDetail] value was a string, parsing:", val.slice(0, 200));
+      try { val = JSON.parse(val); } catch { val = {}; }
+    }
+    const v = val as Record<string, unknown>;
+    if (!v || typeof v !== "object" || !v.type) {
+      console.warn("[mapKeyDetail] unexpected value format:", typeof val, "keys:", v ? Object.keys(v) : "null");
+    }
 
     let keyValue: KeyValue;
 
-    switch (val.type) {
+    switch (v.type) {
       case "string":
         keyValue = {
           type: "string",
-          value: val.value as string,
-          valueHex: (val.valueHex as string) || "",
-          encoding: (val.encoding as string) || rust.encoding,
-          contentEncoding: val.contentEncoding as string | undefined,
+          value: v.value as string,
+          valueHex: (v.valueHex as string) || "",
+          encoding: (v.encoding as string) || rust.encoding,
+          contentEncoding: v.contentEncoding as string | undefined,
         };
         break;
       case "hash":
         keyValue = {
           type: "hash",
-          fields: (val.fields as Array<{ field: string; fieldHex?: string; value: string; valueHex?: string; ttl?: number }>) || [],
-          encoding: (val.encoding as string) || rust.encoding,
-          contentEncoding: val.contentEncoding as string | undefined,
-          totalCount: val.totalCount as number | undefined,
-          truncated: val.truncated as boolean | undefined,
-          hasFieldTtl: val.hasFieldTtl as boolean | undefined,
+          fields: (v.fields as Array<{ field: string; fieldHex?: string; value: string; valueHex?: string; ttl?: number }>) || [],
+          encoding: (v.encoding as string) || rust.encoding,
+          contentEncoding: v.contentEncoding as string | undefined,
+          totalCount: v.totalCount as number | undefined,
+          truncated: v.truncated as boolean | undefined,
+          hasFieldTtl: v.hasFieldTtl as boolean | undefined,
         };
         break;
       case "list":
         keyValue = {
           type: "list",
-          items: (val.items as string[]) || [],
-          itemsHex: (val.itemsHex as string[]) || undefined,
-          encoding: (val.encoding as string) || rust.encoding,
-          contentEncoding: val.contentEncoding as string | undefined,
-          totalCount: val.totalCount as number | undefined,
-          truncated: val.truncated as boolean | undefined,
-          originalIndices: val.originalIndices as number[] | undefined,
+          items: (v.items as string[]) || [],
+          itemsHex: (v.itemsHex as string[]) || undefined,
+          encoding: (v.encoding as string) || rust.encoding,
+          contentEncoding: v.contentEncoding as string | undefined,
+          totalCount: v.totalCount as number | undefined,
+          truncated: v.truncated as boolean | undefined,
+          originalIndices: v.originalIndices as number[] | undefined,
         };
         break;
       case "set":
         keyValue = {
           type: "set",
-          members: (val.members as string[]) || [],
-          membersHex: (val.membersHex as string[]) || undefined,
-          encoding: (val.encoding as string) || rust.encoding,
-          contentEncoding: val.contentEncoding as string | undefined,
-          totalCount: val.totalCount as number | undefined,
-          truncated: val.truncated as boolean | undefined,
+          members: (v.members as string[]) || [],
+          membersHex: (v.membersHex as string[]) || undefined,
+          encoding: (v.encoding as string) || rust.encoding,
+          contentEncoding: v.contentEncoding as string | undefined,
+          totalCount: v.totalCount as number | undefined,
+          truncated: v.truncated as boolean | undefined,
         };
         break;
       case "zset":
         keyValue = {
           type: "zset",
-          members: (val.members as Array<{ member: string; memberHex?: string; score: number }>) || [],
-          encoding: (val.encoding as string) || rust.encoding,
-          contentEncoding: val.contentEncoding as string | undefined,
-          totalCount: val.totalCount as number | undefined,
-          truncated: val.truncated as boolean | undefined,
+          members: (v.members as Array<{ member: string; memberHex?: string; score: number }>) || [],
+          encoding: (v.encoding as string) || rust.encoding,
+          contentEncoding: v.contentEncoding as string | undefined,
+          totalCount: v.totalCount as number | undefined,
+          truncated: v.truncated as boolean | undefined,
         };
         break;
       default:
         keyValue = {
           type: "string",
-          value: JSON.stringify(val),
+          value: JSON.stringify(v),
           valueHex: "",
           encoding: rust.encoding,
           contentEncoding: undefined,
@@ -172,7 +181,7 @@ export const useDetailStore = defineStore("detail", () => {
     try {
       const offset = page * pageSize.value;
       const redisVersion = metricsStore.version || undefined;
-      const rustDetail = await tauriApi.cascade.getKeyDetail(
+      let rustDetail = await tauriApi.cascade.getKeyDetail(
         connId,
         key,
         offset,
@@ -180,6 +189,10 @@ export const useDetailStore = defineStore("detail", () => {
         filterPattern.value || undefined,
         redisVersion
       );
+      // Defensive: handle double-serialized IPC response
+      if (typeof rustDetail === "string") {
+        try { rustDetail = JSON.parse(rustDetail); } catch { /* use as-is */ }
+      }
       currentDetail.value = mapKeyDetail(rustDetail);
 
       if (currentDetail.value.key.ttl > 0) {
