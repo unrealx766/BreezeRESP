@@ -9,7 +9,9 @@
     "browser": "Browser",
     "pipeline": "Pipeline",
     "sandbox": "Sandbox",
-    "history": "Command History"
+    "history": "Command History",
+    "collapse": "Collapse",
+    "expand": "Expand"
   },
   "connection": {
     "title": "Connection Manager",
@@ -254,6 +256,9 @@
     "themeDesc": "Choose the appearance for the application",
     "themeLight": "Light",
     "themeDark": "Dark",
+    "dotColor": "Status Dot Color",
+    "dotColorDesc": "Customize the color of the connection status dot when connected",
+    "dotColorReset": "Reset",
     "general": "General",
     "about": "About"
   },

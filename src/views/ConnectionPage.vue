@@ -231,11 +231,11 @@ function statusColor(status: string) {
           <span
             class="w-2.5 h-2.5 rounded-full mt-1"
             :class="{
-              'bg-success': conn.status === 'connected',
               'bg-gray-300': conn.status === 'disconnected',
               'bg-warning animate-pulse': conn.status === 'connecting',
               'bg-danger': conn.status === 'error',
             }"
+            :style="conn.status === 'connected' ? { backgroundColor: 'var(--dot-connected)' } : undefined"
           />
         </div>
 

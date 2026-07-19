@@ -5,6 +5,7 @@ import { router } from "./router";
 import { i18n } from "./i18n";
 import { registerConnectionGuard } from "./services/tauriApi";
 import "./assets/main.css";
+import "./utils/uiSettings"; // Initialize UI settings (CSS variables, etc.)
 
 const app = createApp(App);
 const pinia = createPinia();

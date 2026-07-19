@@ -2,8 +2,9 @@
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { availableLocales } from "@/i18n";
-import { Globe, Check, Settings, X, Info, SlidersHorizontal, Github, Sun, Moon } from "lucide-vue-next";
+import { Globe, Check, Settings, X, Info, SlidersHorizontal, Github, Sun, Moon, Palette, RotateCcw } from "lucide-vue-next";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { dotColor, resetDotColor, DEFAULT_DOT_COLOR } from "@/utils/uiSettings";
 
 const GITHUB_URL = "https://github.com/unrealx766/BreezeRESP";
 
@@ -155,6 +156,35 @@ defineExpose({ open });
                     >
                       <span>{{ loc.label }}</span>
                       <Check v-if="locale === loc.code" :size="12" />
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Connection Dot Color -->
+                <div>
+                  <div class="flex items-center gap-2 mb-2.5">
+                    <Palette :size="13" class="text-text-muted" />
+                    <span class="text-xs font-medium text-text-primary">{{ t("settings.dotColor") }}</span>
+                  </div>
+                  <p class="text-[11px] text-text-muted mb-3 pl-[21px]">{{ t("settings.dotColorDesc") }}</p>
+                  <div class="flex items-center gap-3 pl-[21px]">
+                    <label class="relative w-8 h-8 rounded-lg border border-border cursor-pointer overflow-hidden hover:border-border-hover transition-colors">
+                      <span class="absolute inset-0" :style="{ backgroundColor: dotColor }" />
+                      <input
+                        type="color"
+                        v-model="dotColor"
+                        class="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      />
+                    </label>
+                    <span class="text-xs font-mono text-text-secondary">{{ dotColor }}</span>
+                    <button
+                      v-if="dotColor !== DEFAULT_DOT_COLOR"
+                      @click="resetDotColor"
+                      class="flex items-center gap-1 px-2 py-1 text-[11px] text-text-muted hover:text-text-secondary rounded-md hover:bg-bg-hover transition-colors"
+                      :title="t('settings.dotColorReset')"
+                    >
+                      <RotateCcw :size="11" />
+                      {{ t("settings.dotColorReset") }}
                     </button>
                   </div>
                 </div>

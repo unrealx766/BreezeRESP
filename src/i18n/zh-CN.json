@@ -9,7 +9,9 @@
     "browser": "数据浏览器",
     "pipeline": "流水线",
     "sandbox": "命令沙盒",
-    "history": "命令记录"
+    "history": "命令记录",
+    "collapse": "收起面板",
+    "expand": "展开面板"
   },
   "connection": {
     "title": "连接管理",
@@ -254,6 +256,9 @@
     "themeDesc": "选择应用程序的外观主题",
     "themeLight": "浅色",
     "themeDark": "深色",
+    "dotColor": "连接状态颜色",
+    "dotColorDesc": "自定义连接成功时状态点的显示颜色",
+    "dotColorReset": "重置",
     "general": "通用",
     "about": "关于"
   },
