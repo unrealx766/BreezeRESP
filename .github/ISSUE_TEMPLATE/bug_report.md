@@ -29,7 +29,7 @@ assignees: ''
 
 ## 💻 运行环境 / Environment
 <!-- 请提供以下环境信息，以便我们排查兼容性问题。 -->
-- **BreezeRESP 版本 (Version)**: [e.g., 1.1.0]
+- **BreezeRESP 版本 (Version)**: [e.g., 1.2.0]
 - **操作系统 (OS)**: [e.g., Windows 11, macOS Sequoia, Ubuntu 24.04]
 - **系统架构 (Architecture)**: [e.g., x86_64, aarch64 (ARM64)]
 - **Redis 版本 (Redis Server Version)**: [e.g., Redis 7.2 / 云数据库]

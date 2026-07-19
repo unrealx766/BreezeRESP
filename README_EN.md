@@ -3,7 +3,7 @@
 [English](README_EN.md) | 中文
 > A lightweight and fast Redis GUI tool built with Tauri v2 + Vue 3.
 
-![Version](https://img.shields.io/badge/version-1.1.0-blue)
+![Version](https://img.shields.io/badge/version-1.2.0-blue)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 

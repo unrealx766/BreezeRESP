@@ -3,7 +3,7 @@
 [English](README_EN.md) | 中文
 > 一款轻量、快速的 Redis 可视化工具，基于 Tauri v2 + Vue 3 构建。
 
-![Version](https://img.shields.io/badge/version-1.1.0-blue)
+![Version](https://img.shields.io/badge/version-1.2.0-blue)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 
