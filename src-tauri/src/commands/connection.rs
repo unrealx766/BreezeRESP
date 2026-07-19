@@ -130,7 +130,14 @@ pub async fn connect(
 pub async fn disconnect(state: State<'_, AppState>, id: String) -> Result<(), String> {
     validate_connection_id(&id)?;
     let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
-    pm.remove(&id)
+    pm.remove(&id)?;
+
+    // Clear any pending sandbox state to prevent stale data leaking across connections
+    let ss = state.shadow_store.lock().map_err(|e| e.to_string())?;
+    let mut ss = ss;
+    ss.clear_pending();
+
+    Ok(())
 }
 
 /// Test a Redis connection without persisting it
@@ -294,6 +301,10 @@ pub async fn switch_db(
         pm.get_or_create(&id, &host, port, pw, db, ssl)?
     };
 
+    // Zeroize password from memory after pool creation
+    let mut password = password;
+    password.zeroize();
+
     // Verify with PING (with timeout to prevent TLS hang)
     let mut conn = tokio::time::timeout(CONN_TIMEOUT, pool.get())
         .await
@@ -316,6 +327,13 @@ pub async fn delete_connection(state: State<'_, AppState>, id: String) -> Result
     {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
         let _ = pm.remove(&id);
+    }
+
+    // Clear any pending sandbox state
+    {
+        let ss = state.shadow_store.lock().map_err(|e| e.to_string())?;
+        let mut ss = ss;
+        ss.clear_pending();
     }
 
     let cs = state.config_store.lock().map_err(|e| e.to_string())?;
