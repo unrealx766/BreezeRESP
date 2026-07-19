@@ -107,7 +107,6 @@ export const usePipelineStore = defineStore("pipeline", () => {
         "DEL", "EXPIRE", "EXPIREAT", "PEXPIRE", "PEXPIREAT", "PERSIST",
         "RENAME", "RENAMENX", "COPY", "MOVE",
       ]);
-      const connStore = useConnectionStore();
       const conn = connStore.connections.find((c) => c.id === connId);
       const historyStore = useHistoryStore();
       for (let i = 0; i < validCommands.length && i < response.results.length; i++) {
