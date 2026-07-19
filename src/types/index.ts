@@ -182,6 +182,8 @@ export interface CommandHistoryItem {
   success: boolean;
   error?: string;
   timestamp: number;
+  /** Execution duration in milliseconds */
+  durationMs?: number;
 }
 
 // UI types

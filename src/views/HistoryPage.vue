@@ -84,6 +84,23 @@ function sourceLabel(source: string): string {
   return map[source] ?? source;
 }
 
+/** Format duration in ms to human-readable string */
+function formatDuration(ms: number | undefined): string {
+  if (ms == null) return "";
+  if (ms < 10000) return `${ms}ms`;
+  const totalSec = ms / 1000;
+  if (totalSec < 60) return `${totalSec.toFixed(1)}s`;
+  const totalMin = Math.floor(totalSec / 60);
+  const sec = Math.round(totalSec % 60);
+  if (totalMin < 60) return `${totalMin}m${sec}s`;
+  const hours = Math.floor(totalMin / 60);
+  const min = totalMin % 60;
+  if (hours < 24) return `${hours}h${min}m`;
+  const days = Math.floor(hours / 24);
+  const h = hours % 24;
+  return `${days}d${h}h`;
+}
+
 function sourceColor(source: string): string {
   const map: Record<string, string> = {
     browser: "bg-blue-500/15 text-blue-400 border-blue-500/30",
@@ -262,6 +279,10 @@ const groupedItems = computed(() => {
                 <div class="flex items-center gap-2 mb-0.5">
                   <!-- Time -->
                   <span class="text-[11px] font-mono text-text-muted">{{ formatTime(item.timestamp) }}</span>
+                  <!-- Duration -->
+                  <span v-if="item.durationMs != null" class="text-[10px] font-mono text-text-muted/70">
+                    {{ formatDuration(item.durationMs) }}
+                  </span>
                   <!-- DB badge -->
                   <span class="text-[10px] font-mono font-semibold text-redis/70 bg-redis/8 px-1.5 py-0.5 rounded">
                     DB{{ item.db }}
@@ -289,7 +310,7 @@ const groupedItems = computed(() => {
                     <!-- Single command: inline -->
                     <code v-else class="text-xs text-text-primary font-mono truncate block">
                       <span class="text-redis font-semibold">{{ cmdVerb(item.command) }}</span>
-                      <span class="text-text-secondary"> {{ cmdArgs(item.command) }}</span>
+                      <span v-if="cmdArgs(item.command)" class="text-text-secondary ml-1">{{ cmdArgs(item.command) }}</span>
                     </code>
                   </div>
                   <!-- Copy button (visible on hover) -->

@@ -241,7 +241,9 @@ export const useSandboxStore = defineStore("sandbox", () => {
 
     try {
       // Re-execute the command in Redis for real and clear pending state.
+      const applyStart = performance.now();
       const ok = await tauriApi.sandbox.apply(connId, cmd);
+      const applyDuration = Math.round(performance.now() - applyStart);
       if (!ok) {
         toast.error("Apply returned false.");
         return;
@@ -278,6 +280,7 @@ export const useSandboxStore = defineStore("sandbox", () => {
         command: cmd,
         source: "sandbox",
         success: true,
+        durationMs: applyDuration,
       });
 
       // Refresh keys after apply

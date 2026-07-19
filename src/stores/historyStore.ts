@@ -16,6 +16,7 @@ export const useHistoryStore = defineStore("history", () => {
     source: CommandSource;
     success: boolean;
     error?: string;
+    durationMs?: number;
   }) {
     const item: CommandHistoryItem = {
       id: `hist-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -27,6 +28,7 @@ export const useHistoryStore = defineStore("history", () => {
       success: params.success,
       error: params.error,
       timestamp: Date.now(),
+      durationMs: params.durationMs,
     };
     history.value.unshift(item);
     if (history.value.length > MAX_HISTORY) {
@@ -47,8 +49,10 @@ export const useHistoryStore = defineStore("history", () => {
     const connId = connStore.activeConnectionId;
     const conn = connId ? connStore.connections.find((c) => c.id === connId) : undefined;
     const activeDb = connId ? connStore.getActiveDb(connId) : 0;
+    const start = performance.now();
     try {
       const result = await fn();
+      const durationMs = Math.round(performance.now() - start);
       if (connId) {
         addRecord({
           connectionId: connId,
@@ -57,10 +61,12 @@ export const useHistoryStore = defineStore("history", () => {
           command,
           source,
           success: true,
+          durationMs,
         });
       }
       return result;
     } catch (e) {
+      const durationMs = Math.round(performance.now() - start);
       if (connId) {
         const errMsg = e instanceof Error ? e.message : typeof e === "string" ? e : String(e);
         addRecord({
@@ -71,6 +77,7 @@ export const useHistoryStore = defineStore("history", () => {
           source,
           success: false,
           error: errMsg,
+          durationMs,
         });
       }
       throw e;

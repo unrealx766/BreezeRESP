@@ -122,6 +122,7 @@ export const usePipelineStore = defineStore("pipeline", () => {
             command: `${cmdName} ${argsStr}`.trim(),
             source: "pipeline",
             success: true,
+            durationMs: result.latencyMs != null ? Math.round(result.latencyMs) : undefined,
           });
         }
       }
