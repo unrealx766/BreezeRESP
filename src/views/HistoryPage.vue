@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
 import { History, Search, Trash2, Copy, CheckCircle, XCircle } from "lucide-vue-next";
 import { useHistoryStore } from "@/stores/historyStore";
@@ -13,6 +13,22 @@ const connStore = useConnectionStore();
 const searchQuery = ref("");
 const selectedDb = ref<number | undefined>(undefined);
 const showConfirmClear = ref(false);
+const confirmRef = ref<HTMLElement | null>(null);
+
+// Reset DB filter when active connection changes
+watch(() => connStore.activeConnectionId, () => {
+  selectedDb.value = undefined;
+  showConfirmClear.value = false;
+});
+
+// Click-outside to close confirm dropdown
+function onClickOutside(e: MouseEvent) {
+  if (showConfirmClear.value && confirmRef.value && !confirmRef.value.contains(e.target as Node)) {
+    showConfirmClear.value = false;
+  }
+}
+onMounted(() => document.addEventListener("click", onClickOutside));
+onBeforeUnmount(() => document.removeEventListener("click", onClickOutside));
 
 const activeDbList = computed(() => {
   const connId = connStore.activeConnectionId;
@@ -100,8 +116,9 @@ function handleClear() {
   showConfirmClear.value = false;
 }
 
-/** Group items by date for section headers */
-function groupByDate(items: typeof filteredItems.value): Array<{ date: string; items: typeof items }> {
+/** Group items by date for section headers (computed to avoid re-creating arrays on every render) */
+const groupedItems = computed(() => {
+  const items = filteredItems.value;
   const groups: Array<{ date: string; items: typeof items }> = [];
   let lastDate = "";
   for (const item of items) {
@@ -113,7 +130,7 @@ function groupByDate(items: typeof filteredItems.value): Array<{ date: string; i
     groups[groups.length - 1].items.push(item);
   }
   return groups;
-}
+});
 </script>
 
 <template>
@@ -141,7 +158,7 @@ function groupByDate(items: typeof filteredItems.value): Array<{ date: string; i
           />
         </div>
         <!-- Clear button -->
-        <div v-if="filteredItems.length > 0" class="relative">
+        <div v-if="filteredItems.length > 0" class="relative" ref="confirmRef">
           <button
             @click="showConfirmClear = true"
             class="h-7 px-2.5 text-xs rounded-lg border border-border text-text-secondary hover:bg-danger/10 hover:text-danger hover:border-danger/30 transition-colors flex items-center gap-1"
@@ -220,7 +237,7 @@ function groupByDate(items: typeof filteredItems.value): Array<{ date: string; i
 
       <!-- Command list -->
       <div class="flex-1 overflow-y-auto space-y-3">
-        <div v-for="group in groupByDate(filteredItems)" :key="group.date">
+        <div v-for="group in groupedItems" :key="group.date">
           <!-- Date header -->
           <div class="flex items-center gap-2 mb-1.5">
             <span class="text-[11px] font-semibold text-text-muted uppercase tracking-wider">{{ group.date }}</span>
@@ -261,12 +278,14 @@ function groupByDate(items: typeof filteredItems.value): Array<{ date: string; i
                 <div class="flex items-start gap-1.5">
                   <div class="flex-1 min-w-0" :title="item.command">
                     <!-- Multi-command: stacked with left rail -->
-                    <div v-if="splitCommands(item.command).length > 1" class="flex flex-col gap-0.5 pl-2 border-l-2 border-redis/20">
-                      <div v-for="(sub, idx) in splitCommands(item.command)" :key="idx" class="flex items-baseline">
-                        <span class="text-xs font-mono text-redis font-semibold shrink-0">{{ cmdVerb(sub) }}</span>
-                        <span class="text-xs font-mono text-text-secondary truncate ml-1">{{ cmdArgs(sub) }}</span>
+                    <template v-if="item.command.includes(' + ')">
+                      <div class="flex flex-col gap-0.5 pl-2 border-l-2 border-redis/20">
+                        <div v-for="(sub, idx) in splitCommands(item.command)" :key="idx" class="flex items-baseline">
+                          <span class="text-xs font-mono text-redis font-semibold shrink-0">{{ cmdVerb(sub) }}</span>
+                          <span class="text-xs font-mono text-text-secondary truncate ml-1">{{ cmdArgs(sub) }}</span>
+                        </div>
                       </div>
-                    </div>
+                    </template>
                     <!-- Single command: inline -->
                     <code v-else class="text-xs text-text-primary font-mono truncate block">
                       <span class="text-redis font-semibold">{{ cmdVerb(item.command) }}</span>
