@@ -1,18 +1,26 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
-import { tauriApi, type PubSubMessage } from "@/services/tauriApi";
+import { useI18n } from "vue-i18n";
+import { tauriApi } from "@/services/tauriApi";
 import { useConnectionStore } from "@/stores/connectionStore";
+import { usePubsubStore } from "@/stores/pubsubStore";
 import { toast } from "@/utils/toast";
 import NumberedTextarea from "@/components/shared/NumberedTextarea.vue";
+import { Radio, Plus, Send, MessageSquare, RefreshCw, X } from "lucide-vue-next";
 
-const connectionStore = useConnectionStore();
-const activeConnection = computed(() => connectionStore.connections.find((c) => c.id === connectionStore.activeConnectionId));
+const { t } = useI18n();
+const connStore = useConnectionStore();
+const pubsubStore = usePubsubStore();
+const isConnected = computed(() => connStore.activeConnection?.status === "connected");
 
-// Channel related state
+// Subscriptions & received messages live in the store (keyed by connection id)
+// so they persist across tab switches — this page unmounts on navigation.
+const subscriptions = computed(() => pubsubStore.channelsOf(connStore.activeConnectionId));
+const messages = computed(() => pubsubStore.messagesOf(connStore.activeConnectionId));
+
+// Channel related state (available-channels list is ephemeral, re-loaded on demand)
 const channelInput = ref("");
 const channels = ref<string[]>([]);
-const subscriptions = ref<string[]>([]);
-const messages = ref<PubSubMessage[]>([]);
 
 // Publishing related state
 const publishChannel = ref("");
@@ -23,19 +31,19 @@ const loadingChannels = ref(false);
 const subscribing = ref(false);
 const publishing = ref(false);
 
-// Calculate whether currently connected
-const isConnected = computed(() => !!activeConnection.value);
+// Whether we are actively listening to at least one channel
+const isListening = computed(() => subscriptions.value.length > 0);
 
 // Load channel list
 const loadChannels = async (): Promise<void> => {
-  if (!activeConnection.value) return;
+  const conn = connStore.activeConnection;
+  if (!conn) return;
 
   try {
     loadingChannels.value = true;
-    const channelList = await tauriApi.pubsub.listChannels(activeConnection.value.id);
-    channels.value = channelList;
+    channels.value = await tauriApi.pubsub.listChannels(conn.id);
   } catch (error: any) {
-    toast.error(error.message || "获取频道列表失败");
+    toast.error(error.message || t("pubsub.errors.loadChannelsFailed"));
   } finally {
     loadingChannels.value = false;
   }
@@ -43,27 +51,22 @@ const loadChannels = async (): Promise<void> => {
 
 // Subscribe to a channel
 const handleSubscribe = async (): Promise<void> => {
-  if (!activeConnection.value || !channelInput.value.trim()) return;
+  const conn = connStore.activeConnection;
+  if (!conn || !channelInput.value.trim()) return;
 
   const channel = channelInput.value.trim();
   if (subscriptions.value.includes(channel)) {
-    toast.info("已订阅该频道");
+    toast.info(t("pubsub.alreadySubscribed"));
     return;
   }
 
   try {
     subscribing.value = true;
-    const result = await tauriApi.pubsub.subscribe(activeConnection.value.id, channel);
-
-    if (result.includes("ready")) {
-      subscriptions.value.push(channel);
-      toast.success(`成功订阅频道：${channel}`);
-
-      // Clear input field
-      channelInput.value = "";
-    }
+    await pubsubStore.subscribe(conn.id, channel);
+    toast.success(t("pubsub.subscribeSuccess", { channel }));
+    channelInput.value = "";
   } catch (error: any) {
-    toast.error(error.message || "订阅失败");
+    toast.error(error.message || t("pubsub.errors.subscribeFailed"));
   } finally {
     subscribing.value = false;
   }
@@ -71,19 +74,15 @@ const handleSubscribe = async (): Promise<void> => {
 
 // Unsubscribe from a channel
 const handleUnsubscribe = async (channel: string): Promise<void> => {
-  if (!activeConnection.value) return;
+  const conn = connStore.activeConnection;
+  if (!conn) return;
 
   try {
     subscribing.value = true;
-    const result = await tauriApi.pubsub.unsubscribe(activeConnection.value.id, channel);
-
-    if (result.includes("ready")) {
-      subscriptions.value = subscriptions.value.filter((c) => c !== channel);
-      messages.value = messages.value.filter((m) => m.channel !== channel);
-      toast.success(`已取消订阅：${channel}`);
-    }
+    await pubsubStore.unsubscribe(conn.id, channel);
+    toast.success(t("pubsub.unsubscribeSuccess", { channel }));
   } catch (error: any) {
-    toast.error(error.message || "取消订阅失败");
+    toast.error(error.message || t("pubsub.errors.unsubscribeFailed"));
   } finally {
     subscribing.value = false;
   }
@@ -91,19 +90,15 @@ const handleUnsubscribe = async (channel: string): Promise<void> => {
 
 // Unsubscribe from all channels
 const handleUnsubscribeAll = async (): Promise<void> => {
-  if (!activeConnection.value) return;
+  const conn = connStore.activeConnection;
+  if (!conn) return;
 
   try {
     subscribing.value = true;
-    const result = await tauriApi.pubsub.unsubscribe(activeConnection.value.id);
-
-    if (result.includes("ready")) {
-      subscriptions.value = [];
-      messages.value = [];
-      toast.success("已取消所有订阅");
-    }
+    await pubsubStore.unsubscribeAll(conn.id);
+    toast.success(t("pubsub.unsubscribeAllSuccess"));
   } catch (error: any) {
-    toast.error(error.message || "取消订阅失败");
+    toast.error(error.message || t("pubsub.errors.unsubscribeFailed"));
   } finally {
     subscribing.value = false;
   }
@@ -111,66 +106,46 @@ const handleUnsubscribeAll = async (): Promise<void> => {
 
 // Publish a message to a channel
 const handlePublish = async (): Promise<void> => {
-  if (!activeConnection.value || !publishChannel.value.trim() || !publishMessage.value.trim()) return;
+  const conn = connStore.activeConnection;
+  if (!conn || !publishChannel.value.trim() || !publishMessage.value.trim()) return;
 
   try {
     publishing.value = true;
     const numSubscribers = await tauriApi.pubsub.publish(
-      activeConnection.value.id,
+      conn.id,
       publishChannel.value.trim(),
       publishMessage.value.trim()
     );
 
-    toast.success(`消息已发布到频道 "${publishChannel.value}"，${numSubscribers} 个订阅者收到`);
-
-    // Clear message content
+    toast.success(t("pubsub.publishSuccess", { channel: publishChannel.value.trim(), count: numSubscribers }));
     publishMessage.value = "";
   } catch (error: any) {
-    toast.error(error.message || "发布失败");
+    toast.error(error.message || t("pubsub.errors.publishFailed"));
   } finally {
     publishing.value = false;
   }
 };
 
-// Get subscriber count for a channel
-const getNumSubs = async (channel: string): Promise<number> => {
-  if (!activeConnection.value) return 0;
-
-  try {
-    return await tauriApi.pubsub.numSubs(activeConnection.value.id, channel);
-  } catch {
-    return 0;
-  }
-};
-
-// Wrapper function for subscriber count (for templates)
-const subsCount = ref<Record<string, number>>({});
-
-// Format timestamp
+// Format timestamp (aligned with other pages: manual HH:mm:ss)
 const formatTime = (timestamp: number): string => {
-  return new Date(timestamp).toLocaleTimeString("zh-CN", {
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  const d = new Date(timestamp);
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 };
 
-// Clear all messages
+// Clear all received messages for the active connection
 const clearMessages = (): void => {
-  messages.value = [];
-  toast.info("已清空消息");
+  const conn = connStore.activeConnection;
+  if (conn) pubsubStore.clearMessages(conn.id);
+  toast.info(t("pubsub.messagesCleared"));
 };
 
 onMounted(async () => {
+  // Register the app-wide real-time listener (idempotent) so messages keep
+  // arriving into the store even when this page is not mounted.
+  await pubsubStore.init();
   if (isConnected.value) {
     await loadChannels();
-
-    // Load subscriber counts
-    for (const channel of subscriptions.value) {
-      const count = await getNumSubs(channel);
-      subsCount.value[channel] = count;
-    }
   }
 });
 </script>
@@ -178,168 +153,202 @@ onMounted(async () => {
 <template>
   <div class="h-full flex flex-col p-6 overflow-auto min-w-[600px]">
     <!-- Header -->
-    <div class="flex items-center justify-between mb-4 shrink-0 flex-wrap">
-      <h2 class="text-xl font-semibold text-text-primary">发布/订阅</h2>
+    <div class="flex items-start justify-between gap-3 mb-4 shrink-0 flex-wrap">
+      <div>
+        <h2 class="text-xl font-semibold text-text-primary flex items-center gap-2">
+          <Radio :size="20" class="text-redis" />
+          {{ t("pubsub.title") }}
+        </h2>
+        <p class="text-sm text-text-muted mt-1">{{ t("pubsub.description") }}</p>
+      </div>
     </div>
 
     <div class="flex-1 flex min-h-0 gap-4">
       <!-- Left Panel: Subscription Management & Channel List -->
-      <div class="w-1/2 flex flex-col min-h-0 rounded-lg border border-border-light bg-bg-secondary">
+      <div class="w-1/2 flex flex-col min-h-0">
         <!-- Subscription Section -->
-        <div class="p-4 border-b border-border">
-          <h3 class="font-medium mb-2 text-text-primary">订阅频道</h3>
-          <div class="flex gap-2 mb-2">
-            <input
-              v-model="channelInput"
-              type="text"
-              placeholder="输入频道名称..."
-              @keyup.enter="handleSubscribe"
-              class="flex-1 px-3 py-2 border border-[color:var(--border-color)] rounded bg-[color:var(--bg-secondary)] text-[color:var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary-color)]"
-              :disabled="subscribing"
-            />
-            <button
-              @click="handleSubscribe"
-              class="px-4 py-2 bg-[color:var(--primary-color)] text-white rounded hover:bg-[color:var(--primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
-              :disabled="subscribing || !channelInput.trim()"
+        <div class="card p-4 mb-4">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-semibold text-text-primary">{{ t("pubsub.subscribeChannel") }}</h3>
+            <span
+              v-if="isListening"
+              class="inline-flex items-center gap-1.5 text-xs font-medium text-success"
             >
-              {{ subscribing ? '订阅中...' : '订阅' }}
-            </button>
-          </div>
-
-          <div class="flex items-center justify-between mb-2">
-            <span class="text-sm text-[color:var(--text-secondary)]">
-              已订阅：{{ subscriptions.length }} 个频道
+              <span class="relative flex h-2 w-2">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
+              </span>
+              {{ t("pubsub.listening") }}
             </span>
-            <button
-              v-if="subscriptions.length > 0"
-              @click="handleUnsubscribeAll"
-              class="text-sm text-[color:var(--text-secondary)] hover:text-[color:var(--danger-color)]"
-              :disabled="subscribing"
-            >
-              取消全部订阅
-            </button>
           </div>
-
-          <!-- 订阅列表 -->
-          <div v-if="subscriptions.length > 0" class="max-h-32 overflow-y-auto space-y-1">
-            <div
-              v-for="channel in subscriptions"
-              :key="channel"
-              class="flex items-center justify-between p-2 bg-[color:var(--bg-secondary)] rounded border border-[color:var(--border-color)]"
-            >
-              <div class="flex items-center gap-2">
-                <span class="text-sm font-medium">{{ channel }}</span>
-                <span class="text-xs text-[color:var(--text-secondary)]">
-                  {{ subsCount[channel] || 0 }} 订阅者
-                </span>
-              </div>
+          <div class="space-y-3">
+            <div class="flex gap-2">
+              <input
+                v-model="channelInput"
+                type="text"
+                :placeholder="t('pubsub.inputChannelPlaceholder')"
+                @keyup.enter="handleSubscribe"
+                class="flex-1 px-3 py-2 text-sm border border-border rounded-lg bg-bg-primary text-text-primary focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                :disabled="!isConnected || subscribing"
+              />
               <button
-                @click="handleUnsubscribe(channel)"
-                class="text-sm text-[color:var(--text-secondary)] hover:text-[color:var(--danger-color)]"
-                :disabled="subscribing"
+                @click="handleSubscribe"
+                class="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-redis rounded-lg hover:bg-redis-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                :disabled="!isConnected || subscribing || !channelInput.trim()"
+                :title="!isConnected ? t('status.noConnection') : ''"
               >
-                ✕
+                <Plus :size="14" />
+                {{ subscribing ? t("pubsub.subscribing") : t("pubsub.subscribe") }}
               </button>
             </div>
-          </div>
-          <div v-else class="text-sm text-[color:var(--text-secondary)] italic">
-            暂无订阅
+
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-text-secondary">
+                {{ t("pubsub.subscribedCount", { count: subscriptions.length }) }}
+              </span>
+              <button
+                v-if="subscriptions.length > 0"
+                @click="handleUnsubscribeAll"
+                class="text-xs text-text-secondary hover:text-danger transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                :disabled="subscribing"
+              >
+                {{ t("pubsub.unsubscribeAll") }}
+              </button>
+            </div>
+
+            <!-- Subscription List -->
+            <div v-if="subscriptions.length > 0" class="max-h-32 overflow-y-auto space-y-1.5">
+              <div
+                v-for="channel in subscriptions"
+                :key="channel"
+                class="flex items-center justify-between px-3 py-2 bg-bg-primary rounded-lg border border-border-light text-sm"
+              >
+                <span class="text-text-primary font-mono truncate" :title="channel">{{ channel }}</span>
+                <button
+                  @click="handleUnsubscribe(channel)"
+                  class="shrink-0 w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  :disabled="subscribing"
+                >
+                  <X :size="13" />
+                </button>
+              </div>
+            </div>
+            <p v-else class="text-xs text-text-muted italic">
+              {{ t("pubsub.noSubscriptions") }}
+            </p>
           </div>
         </div>
 
         <!-- Channels List -->
-        <div class="flex-1 p-4 overflow-y-auto">
-          <h3 class="font-medium mb-2 text-text-primary">可用频道</h3>
-          <button
-            @click="loadChannels"
-            class="mb-2 px-3 py-1 text-sm border border-[color:var(--border-color)] rounded hover:bg-[color:var(--bg-secondary)]"
-            :disabled="loadingChannels"
-          >
-            {{ loadingChannels ? '加载中...' : '刷新列表' }}
-          </button>
-          
-          <div v-if="channels.length > 0" class="space-y-1 max-h-48 overflow-y-auto">
+        <div class="card p-4 flex-1 overflow-hidden flex flex-col">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-semibold text-text-primary">{{ t("pubsub.availableChannels") }}</h3>
+            <button
+              @click="loadChannels"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary bg-bg-primary border border-border rounded-lg hover:bg-bg-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              :disabled="!isConnected || loadingChannels"
+              :title="!isConnected ? t('status.noConnection') : ''"
+            >
+              <RefreshCw :size="13" :class="loadingChannels ? 'animate-spin' : ''" />
+              {{ loadingChannels ? t("pubsub.loading") : t("pubsub.refreshList") }}
+            </button>
+          </div>
+
+          <div v-if="channels.length > 0" class="flex-1 overflow-y-auto space-y-1.5">
             <div
               v-for="channel in channels"
               :key="channel"
-              class="flex items-center justify-between p-2 bg-[color:var(--bg-secondary)] rounded border border-[color:var(--border-color)]"
+              class="flex items-center justify-between px-3 py-2 bg-bg-primary rounded-lg border border-border-light text-sm"
             >
-              <span class="text-sm">{{ channel }}</span>
+              <span class="text-text-primary font-mono truncate" :title="channel">{{ channel }}</span>
               <button
-                @click="() => { publishChannel = channel; loadChannels(); }"
-                class="text-sm text-[color:var(--primary-color)] hover:underline"
+                @click="publishChannel = channel"
+                class="shrink-0 text-xs text-redis hover:text-redis-dark transition-colors"
               >
-                发布消息
+                {{ t("pubsub.publishMessage") }}
               </button>
             </div>
           </div>
-          <div v-else class="text-sm text-[color:var(--text-secondary)] italic">
-            暂无可用频道
+          <div v-else class="flex-1 flex flex-col items-center justify-center text-text-muted">
+            <Radio :size="32" class="mb-2 opacity-30" />
+            <p class="text-xs italic">{{ t("pubsub.noAvailableChannels") }}</p>
           </div>
         </div>
       </div>
 
       <!-- Right Panel: Message Reception & Publishing -->
-      <div class="w-1/2 flex flex-col rounded-lg border border-border-light bg-bg-secondary">
+      <div class="w-1/2 flex flex-col min-h-0">
         <!-- Publish Message Section -->
-        <div class="p-4 border-b border-border">
-          <h3 class="font-medium mb-2 text-text-primary">发布消息</h3>
-          <div class="space-y-2">
+        <div class="card p-4 mb-4">
+          <h3 class="text-sm font-semibold text-text-primary mb-3">{{ t("pubsub.publishMessage") }}</h3>
+          <div class="space-y-3">
             <div class="flex gap-2">
               <input
                 v-model="publishChannel"
                 type="text"
-                placeholder="频道名称"
-                class="flex-1 px-3 py-2 border border-[color:var(--border-color)] rounded bg-[color:var(--bg-secondary)] text-[color:var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary-color)]"
+                :placeholder="t('pubsub.channelNamePlaceholder')"
+                class="flex-1 px-3 py-2 text-sm border border-border rounded-lg bg-bg-primary text-text-primary focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                :disabled="!isConnected"
               />
               <button
                 @click="handlePublish"
-                class="px-4 py-2 bg-[color:var(--primary-color)] text-white rounded hover:bg-[color:var(--primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
-                :disabled="publishing || !publishChannel.trim() || !publishMessage.trim()"
+                class="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-redis rounded-lg hover:bg-redis-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                :disabled="!isConnected || publishing || !publishChannel.trim() || !publishMessage.trim()"
+                :title="!isConnected ? t('status.noConnection') : ''"
               >
-                {{ publishing ? '发送中...' : '发送' }}
+                <Send :size="14" />
+                {{ publishing ? t("pubsub.publishing") : t("pubsub.publish") }}
               </button>
             </div>
             <NumberedTextarea
               v-model="publishMessage"
-              placeholder="输入消息内容..."
+              :placeholder="t('pubsub.messageContentPlaceholder')"
               class="w-full"
             />
           </div>
         </div>
 
         <!-- Message Display Section -->
-        <div class="flex-1 p-4 overflow-hidden flex flex-col">
-          <div class="flex items-center justify-between mb-2">
-            <h3 class="font-medium text-text-primary">消息列表</h3>
+        <div class="card p-4 flex-1 overflow-hidden flex flex-col">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-semibold text-text-primary flex items-center gap-2">
+              {{ t("pubsub.messageList") }}
+              <span
+                v-if="messages.length > 0"
+                class="badge inline-flex items-center px-1.5 py-0.5 text-[11px] font-mono rounded-md bg-redis/10 text-redis"
+              >
+                {{ messages.length }}
+              </span>
+            </h3>
             <button
               v-if="messages.length > 0"
               @click="clearMessages"
-              class="text-sm text-[color:var(--text-secondary)] hover:text-[color:var(--danger-color)]"
+              class="text-xs text-text-secondary hover:text-danger transition-colors"
             >
-              清空消息
+              {{ t("pubsub.clearMessages") }}
             </button>
           </div>
-          
-          <div class="flex-1 overflow-y-auto space-y-2 bg-[color:var(--bg-secondary)] rounded border border-[color:var(--border-color)] p-3">
-            <div v-if="messages.length === 0" class="text-center text-[color:var(--text-secondary)] italic py-8">
-              暂无消息
+
+          <div class="flex-1 overflow-y-auto space-y-2 bg-bg-primary rounded-lg border border-border-light p-3">
+            <div v-if="messages.length === 0" class="flex flex-col items-center justify-center py-12 text-text-muted">
+              <MessageSquare :size="32" class="mb-2 opacity-30" />
+              <p class="text-sm">{{ t("pubsub.noMessages") }}</p>
             </div>
 
             <div
               v-for="(msg, index) in messages"
               :key="index"
-              class="p-3 bg-[color:var(--bg-primary)] rounded border border-[color:var(--border-color)]"
+              class="p-3 bg-bg-secondary rounded-lg border border-border-light text-sm"
             >
               <div class="flex items-center justify-between mb-1">
-                <span class="text-sm font-medium text-[color:var(--primary-color)]">
+                <span class="text-xs font-mono font-semibold text-redis truncate" :title="msg.channel">
                   {{ msg.channel }}
                 </span>
-                <span class="text-xs text-[color:var(--text-secondary)]">
+                <span class="text-[11px] font-mono text-text-muted shrink-0 ml-2">
                   {{ formatTime(msg.timestamp) }}
                 </span>
               </div>
-              <div class="text-sm break-all whitespace-pre-wrap">
+              <div class="text-xs font-mono text-text-primary break-all whitespace-pre-wrap">
                 {{ msg.message }}
               </div>
             </div>
@@ -349,10 +358,3 @@ onMounted(async () => {
     </div>
   </div>
 </template>
-
-<style scoped>
-/* 使用 CSS 变量支持主题 */
-:deep(.numbered-textarea) {
-  width: 100%;
-}
-</style>

@@ -7,6 +7,7 @@ import { i18n } from "@/i18n";
 import { useCascadeStore } from "@/stores/cascadeStore";
 import { useDetailStore } from "@/stores/detailStore";
 import { useHistoryStore } from "@/stores/historyStore";
+import { usePubsubStore } from "@/stores/pubsubStore";
 
 export const useConnectionStore = defineStore("connection", () => {
   const connections = ref<RedisConnection[]>([]);
@@ -155,6 +156,8 @@ export const useConnectionStore = defineStore("connection", () => {
     // Clean up orphaned history records for the removed connection
     const historyStore = useHistoryStore();
     historyStore.clearHistory(id);
+    // Drop any Pub/Sub state (backend tears down its listener on delete)
+    usePubsubStore().clearConnection(id);
   }
 
   function setStatus(id: string, status: ConnectionStatus) {
@@ -183,6 +186,8 @@ export const useConnectionStore = defineStore("connection", () => {
       cascade.expandedPaths = new Set<string>();
       cascade.totalKeyCount = 0;
       detail.clearDetail();
+      // Backend listener dies when the connection drops; clear local state.
+      usePubsubStore().clearConnection(id);
     }
   }
 
@@ -229,6 +234,8 @@ export const useConnectionStore = defineStore("connection", () => {
       console.error("Disconnect failed:", e);
     }
     setStatus(id, "disconnected");
+    // Backend tears down the pubsub listener on disconnect; mirror locally.
+    usePubsubStore().clearConnection(id);
     if (activeConnectionId.value === id) {
       activeConnectionId.value = null;
 
@@ -319,6 +326,9 @@ export const useConnectionStore = defineStore("connection", () => {
     try {
       await tauriApi.connection.switchDb(id, db);
       activeDbMap.value = { ...activeDbMap.value, [id]: db };
+      // Subscriptions were bound to the previous DB and torn down by the
+      // backend on switch; clear local Pub/Sub state to match.
+      usePubsubStore().clearConnection(id);
     } catch (e) {
       console.error("Switch DB failed:", e);
       throw e;

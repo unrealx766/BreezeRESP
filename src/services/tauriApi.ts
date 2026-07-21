@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { SavedPipeline } from "@/types";
 
 // ---- Connection guard (registered at app startup to avoid circular deps) ----
@@ -109,6 +110,14 @@ export interface RustServerMetrics {
 }
 
 export interface PubSubMessage {
+  channel: string;
+  message: string;
+  timestamp: number;
+}
+
+/** Real-time message pushed from the backend `pubsub-message` event. */
+export interface PubSubEvent {
+  connectionId: string;
   channel: string;
   message: string;
   timestamp: number;
@@ -248,15 +257,19 @@ export const tauriApi = {
       withConn(connectionId, () => invoke<number>("pubsub_publish", { connectionId, channel, message })),
 
     subscribe: (connectionId: string, channel: string) =>
-      withConn(connectionId, () => invoke<string>("pubsub_subscribe", { connectionId, channel })),
+      withConn(connectionId, () => invoke<string[]>("pubsub_subscribe", { connectionId, channel })),
 
     unsubscribe: (connectionId: string, channel?: string) =>
-      withConn(connectionId, () => invoke<string>("pubsub_unsubscribe", { connectionId, channel: channel ?? null })),
+      withConn(connectionId, () => invoke<string[]>("pubsub_unsubscribe", { connectionId, channel: channel ?? null })),
 
     listChannels: (connectionId: string, pattern?: string) =>
       withConn(connectionId, () => invoke<string[]>("pubsub_list_channels", { connectionId, pattern: pattern ?? null })),
 
     numSubs: (connectionId: string, channel: string) =>
       withConn(connectionId, () => invoke<number>("pubsub_num_subs", { connectionId, channel })),
+
+    /** Listen for real-time messages. Returns an unlisten function. */
+    onMessage: (handler: (msg: PubSubEvent) => void): Promise<UnlistenFn> =>
+      listen<PubSubEvent>("pubsub-message", (event) => handler(event.payload)),
   },
 };

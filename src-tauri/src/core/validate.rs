@@ -130,6 +130,17 @@ pub fn validate_pattern(pattern: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Validate a Pub/Sub channel name.
+///
+/// Note: subscription commands are dispatched over a dedicated pubsub connection
+/// (not the shared pool), so the `SUBSCRIBE` blocklist in `validate_command`
+/// does not apply here. We only enforce the same identifier hygiene as keys.
+pub fn validate_channel(channel: &str) -> Result<(), String> {
+    validate_non_empty(channel, "channel", MAX_IDENTIFIER_LEN)?;
+    reject_null_bytes(channel, "channel")?;
+    Ok(())
+}
+
 /// Validate a raw Redis command string (sandbox / pipeline).
 pub fn validate_command(cmd: &str) -> Result<(), String> {
     validate_non_empty(cmd, "command", MAX_COMMAND_LEN)?;

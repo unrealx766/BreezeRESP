@@ -131,6 +131,10 @@ pub async fn disconnect(state: State<'_, AppState>, id: String) -> Result<(), St
     validate_connection_id(&id)?;
     let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
     pm.remove(&id)?;
+    drop(pm);
+
+    // Tear down any active pubsub listener for this connection
+    state.pubsub_manager.clear(&id);
 
     // Clear any pending sandbox state to prevent stale data leaking across connections
     let ss = state.shadow_store.lock().map_err(|e| e.to_string())?;
@@ -294,6 +298,9 @@ pub async fn switch_db(
         let _ = pm.remove(&id);
     }
 
+    // Active subscriptions were bound to the previous DB; tear them down.
+    state.pubsub_manager.clear(&id);
+
     // Create new pool with the new DB
     let pw = if password.is_empty() { None } else { Some(password.as_str()) };
     let pool = {
@@ -328,6 +335,9 @@ pub async fn delete_connection(state: State<'_, AppState>, id: String) -> Result
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
         let _ = pm.remove(&id);
     }
+
+    // Tear down any active pubsub listener for this connection
+    state.pubsub_manager.clear(&id);
 
     // Clear any pending sandbox state
     {
