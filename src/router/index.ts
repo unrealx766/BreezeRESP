@@ -4,6 +4,7 @@ import BrowserPage from "@/views/BrowserPage.vue";
 import PipelinePage from "@/views/PipelinePage.vue";
 import SandboxPage from "@/views/SandboxPage.vue";
 import HistoryPage from "@/views/HistoryPage.vue";
+import PubSubPage from "@/views/PubSubPage.vue";
 
 const routes: RouteRecordRaw[] = [
   {
@@ -30,6 +31,11 @@ const routes: RouteRecordRaw[] = [
     path: "/history",
     name: "history",
     component: HistoryPage,
+  },
+  {
+    path: "/pubsub",
+    name: "pubsub",
+    component: PubSubPage,
   },
 ];
 

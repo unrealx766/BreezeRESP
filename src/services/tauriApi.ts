@@ -108,6 +108,12 @@ export interface RustServerMetrics {
   instantaneousOpsPerSec: number;
 }
 
+export interface PubSubMessage {
+  channel: string;
+  message: string;
+  timestamp: number;
+}
+
 // ---- Tauri invoke wrappers ----
 
 export const tauriApi = {
@@ -235,5 +241,22 @@ export const tauriApi = {
   metrics: {
     get: (connectionId: string) =>
       withConn(connectionId, () => invoke<RustServerMetrics>("get_metrics", { connectionId })),
+  },
+
+  pubsub: {
+    publish: (connectionId: string, channel: string, message: string) =>
+      withConn(connectionId, () => invoke<number>("pubsub_publish", { connectionId, channel, message })),
+
+    subscribe: (connectionId: string, channel: string) =>
+      withConn(connectionId, () => invoke<string>("pubsub_subscribe", { connectionId, channel })),
+
+    unsubscribe: (connectionId: string, channel?: string) =>
+      withConn(connectionId, () => invoke<string>("pubsub_unsubscribe", { connectionId, channel: channel ?? null })),
+
+    listChannels: (connectionId: string, pattern?: string) =>
+      withConn(connectionId, () => invoke<string[]>("pubsub_list_channels", { connectionId, pattern: pattern ?? null })),
+
+    numSubs: (connectionId: string, channel: string) =>
+      withConn(connectionId, () => invoke<number>("pubsub_num_subs", { connectionId, channel })),
   },
 };

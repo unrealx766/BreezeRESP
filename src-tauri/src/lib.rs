@@ -96,6 +96,12 @@ pub fn run() {
             commands::sandbox::sandbox_rollback,
             // Metrics commands
             commands::metrics::get_metrics,
+            // PubSub commands
+            commands::pubsub::pubsub_publish,
+            commands::pubsub::pubsub_subscribe,
+            commands::pubsub::pubsub_unsubscribe,
+            commands::pubsub::pubsub_list_channels,
+            commands::pubsub::pubsub_num_subs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
