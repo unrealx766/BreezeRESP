@@ -6,9 +6,21 @@ import type { UnlistenFn } from "@tauri-apps/api/event";
 /** Maximum number of received messages retained per connection. */
 const MAX_MESSAGES = 500;
 
+/** Maximum number of published-message history entries retained per connection. */
+const MAX_PUBLISHES = 200;
+
 export interface PubSubMessageItem {
   channel: string;
   message: string;
+  timestamp: number;
+}
+
+/** A record of one message published by the user, with its delivery count. */
+export interface PubSubPublishItem {
+  channel: string;
+  message: string;
+  /** Number of subscribers that received the message (PUBLISH return value). */
+  count: number;
   timestamp: number;
 }
 
@@ -25,6 +37,8 @@ export const usePubsubStore = defineStore("pubsub", () => {
   const subscriptionsMap = ref<Record<string, string[]>>({});
   /** connectionId → received messages (newest first) */
   const messagesMap = ref<Record<string, PubSubMessageItem[]>>({});
+  /** connectionId → published-message history (newest first) */
+  const publishesMap = ref<Record<string, PubSubPublishItem[]>>({});
 
   /** Handle to the global event listener; set once by `init()`. */
   let unlisten: UnlistenFn | null = null;
@@ -52,6 +66,24 @@ export const usePubsubStore = defineStore("pubsub", () => {
   /** Read the received messages for a connection. */
   function messagesOf(connectionId: string | null): PubSubMessageItem[] {
     return connectionId ? messagesMap.value[connectionId] ?? [] : [];
+  }
+
+  /** Read the published-message history for a connection. */
+  function publishesOf(connectionId: string | null): PubSubPublishItem[] {
+    return connectionId ? publishesMap.value[connectionId] ?? [] : [];
+  }
+
+  /** Record a message the user just published (newest first). */
+  function addPublish(connectionId: string, item: PubSubPublishItem): void {
+    const list = publishesMap.value[connectionId] ? [...publishesMap.value[connectionId]] : [];
+    list.unshift(item);
+    if (list.length > MAX_PUBLISHES) list.length = MAX_PUBLISHES;
+    publishesMap.value = { ...publishesMap.value, [connectionId]: list };
+  }
+
+  /** Clear the published-message history for a connection. */
+  function clearPublishes(connectionId: string): void {
+    publishesMap.value = { ...publishesMap.value, [connectionId]: [] };
   }
 
   async function subscribe(connectionId: string, channel: string): Promise<string[]> {
@@ -96,14 +128,23 @@ export const usePubsubStore = defineStore("pubsub", () => {
       delete next[connectionId];
       messagesMap.value = next;
     }
+    if (connectionId in publishesMap.value) {
+      const next = { ...publishesMap.value };
+      delete next[connectionId];
+      publishesMap.value = next;
+    }
   }
 
   return {
     subscriptionsMap,
     messagesMap,
+    publishesMap,
     init,
     channelsOf,
     messagesOf,
+    publishesOf,
+    addPublish,
+    clearPublishes,
     subscribe,
     unsubscribe,
     unsubscribeAll,

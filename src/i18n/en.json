@@ -279,6 +279,10 @@
     "messagesCleared": "Messages cleared",
     "newMessages": "{count} new messages",
     "scrollToBottom": "Scroll to bottom",
+    "publishHistory": "Publish History",
+    "clearPublishHistory": "Clear History",
+    "deliveredCount": "{count} received",
+    "noPublishHistory": "No published messages",
     "errors": {
       "loadChannelsFailed": "Failed to load channel list",
       "subscribeFailed": "Subscribe failed",

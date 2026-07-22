@@ -7,7 +7,7 @@ import { usePubsubStore } from "@/stores/pubsubStore";
 import type { PubSubMessageItem } from "@/stores/pubsubStore";
 import { toast } from "@/utils/toast";
 import NumberedTextarea from "@/components/shared/NumberedTextarea.vue";
-import { Radio, Plus, Send, MessageSquare, RefreshCw, X, ArrowDown } from "lucide-vue-next";
+import { Radio, Plus, Send, MessageSquare, RefreshCw, X, ArrowDown, History } from "lucide-vue-next";
 
 const { t } = useI18n();
 const connStore = useConnectionStore();
@@ -21,6 +21,9 @@ const messages = computed(() => pubsubStore.messagesOf(connStore.activeConnectio
 
 // Messages are stored newest-first; display oldest→newest (newest at bottom).
 const displayMessages = computed(() => [...messages.value].reverse());
+
+// Publish history (newest first) lives in the store, keyed by connection id.
+const publishes = computed(() => pubsubStore.publishesOf(connStore.activeConnectionId));
 
 // Scroll tracking for the message list.
 const messagesContainerRef = ref<HTMLElement | null>(null);
@@ -120,21 +123,35 @@ const handlePublish = async (): Promise<void> => {
   const conn = connStore.activeConnection;
   if (!conn || !publishChannel.value.trim() || !publishMessage.value.trim()) return;
 
+  const channel = publishChannel.value.trim();
+  const message = publishMessage.value.trim();
+
   try {
     publishing.value = true;
-    const numSubscribers = await tauriApi.pubsub.publish(
-      conn.id,
-      publishChannel.value.trim(),
-      publishMessage.value.trim()
-    );
+    const numSubscribers = await tauriApi.pubsub.publish(conn.id, channel, message);
 
-    toast.success(t("pubsub.publishSuccess", { channel: publishChannel.value.trim(), count: numSubscribers }));
+    // Record the publish (with delivery count) into the per-connection history.
+    pubsubStore.addPublish(conn.id, { channel, message, count: numSubscribers, timestamp: Date.now() });
+
+    toast.success(t("pubsub.publishSuccess", { channel, count: numSubscribers }));
     publishMessage.value = "";
   } catch (error: any) {
     toast.error(error.message || t("pubsub.errors.publishFailed"));
   } finally {
     publishing.value = false;
   }
+};
+
+// Clear the publish history for the active connection
+const clearPublishHistory = (): void => {
+  const conn = connStore.activeConnection;
+  if (conn) pubsubStore.clearPublishes(conn.id);
+};
+
+// Re-fill the publish form from a history entry
+const reusePublish = (item: { channel: string; message: string }): void => {
+  publishChannel.value = item.channel;
+  publishMessage.value = item.message;
 };
 
 // Format timestamp (aligned with other pages: manual HH:mm:ss)
@@ -436,6 +453,58 @@ onMounted(async () => {
               :rows="2"
               class="w-full"
             />
+
+            <!-- Publish History -->
+            <div class="pt-2 border-t border-border-light">
+              <div class="flex items-center justify-between mb-2">
+                <h4 class="text-xs font-semibold text-text-secondary flex items-center gap-1.5">
+                  <History :size="13" />
+                  {{ t("pubsub.publishHistory") }}
+                  <span
+                    v-if="publishes.length > 0"
+                    class="badge inline-flex items-center px-1.5 py-0.5 text-[11px] font-mono rounded-md bg-redis/10 text-redis"
+                  >
+                    {{ publishes.length }}
+                  </span>
+                </h4>
+                <button
+                  v-if="publishes.length > 0"
+                  @click="clearPublishHistory"
+                  class="text-xs text-text-secondary hover:text-danger transition-colors"
+                >
+                  {{ t("pubsub.clearPublishHistory") }}
+                </button>
+              </div>
+
+              <div v-if="publishes.length > 0" class="max-h-32 overflow-y-auto space-y-1.5">
+                <button
+                  v-for="(item, index) in publishes"
+                  :key="index"
+                  @click="reusePublish(item)"
+                  class="w-full text-left px-3 py-2 bg-bg-primary rounded-lg border border-border-light hover:border-redis/40 hover:bg-bg-hover transition-colors"
+                  :title="t('pubsub.publish')"
+                >
+                  <div class="flex items-center justify-between gap-2 mb-1">
+                    <span class="text-xs font-mono font-semibold text-redis truncate" :title="item.channel">
+                      {{ item.channel }}
+                    </span>
+                    <span class="flex items-center gap-2 shrink-0">
+                      <span
+                        class="badge inline-flex items-center px-1.5 py-0.5 text-[11px] font-mono rounded-md"
+                        :class="item.count > 0 ? 'bg-success/10 text-success' : 'bg-bg-secondary text-text-muted'"
+                      >
+                        {{ t("pubsub.deliveredCount", { count: item.count }) }}
+                      </span>
+                      <span class="text-[11px] font-mono text-text-muted">{{ formatTime(item.timestamp) }}</span>
+                    </span>
+                  </div>
+                  <div class="text-xs font-mono text-text-secondary truncate" :title="item.message">
+                    {{ item.message }}
+                  </div>
+                </button>
+              </div>
+              <p v-else class="text-xs text-text-muted italic">{{ t("pubsub.noPublishHistory") }}</p>
+            </div>
           </div>
         </div>
       </div>

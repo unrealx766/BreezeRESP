@@ -279,6 +279,10 @@
     "messagesCleared": "消息已清空",
     "newMessages": "{count} 条新消息",
     "scrollToBottom": "回到底部",
+    "publishHistory": "发布历史",
+    "clearPublishHistory": "清空历史",
+    "deliveredCount": "{count} 个接收",
+    "noPublishHistory": "暂无发布记录",
     "errors": {
       "loadChannelsFailed": "加载频道列表失败",
       "subscribeFailed": "订阅失败",
