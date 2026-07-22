@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
 import { tauriApi } from "@/services/tauriApi";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { usePubsubStore } from "@/stores/pubsubStore";
+import type { PubSubMessageItem } from "@/stores/pubsubStore";
 import { toast } from "@/utils/toast";
 import NumberedTextarea from "@/components/shared/NumberedTextarea.vue";
-import { Radio, Plus, Send, MessageSquare, RefreshCw, X } from "lucide-vue-next";
+import { Radio, Plus, Send, MessageSquare, RefreshCw, X, ArrowDown } from "lucide-vue-next";
 
 const { t } = useI18n();
 const connStore = useConnectionStore();
@@ -17,6 +18,16 @@ const isConnected = computed(() => connStore.activeConnection?.status === "conne
 // so they persist across tab switches — this page unmounts on navigation.
 const subscriptions = computed(() => pubsubStore.channelsOf(connStore.activeConnectionId));
 const messages = computed(() => pubsubStore.messagesOf(connStore.activeConnectionId));
+
+// Messages are stored newest-first; display oldest→newest (newest at bottom).
+const displayMessages = computed(() => [...messages.value].reverse());
+
+// Scroll tracking for the message list.
+const messagesContainerRef = ref<HTMLElement | null>(null);
+// Whether the list is currently scrolled to the bottom (auto-follow mode).
+const isAtBottom = ref(true);
+// Count of messages received while the user is scrolled away from the bottom.
+const newMessageCount = ref(0);
 
 // Channel related state (available-channels list is ephemeral, re-loaded on demand)
 const channelInput = ref("");
@@ -140,6 +151,61 @@ const clearMessages = (): void => {
   toast.info(t("pubsub.messagesCleared"));
 };
 
+// Distance (px) from the bottom within which we consider the list "at bottom".
+const BOTTOM_THRESHOLD = 40;
+
+// Recompute whether the list is scrolled to the bottom; reset the new-message
+// badge once the user reaches the bottom again.
+const updateAtBottom = (): void => {
+  const el = messagesContainerRef.value;
+  if (!el) return;
+  isAtBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight <= BOTTOM_THRESHOLD;
+  if (isAtBottom.value) newMessageCount.value = 0;
+};
+
+// Jump to the newest message at the bottom.
+const scrollToBottom = (): void => {
+  const el = messagesContainerRef.value;
+  if (!el) return;
+  el.scrollTop = el.scrollHeight;
+  isAtBottom.value = true;
+  newMessageCount.value = 0;
+};
+
+// Track the previous newest message + connection so we can tell how many new
+// messages arrived and whether the connection was switched.
+let prevConnId = connStore.activeConnectionId;
+let prevTop: PubSubMessageItem | undefined = messages.value[0];
+
+watch(messages, (list) => {
+  const currConn = connStore.activeConnectionId;
+  // Connection switched: reset state and stick to the bottom of the new list.
+  if (currConn !== prevConnId) {
+    prevConnId = currConn;
+    prevTop = list[0];
+    newMessageCount.value = 0;
+    nextTick(scrollToBottom);
+    return;
+  }
+
+  const newTop = list[0];
+  if (newTop === prevTop) return;
+
+  if (isAtBottom.value) {
+    // Auto-follow: keep the newest message in view.
+    nextTick(scrollToBottom);
+  } else {
+    // Count how many new messages appeared since the last known newest one.
+    let added = 0;
+    for (const m of list) {
+      if (m === prevTop) break;
+      added++;
+    }
+    newMessageCount.value += added > 0 ? added : 1;
+  }
+  prevTop = newTop;
+});
+
 onMounted(async () => {
   // Register the app-wide real-time listener (idempotent) so messages keep
   // arriving into the store even when this page is not mounted.
@@ -147,6 +213,7 @@ onMounted(async () => {
   if (isConnected.value) {
     await loadChannels();
   }
+  nextTick(scrollToBottom);
 });
 </script>
 
@@ -165,7 +232,7 @@ onMounted(async () => {
 
     <div class="flex-1 flex min-h-0 gap-4">
       <!-- Left Panel: Subscription Management & Channel List -->
-      <div class="w-1/2 flex flex-col min-h-0">
+      <div class="w-2/5 flex flex-col min-h-0">
         <!-- Subscription Section -->
         <div class="card p-4 mb-4">
           <div class="flex items-center justify-between mb-3">
@@ -277,37 +344,7 @@ onMounted(async () => {
       </div>
 
       <!-- Right Panel: Message Reception & Publishing -->
-      <div class="w-1/2 flex flex-col min-h-0">
-        <!-- Publish Message Section -->
-        <div class="card p-4 mb-4">
-          <h3 class="text-sm font-semibold text-text-primary mb-3">{{ t("pubsub.publishMessage") }}</h3>
-          <div class="space-y-3">
-            <div class="flex gap-2">
-              <input
-                v-model="publishChannel"
-                type="text"
-                :placeholder="t('pubsub.channelNamePlaceholder')"
-                class="flex-1 px-3 py-2 text-sm border border-border rounded-lg bg-bg-primary text-text-primary focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                :disabled="!isConnected"
-              />
-              <button
-                @click="handlePublish"
-                class="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-redis rounded-lg hover:bg-redis-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                :disabled="!isConnected || publishing || !publishChannel.trim() || !publishMessage.trim()"
-                :title="!isConnected ? t('status.noConnection') : ''"
-              >
-                <Send :size="14" />
-                {{ publishing ? t("pubsub.publishing") : t("pubsub.publish") }}
-              </button>
-            </div>
-            <NumberedTextarea
-              v-model="publishMessage"
-              :placeholder="t('pubsub.messageContentPlaceholder')"
-              class="w-full"
-            />
-          </div>
-        </div>
-
+      <div class="w-3/5 flex flex-col min-h-0">
         <!-- Message Display Section -->
         <div class="card p-4 flex-1 overflow-hidden flex flex-col">
           <div class="flex items-center justify-between mb-3">
@@ -329,29 +366,76 @@ onMounted(async () => {
             </button>
           </div>
 
-          <div class="flex-1 overflow-y-auto space-y-2 bg-bg-primary rounded-lg border border-border-light p-3">
-            <div v-if="messages.length === 0" class="flex flex-col items-center justify-center py-12 text-text-muted">
-              <MessageSquare :size="32" class="mb-2 opacity-30" />
-              <p class="text-sm">{{ t("pubsub.noMessages") }}</p>
+          <div class="relative flex-1 min-h-0">
+            <div
+              ref="messagesContainerRef"
+              @scroll="updateAtBottom"
+              class="h-full overflow-y-auto space-y-2 bg-bg-primary rounded-lg border border-border-light p-3"
+            >
+              <div v-if="messages.length === 0" class="flex flex-col items-center justify-center py-12 text-text-muted">
+                <MessageSquare :size="32" class="mb-2 opacity-30" />
+                <p class="text-sm">{{ t("pubsub.noMessages") }}</p>
+              </div>
+
+              <div
+                v-for="(msg, index) in displayMessages"
+                :key="index"
+                class="p-3 bg-bg-secondary rounded-lg border border-border-light text-sm"
+              >
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-xs font-mono font-semibold text-redis truncate" :title="msg.channel">
+                    {{ msg.channel }}
+                  </span>
+                  <span class="text-[11px] font-mono text-text-muted shrink-0 ml-2">
+                    {{ formatTime(msg.timestamp) }}
+                  </span>
+                </div>
+                <div class="text-xs font-mono text-text-primary break-all whitespace-pre-wrap">
+                  {{ msg.message }}
+                </div>
+              </div>
             </div>
 
-            <div
-              v-for="(msg, index) in messages"
-              :key="index"
-              class="p-3 bg-bg-secondary rounded-lg border border-border-light text-sm"
+            <!-- Floating jump-to-bottom button (shown when scrolled away) -->
+            <button
+              v-if="!isAtBottom"
+              @click="scrollToBottom"
+              class="absolute bottom-3 left-1/2 -translate-x-1/2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-redis rounded-full shadow-lg hover:bg-redis-dark transition-colors"
             >
-              <div class="flex items-center justify-between mb-1">
-                <span class="text-xs font-mono font-semibold text-redis truncate" :title="msg.channel">
-                  {{ msg.channel }}
-                </span>
-                <span class="text-[11px] font-mono text-text-muted shrink-0 ml-2">
-                  {{ formatTime(msg.timestamp) }}
-                </span>
-              </div>
-              <div class="text-xs font-mono text-text-primary break-all whitespace-pre-wrap">
-                {{ msg.message }}
-              </div>
+              <ArrowDown :size="14" />
+              {{ newMessageCount > 0 ? t("pubsub.newMessages", { count: newMessageCount }) : t("pubsub.scrollToBottom") }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Publish Message Section -->
+        <div class="card p-3 mt-4 shrink-0">
+          <h3 class="text-sm font-semibold text-text-primary mb-2">{{ t("pubsub.publishMessage") }}</h3>
+          <div class="space-y-2">
+            <div class="flex gap-2">
+              <input
+                v-model="publishChannel"
+                type="text"
+                :placeholder="t('pubsub.channelNamePlaceholder')"
+                class="flex-1 px-3 py-1.5 text-sm border border-border rounded-lg bg-bg-primary text-text-primary focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                :disabled="!isConnected"
+              />
+              <button
+                @click="handlePublish"
+                class="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 text-sm font-medium text-white bg-redis rounded-lg hover:bg-redis-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                :disabled="!isConnected || publishing || !publishChannel.trim() || !publishMessage.trim()"
+                :title="!isConnected ? t('status.noConnection') : ''"
+              >
+                <Send :size="14" />
+                {{ publishing ? t("pubsub.publishing") : t("pubsub.publish") }}
+              </button>
             </div>
+            <NumberedTextarea
+              v-model="publishMessage"
+              :placeholder="t('pubsub.messageContentPlaceholder')"
+              :rows="2"
+              class="w-full"
+            />
           </div>
         </div>
       </div>

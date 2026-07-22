@@ -277,6 +277,8 @@
     "unsubscribeAllSuccess": "已取消所有订阅",
     "publishSuccess": "消息已发布到 \"{channel}\"，{count} 个订阅者接收",
     "messagesCleared": "消息已清空",
+    "newMessages": "{count} 条新消息",
+    "scrollToBottom": "回到底部",
     "errors": {
       "loadChannelsFailed": "加载频道列表失败",
       "subscribeFailed": "订阅失败",

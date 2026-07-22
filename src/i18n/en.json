@@ -277,6 +277,8 @@
     "unsubscribeAllSuccess": "Unsubscribed from all channels",
     "publishSuccess": "Message published to \"{channel}\", received by {count} subscribers",
     "messagesCleared": "Messages cleared",
+    "newMessages": "{count} new messages",
+    "scrollToBottom": "Scroll to bottom",
     "errors": {
       "loadChannelsFailed": "Failed to load channel list",
       "subscribeFailed": "Subscribe failed",
