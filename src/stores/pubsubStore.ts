@@ -13,6 +13,8 @@ export interface PubSubMessageItem {
   channel: string;
   message: string;
   timestamp: number;
+  /** The glob pattern matched, when delivered via a pattern subscription. */
+  pattern?: string | null;
 }
 
 /** A record of one message published by the user, with its delivery count. */
@@ -35,6 +37,8 @@ export interface PubSubPublishItem {
 export const usePubsubStore = defineStore("pubsub", () => {
   /** connectionId → active (sorted) channel names */
   const subscriptionsMap = ref<Record<string, string[]>>({});
+  /** connectionId → active (sorted) glob patterns */
+  const patternsMap = ref<Record<string, string[]>>({});
   /** connectionId → received messages (newest first) */
   const messagesMap = ref<Record<string, PubSubMessageItem[]>>({});
   /** connectionId → published-message history (newest first) */
@@ -47,7 +51,12 @@ export const usePubsubStore = defineStore("pubsub", () => {
     const list = messagesMap.value[msg.connectionId]
       ? [...messagesMap.value[msg.connectionId]]
       : [];
-    list.unshift({ channel: msg.channel, message: msg.message, timestamp: msg.timestamp });
+    list.unshift({
+      channel: msg.channel,
+      message: msg.message,
+      timestamp: msg.timestamp,
+      pattern: msg.pattern ?? null,
+    });
     if (list.length > MAX_MESSAGES) list.length = MAX_MESSAGES;
     messagesMap.value = { ...messagesMap.value, [msg.connectionId]: list };
   }
@@ -61,6 +70,11 @@ export const usePubsubStore = defineStore("pubsub", () => {
   /** Read the active channel list for a connection. */
   function channelsOf(connectionId: string | null): string[] {
     return connectionId ? subscriptionsMap.value[connectionId] ?? [] : [];
+  }
+
+  /** Read the active glob-pattern list for a connection. */
+  function patternsOf(connectionId: string | null): string[] {
+    return connectionId ? patternsMap.value[connectionId] ?? [] : [];
   }
 
   /** Read the received messages for a connection. */
@@ -86,24 +100,35 @@ export const usePubsubStore = defineStore("pubsub", () => {
     publishesMap.value = { ...publishesMap.value, [connectionId]: [] };
   }
 
-  async function subscribe(connectionId: string, channel: string): Promise<string[]> {
-    const result = await tauriApi.pubsub.subscribe(connectionId, channel);
-    subscriptionsMap.value = { ...subscriptionsMap.value, [connectionId]: result };
-    return result;
+  async function subscribe(
+    connectionId: string,
+    channel: string,
+    isPattern = false,
+  ): Promise<void> {
+    const state = await tauriApi.pubsub.subscribe(connectionId, channel, isPattern);
+    subscriptionsMap.value = { ...subscriptionsMap.value, [connectionId]: state.channels };
+    patternsMap.value = { ...patternsMap.value, [connectionId]: state.patterns };
   }
 
-  async function unsubscribe(connectionId: string, channel: string): Promise<string[]> {
-    const result = await tauriApi.pubsub.unsubscribe(connectionId, channel);
-    subscriptionsMap.value = { ...subscriptionsMap.value, [connectionId]: result };
-    // Drop buffered messages for the channel we just left.
-    const remaining = (messagesMap.value[connectionId] ?? []).filter((m) => m.channel !== channel);
+  async function unsubscribe(
+    connectionId: string,
+    channel: string,
+    isPattern = false,
+  ): Promise<void> {
+    const state = await tauriApi.pubsub.unsubscribe(connectionId, channel, isPattern);
+    subscriptionsMap.value = { ...subscriptionsMap.value, [connectionId]: state.channels };
+    patternsMap.value = { ...patternsMap.value, [connectionId]: state.patterns };
+    // Drop buffered messages that arrived via the channel/pattern we just left.
+    const remaining = (messagesMap.value[connectionId] ?? []).filter((m) =>
+      isPattern ? m.pattern !== channel : m.channel !== channel,
+    );
     messagesMap.value = { ...messagesMap.value, [connectionId]: remaining };
-    return result;
   }
 
   async function unsubscribeAll(connectionId: string): Promise<void> {
     await tauriApi.pubsub.unsubscribe(connectionId);
     subscriptionsMap.value = { ...subscriptionsMap.value, [connectionId]: [] };
+    patternsMap.value = { ...patternsMap.value, [connectionId]: [] };
     messagesMap.value = { ...messagesMap.value, [connectionId]: [] };
   }
 
@@ -123,6 +148,11 @@ export const usePubsubStore = defineStore("pubsub", () => {
       delete next[connectionId];
       subscriptionsMap.value = next;
     }
+    if (connectionId in patternsMap.value) {
+      const next = { ...patternsMap.value };
+      delete next[connectionId];
+      patternsMap.value = next;
+    }
     if (connectionId in messagesMap.value) {
       const next = { ...messagesMap.value };
       delete next[connectionId];
@@ -137,10 +167,12 @@ export const usePubsubStore = defineStore("pubsub", () => {
 
   return {
     subscriptionsMap,
+    patternsMap,
     messagesMap,
     publishesMap,
     init,
     channelsOf,
+    patternsOf,
     messagesOf,
     publishesOf,
     addPublish,

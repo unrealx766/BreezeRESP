@@ -1,9 +1,20 @@
 use crate::core::pubsub_manager::spawn_listener;
 use crate::core::validate::{validate_channel, validate_command, validate_connection_id};
 use crate::AppState;
+use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use tauri::{AppHandle, State};
 use zeroize::Zeroize;
+
+/// The full subscription state for a connection, returned to the frontend after
+/// every subscribe / unsubscribe so it can render exact channels and glob
+/// patterns distinctly.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubscriptionState {
+    pub channels: Vec<String>,
+    pub patterns: Vec<String>,
+}
 
 /// Build a Redis connection URL from stored connection config.
 fn build_redis_url(host: &str, port: u16, password: &str, db: u8, ssl: bool) -> String {
@@ -17,12 +28,13 @@ fn build_redis_url(host: &str, port: u16, password: &str, db: u8, ssl: bool) -> 
 }
 
 /// Open a dedicated pubsub connection for `connection_id` and subscribe to the
-/// given channel set. Uses stored connection config (NOT the shared pool, whose
-/// connections must never enter subscriber mode).
+/// given channel + pattern sets. Uses stored connection config (NOT the shared
+/// pool, whose connections must never enter subscriber mode).
 async fn create_pubsub(
     state: &AppState,
     connection_id: &str,
     channels: &HashSet<String>,
+    patterns: &HashSet<String>,
 ) -> Result<redis::aio::PubSub, String> {
     // Load connection config (scoped lock — never held across await).
     let (host, port, mut password, db, ssl) = {
@@ -50,13 +62,19 @@ async fn create_pubsub(
             .await
             .map_err(|e| format!("Subscribe error: {}", e))?;
     }
+    for pattern in patterns {
+        pubsub
+            .psubscribe(pattern.as_str())
+            .await
+            .map_err(|e| format!("PSubscribe error: {}", e))?;
+    }
 
     Ok(pubsub)
 }
 
-/// Return the sorted channel list.
-fn sorted(channels: HashSet<String>) -> Vec<String> {
-    let mut list: Vec<String> = channels.into_iter().collect();
+/// Return the sorted list of a channel/pattern set.
+fn sorted(set: HashSet<String>) -> Vec<String> {
+    let mut list: Vec<String> = set.into_iter().collect();
     list.sort();
     list
 }
@@ -88,39 +106,53 @@ pub async fn pubsub_publish(
     Ok(num_subscribers as usize)
 }
 
-/// Subscribe to a channel. Establishes (or extends) a dedicated pubsub listener
-/// that streams incoming messages to the frontend via `pubsub-message` events.
-/// Returns the full set of currently-subscribed channels (sorted).
+/// Subscribe to a channel or glob pattern. Establishes (or extends) a dedicated
+/// pubsub listener that streams incoming messages to the frontend via
+/// `pubsub-message` events. When `is_pattern` is true the target is treated as a
+/// glob pattern (PSUBSCRIBE). Returns the full subscription state.
 #[tauri::command]
 pub async fn pubsub_subscribe(
     app: AppHandle,
     state: State<'_, AppState>,
     connection_id: String,
     channel: String,
-) -> Result<Vec<String>, String> {
+    is_pattern: bool,
+) -> Result<SubscriptionState, String> {
     validate_connection_id(&connection_id)?;
     validate_channel(&channel)?;
 
     let mut channels = state.pubsub_manager.channels(&connection_id);
-    channels.insert(channel);
+    let mut patterns = state.pubsub_manager.patterns(&connection_id);
+    if is_pattern {
+        patterns.insert(channel);
+    } else {
+        channels.insert(channel);
+    }
 
     // Establish the connection & subscribe synchronously so failures surface now.
-    let pubsub = create_pubsub(state.inner(), &connection_id, &channels).await?;
+    let pubsub = create_pubsub(state.inner(), &connection_id, &channels, &patterns).await?;
     let handle = spawn_listener(app, connection_id.clone(), pubsub);
-    state.pubsub_manager.replace(&connection_id, channels.clone(), handle);
+    state
+        .pubsub_manager
+        .replace(&connection_id, channels.clone(), patterns.clone(), handle);
 
-    Ok(sorted(channels))
+    Ok(SubscriptionState {
+        channels: sorted(channels),
+        patterns: sorted(patterns),
+    })
 }
 
-/// Unsubscribe from a single channel, or from all channels when `channel` is None.
-/// Returns the remaining subscribed channels (sorted).
+/// Unsubscribe from a single channel/pattern, or from everything when `channel`
+/// is None. When `is_pattern` is true the target is removed from the pattern set
+/// (PUNSUBSCRIBE semantics). Returns the remaining subscription state.
 #[tauri::command]
 pub async fn pubsub_unsubscribe(
     app: AppHandle,
     state: State<'_, AppState>,
     connection_id: String,
     channel: Option<String>,
-) -> Result<Vec<String>, String> {
+    is_pattern: bool,
+) -> Result<SubscriptionState, String> {
     validate_connection_id(&connection_id)?;
 
     let target = match channel {
@@ -128,24 +160,40 @@ pub async fn pubsub_unsubscribe(
         None => {
             // Unsubscribe from everything: tear down the listener.
             state.pubsub_manager.clear(&connection_id);
-            return Ok(Vec::new());
+            return Ok(SubscriptionState {
+                channels: Vec::new(),
+                patterns: Vec::new(),
+            });
         }
     };
 
     let mut channels = state.pubsub_manager.channels(&connection_id);
-    channels.remove(&target);
-
-    if channels.is_empty() {
-        state.pubsub_manager.clear(&connection_id);
-        return Ok(Vec::new());
+    let mut patterns = state.pubsub_manager.patterns(&connection_id);
+    if is_pattern {
+        patterns.remove(&target);
+    } else {
+        channels.remove(&target);
     }
 
-    // Re-establish the listener with the reduced channel set.
-    let pubsub = create_pubsub(state.inner(), &connection_id, &channels).await?;
-    let handle = spawn_listener(app, connection_id.clone(), pubsub);
-    state.pubsub_manager.replace(&connection_id, channels.clone(), handle);
+    if channels.is_empty() && patterns.is_empty() {
+        state.pubsub_manager.clear(&connection_id);
+        return Ok(SubscriptionState {
+            channels: Vec::new(),
+            patterns: Vec::new(),
+        });
+    }
 
-    Ok(sorted(channels))
+    // Re-establish the listener with the reduced channel/pattern set.
+    let pubsub = create_pubsub(state.inner(), &connection_id, &channels, &patterns).await?;
+    let handle = spawn_listener(app, connection_id.clone(), pubsub);
+    state
+        .pubsub_manager
+        .replace(&connection_id, channels.clone(), patterns.clone(), handle);
+
+    Ok(SubscriptionState {
+        channels: sorted(channels),
+        patterns: sorted(patterns),
+    })
 }
 
 /// List all available channels.

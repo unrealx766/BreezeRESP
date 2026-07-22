@@ -121,6 +121,14 @@ export interface PubSubEvent {
   channel: string;
   message: string;
   timestamp: number;
+  /** The glob pattern matched, when delivered via a pattern subscription. */
+  pattern?: string | null;
+}
+
+/** Full subscription state (exact channels + glob patterns) for a connection. */
+export interface SubscriptionState {
+  channels: string[];
+  patterns: string[];
 }
 
 // ---- Tauri invoke wrappers ----
@@ -256,11 +264,11 @@ export const tauriApi = {
     publish: (connectionId: string, channel: string, message: string) =>
       withConn(connectionId, () => invoke<number>("pubsub_publish", { connectionId, channel, message })),
 
-    subscribe: (connectionId: string, channel: string) =>
-      withConn(connectionId, () => invoke<string[]>("pubsub_subscribe", { connectionId, channel })),
+    subscribe: (connectionId: string, channel: string, isPattern = false) =>
+      withConn(connectionId, () => invoke<SubscriptionState>("pubsub_subscribe", { connectionId, channel, isPattern })),
 
-    unsubscribe: (connectionId: string, channel?: string) =>
-      withConn(connectionId, () => invoke<string[]>("pubsub_unsubscribe", { connectionId, channel: channel ?? null })),
+    unsubscribe: (connectionId: string, channel?: string, isPattern = false) =>
+      withConn(connectionId, () => invoke<SubscriptionState>("pubsub_unsubscribe", { connectionId, channel: channel ?? null, isPattern })),
 
     listChannels: (connectionId: string, pattern?: string) =>
       withConn(connectionId, () => invoke<string[]>("pubsub_list_channels", { connectionId, pattern: pattern ?? null })),

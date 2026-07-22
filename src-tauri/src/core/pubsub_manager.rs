@@ -30,12 +30,16 @@ pub struct PubSubEvent {
     pub channel: String,
     pub message: String,
     pub timestamp: u64,
+    /// The glob pattern the message matched, when delivered via a pattern
+    /// subscription (PSUBSCRIBE); `None` for exact-channel subscriptions.
+    pub pattern: Option<String>,
 }
 
-/// A live subscription for one connection: the set of channels plus the handle
-/// to the background listener task.
+/// A live subscription for one connection: the exact channels, glob patterns and
+/// the handle to the background listener task.
 struct Subscription {
     channels: HashSet<String>,
+    patterns: HashSet<String>,
     handle: JoinHandle<()>,
 }
 
@@ -60,8 +64,23 @@ impl PubSubManager {
             .unwrap_or_default()
     }
 
+    /// Returns the current desired glob-pattern set for a connection (empty if none).
+    pub fn patterns(&self, connection_id: &str) -> HashSet<String> {
+        self.subs
+            .lock()
+            .ok()
+            .and_then(|m| m.get(connection_id).map(|s| s.patterns.clone()))
+            .unwrap_or_default()
+    }
+
     /// Replace the listener for a connection, aborting the previous task.
-    pub fn replace(&self, connection_id: &str, channels: HashSet<String>, handle: JoinHandle<()>) {
+    pub fn replace(
+        &self,
+        connection_id: &str,
+        channels: HashSet<String>,
+        patterns: HashSet<String>,
+        handle: JoinHandle<()>,
+    ) {
         let mut map = match self.subs.lock() {
             Ok(m) => m,
             Err(_) => {
@@ -71,7 +90,7 @@ impl PubSubManager {
         };
         if let Some(prev) = map.insert(
             connection_id.to_string(),
-            Subscription { channels, handle },
+            Subscription { channels, patterns, handle },
         ) {
             prev.handle.abort();
         }
@@ -105,6 +124,9 @@ pub fn spawn_listener(
         let mut stream = pubsub.on_message();
         while let Some(msg) = stream.next().await {
             let channel = msg.get_channel_name().to_string();
+            // Pattern subscriptions (PSUBSCRIBE) carry the matched pattern; exact
+            // channel subscriptions do not.
+            let pattern = msg.get_pattern::<String>().ok();
             // Prefer a UTF-8 payload; fall back to a lossy conversion for binary.
             let message: String = msg
                 .get_payload::<String>()
@@ -121,6 +143,7 @@ pub fn spawn_listener(
                     channel,
                     message,
                     timestamp,
+                    pattern,
                 },
             );
         }

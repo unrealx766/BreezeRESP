@@ -7,7 +7,7 @@ import { usePubsubStore } from "@/stores/pubsubStore";
 import type { PubSubMessageItem } from "@/stores/pubsubStore";
 import { toast } from "@/utils/toast";
 import NumberedTextarea from "@/components/shared/NumberedTextarea.vue";
-import { Radio, Plus, Send, MessageSquare, RefreshCw, X, ArrowDown, History } from "lucide-vue-next";
+import { Radio, Plus, Send, MessageSquare, RefreshCw, X, ArrowDown, History, Regex } from "lucide-vue-next";
 
 const { t } = useI18n();
 const connStore = useConnectionStore();
@@ -17,7 +17,23 @@ const isConnected = computed(() => connStore.activeConnection?.status === "conne
 // Subscriptions & received messages live in the store (keyed by connection id)
 // so they persist across tab switches — this page unmounts on navigation.
 const subscriptions = computed(() => pubsubStore.channelsOf(connStore.activeConnectionId));
+const patterns = computed(() => pubsubStore.patternsOf(connStore.activeConnectionId));
 const messages = computed(() => pubsubStore.messagesOf(connStore.activeConnectionId));
+
+// A subscription entry, tagged so the UI can distinguish glob patterns from
+// exact channels. Patterns are listed first.
+interface SubItem {
+  name: string;
+  isPattern: boolean;
+}
+const allSubscriptions = computed<SubItem[]>(() => [
+  ...patterns.value.map((name) => ({ name, isPattern: true })),
+  ...subscriptions.value.map((name) => ({ name, isPattern: false })),
+]);
+const subscriptionCount = computed(() => subscriptions.value.length + patterns.value.length);
+
+// Glob metacharacters imply a pattern subscription (PSUBSCRIBE).
+const isPatternExpr = (s: string): boolean => /[*?[\]]/.test(s);
 
 // Messages are stored newest-first; display oldest→newest (newest at bottom).
 const displayMessages = computed(() => [...messages.value].reverse());
@@ -45,8 +61,8 @@ const loadingChannels = ref(false);
 const subscribing = ref(false);
 const publishing = ref(false);
 
-// Whether we are actively listening to at least one channel
-const isListening = computed(() => subscriptions.value.length > 0);
+// Whether we are actively listening to at least one channel or pattern
+const isListening = computed(() => subscriptionCount.value > 0);
 
 // Load channel list
 const loadChannels = async (): Promise<void> => {
@@ -69,15 +85,13 @@ const handleSubscribe = async (): Promise<void> => {
   if (!conn || !channelInput.value.trim()) return;
 
   const channel = channelInput.value.trim();
-  if (subscriptions.value.includes(channel)) {
-    toast.info(t("pubsub.alreadySubscribed"));
-    return;
-  }
+  const isPattern = isPatternExpr(channel);
+  const existing = isPattern ? patterns.value : subscriptions.value;
+  if (existing.includes(channel)) return;
 
   try {
     subscribing.value = true;
-    await pubsubStore.subscribe(conn.id, channel);
-    toast.success(t("pubsub.subscribeSuccess", { channel }));
+    await pubsubStore.subscribe(conn.id, channel, isPattern);
     channelInput.value = "";
   } catch (error: any) {
     toast.error(error.message || t("pubsub.errors.subscribeFailed"));
@@ -86,15 +100,14 @@ const handleSubscribe = async (): Promise<void> => {
   }
 };
 
-// Unsubscribe from a channel
-const handleUnsubscribe = async (channel: string): Promise<void> => {
+// Unsubscribe from a channel or pattern
+const handleUnsubscribe = async (channel: string, isPattern = false): Promise<void> => {
   const conn = connStore.activeConnection;
   if (!conn) return;
 
   try {
     subscribing.value = true;
-    await pubsubStore.unsubscribe(conn.id, channel);
-    toast.success(t("pubsub.unsubscribeSuccess", { channel }));
+    await pubsubStore.unsubscribe(conn.id, channel, isPattern);
   } catch (error: any) {
     toast.error(error.message || t("pubsub.errors.unsubscribeFailed"));
   } finally {
@@ -110,7 +123,6 @@ const handleUnsubscribeAll = async (): Promise<void> => {
   try {
     subscribing.value = true;
     await pubsubStore.unsubscribeAll(conn.id);
-    toast.success(t("pubsub.unsubscribeAllSuccess"));
   } catch (error: any) {
     toast.error(error.message || t("pubsub.errors.unsubscribeFailed"));
   } finally {
@@ -249,7 +261,7 @@ onMounted(async () => {
 
     <div class="flex-1 flex min-h-0 gap-4">
       <!-- Left Panel: Subscription Management & Channel List -->
-      <div class="w-2/5 flex flex-col min-h-0">
+      <div class="w-1/4 flex flex-col min-h-0">
         <!-- Subscription Section -->
         <div class="card p-4 mb-4">
           <div class="flex items-center justify-between mb-3">
@@ -272,12 +284,12 @@ onMounted(async () => {
                 type="text"
                 :placeholder="t('pubsub.inputChannelPlaceholder')"
                 @keyup.enter="handleSubscribe"
-                class="flex-1 px-3 py-2 text-sm border border-border rounded-lg bg-bg-primary text-text-primary focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                class="flex-1 min-w-0 px-3 py-2 text-sm border border-border rounded-lg bg-bg-primary text-text-primary focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 :disabled="!isConnected || subscribing"
               />
               <button
                 @click="handleSubscribe"
-                class="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-redis rounded-lg hover:bg-redis-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                class="shrink-0 whitespace-nowrap inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-redis rounded-lg hover:bg-redis-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 :disabled="!isConnected || subscribing || !channelInput.trim()"
                 :title="!isConnected ? t('status.noConnection') : ''"
               >
@@ -288,10 +300,17 @@ onMounted(async () => {
 
             <div class="flex items-center justify-between">
               <span class="text-xs text-text-secondary">
-                {{ t("pubsub.subscribedCount", { count: subscriptions.length }) }}
+                {{
+                  patterns.length > 0
+                    ? t("pubsub.subscribedCountWithPatterns", {
+                        channels: subscriptions.length,
+                        patterns: patterns.length,
+                      })
+                    : t("pubsub.subscribedCount", { count: subscriptions.length })
+                }}
               </span>
               <button
-                v-if="subscriptions.length > 0"
+                v-if="subscriptionCount > 0"
                 @click="handleUnsubscribeAll"
                 class="text-xs text-text-secondary hover:text-danger transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 :disabled="subscribing"
@@ -301,15 +320,34 @@ onMounted(async () => {
             </div>
 
             <!-- Subscription List -->
-            <div v-if="subscriptions.length > 0" class="max-h-32 overflow-y-auto space-y-1.5">
+            <div
+              v-if="subscriptionCount > 0"
+              class="space-y-1.5"
+              :class="{ 'max-h-32 overflow-y-auto': subscriptionCount > 3 }"
+              :style="subscriptionCount > 3 ? 'scrollbar-gutter: stable' : ''"
+            >
               <div
-                v-for="channel in subscriptions"
-                :key="channel"
+                v-for="sub in allSubscriptions"
+                :key="(sub.isPattern ? 'p:' : 'c:') + sub.name"
                 class="flex items-center justify-between px-3 py-2 bg-bg-primary rounded-lg border border-border-light text-sm"
               >
-                <span class="text-text-primary font-mono truncate" :title="channel">{{ channel }}</span>
+                <span class="flex items-center gap-1.5 min-w-0">
+                  <Regex
+                    v-if="sub.isPattern"
+                    :size="14"
+                    class="shrink-0 text-redis"
+                    :title="t('pubsub.patternHint')"
+                  />
+                  <Radio
+                    v-else
+                    :size="14"
+                    class="shrink-0 text-redis"
+                    :title="t('pubsub.channelHint')"
+                  />
+                  <span class="text-text-primary font-mono truncate" :title="sub.name">{{ sub.name }}</span>
+                </span>
                 <button
-                  @click="handleUnsubscribe(channel)"
+                  @click="handleUnsubscribe(sub.name, sub.isPattern)"
                   class="shrink-0 w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   :disabled="subscribing"
                 >
@@ -361,7 +399,7 @@ onMounted(async () => {
       </div>
 
       <!-- Right Panel: Message Reception & Publishing -->
-      <div class="w-3/5 flex flex-col min-h-0">
+      <div class="w-3/4 flex flex-col min-h-0">
         <!-- Message Display Section -->
         <div class="card p-4 flex-1 overflow-hidden flex flex-col">
           <div class="flex items-center justify-between mb-3">
@@ -434,12 +472,12 @@ onMounted(async () => {
                 v-model="publishChannel"
                 type="text"
                 :placeholder="t('pubsub.channelNamePlaceholder')"
-                class="flex-1 px-3 py-1.5 text-sm border border-border rounded-lg bg-bg-primary text-text-primary focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                class="flex-1 min-w-0 px-3 py-1.5 text-sm border border-border rounded-lg bg-bg-primary text-text-primary focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 :disabled="!isConnected"
               />
               <button
                 @click="handlePublish"
-                class="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 text-sm font-medium text-white bg-redis rounded-lg hover:bg-redis-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                class="shrink-0 whitespace-nowrap inline-flex items-center justify-center gap-1.5 px-4 py-1.5 text-sm font-medium text-white bg-redis rounded-lg hover:bg-redis-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 :disabled="!isConnected || publishing || !publishChannel.trim() || !publishMessage.trim()"
                 :title="!isConnected ? t('status.noConnection') : ''"
               >
