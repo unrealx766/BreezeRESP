@@ -1,10 +1,19 @@
 use crate::core::pubsub_manager::spawn_listener;
-use crate::core::validate::{validate_channel, validate_command, validate_connection_id};
+use crate::core::validate::{
+    reject_null_bytes, validate_channel, validate_connection_id, validate_non_empty,
+    validate_pattern,
+};
 use crate::AppState;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use tauri::{AppHandle, State};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
+
+/// Maximum number of subscriptions (channels + patterns) per connection.
+const MAX_SUBSCRIPTIONS_PER_CONN: usize = 100;
+
+/// Maximum allowed length for a publish message payload.
+const MAX_MESSAGE_LEN: usize = 65_536; // 64 KB
 
 /// The full subscription state for a connection, returned to the frontend after
 /// every subscribe / unsubscribe so it can render exact channels and glob
@@ -17,14 +26,16 @@ pub struct SubscriptionState {
 }
 
 /// Build a Redis connection URL from stored connection config.
-fn build_redis_url(host: &str, port: u16, password: &str, db: u8, ssl: bool) -> String {
+/// Returns a `Zeroizing<String>` so the password-bearing URL is wiped on drop.
+fn build_redis_url(host: &str, port: u16, password: &str, db: u8, ssl: bool) -> Zeroizing<String> {
     let scheme = if ssl { "rediss" } else { "redis" };
-    if password.is_empty() {
+    let url = if password.is_empty() {
         format!("{}://{}:{}/{}", scheme, host, port, db)
     } else {
         let encoded = urlencoding::encode(password);
         format!("{}://:{}@{}:{}/{}", scheme, encoded, host, port, db)
-    }
+    };
+    Zeroizing::new(url)
 }
 
 /// Open a dedicated pubsub connection for `connection_id` and subscribe to the
@@ -50,7 +61,7 @@ async fn create_pubsub(
     let url = build_redis_url(&host, port, &password, db, ssl);
     password.zeroize();
 
-    let client = redis::Client::open(url).map_err(|e| format!("Client error: {}", e))?;
+    let client = redis::Client::open(url.as_str()).map_err(|e| format!("Client error: {}", e))?;
     let mut pubsub = client
         .get_async_pubsub()
         .await
@@ -88,7 +99,9 @@ pub async fn pubsub_publish(
     message: String,
 ) -> Result<usize, String> {
     validate_connection_id(&connection_id)?;
-    validate_command(&format!("PUBLISH {} {}", channel, message))?;
+    validate_channel(&channel)?;
+    validate_non_empty(&message, "message", MAX_MESSAGE_LEN)?;
+    reject_null_bytes(&message, "message")?;
 
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
@@ -123,6 +136,16 @@ pub async fn pubsub_subscribe(
 
     let mut channels = state.pubsub_manager.channels(&connection_id);
     let mut patterns = state.pubsub_manager.patterns(&connection_id);
+
+    // Enforce subscription count limit to prevent resource exhaustion.
+    let current_count = channels.len() + patterns.len();
+    if current_count >= MAX_SUBSCRIPTIONS_PER_CONN {
+        return Err(format!(
+            "Subscription limit reached (max {} per connection)",
+            MAX_SUBSCRIPTIONS_PER_CONN
+        ));
+    }
+
     if is_pattern {
         patterns.insert(channel);
     } else {
@@ -156,7 +179,10 @@ pub async fn pubsub_unsubscribe(
     validate_connection_id(&connection_id)?;
 
     let target = match channel {
-        Some(ch) => ch,
+        Some(ch) => {
+            validate_channel(&ch)?;
+            ch
+        }
         None => {
             // Unsubscribe from everything: tear down the listener.
             state.pubsub_manager.clear(&connection_id);
@@ -204,6 +230,9 @@ pub async fn pubsub_list_channels(
     pattern: Option<String>,
 ) -> Result<Vec<String>, String> {
     validate_connection_id(&connection_id)?;
+    if let Some(ref p) = pattern {
+        validate_pattern(p)?;
+    }
 
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
@@ -237,7 +266,7 @@ pub async fn pubsub_num_subs(
     channel: String,
 ) -> Result<usize, String> {
     validate_connection_id(&connection_id)?;
-    validate_command(&format!("PUBSUB NUMSUB {}", channel))?;
+    validate_channel(&channel)?;
 
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;

@@ -22,6 +22,11 @@ use tokio::task::JoinHandle;
 /// Event name emitted to the frontend for each received Pub/Sub message.
 pub const PUBSUB_EVENT: &str = "pubsub-message";
 
+/// Maximum message payload size forwarded to the frontend (1 MB).
+/// Larger messages are truncated to prevent memory exhaustion from a
+/// malicious or misbehaving publisher.
+const MAX_FORWARDED_MSG_LEN: usize = 1_048_576;
+
 /// Payload emitted to the frontend for a single received message.
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -128,9 +133,19 @@ pub fn spawn_listener(
             // channel subscriptions do not.
             let pattern = msg.get_pattern::<String>().ok();
             // Prefer a UTF-8 payload; fall back to a lossy conversion for binary.
-            let message: String = msg
+            let mut message: String = msg
                 .get_payload::<String>()
                 .unwrap_or_else(|_| String::from_utf8_lossy(msg.get_payload_bytes()).into_owned());
+            // Truncate oversized messages to protect the frontend from memory exhaustion.
+            if message.len() > MAX_FORWARDED_MSG_LEN {
+                // Find a valid UTF-8 char boundary at or before the limit.
+                let mut end = MAX_FORWARDED_MSG_LEN;
+                while !message.is_char_boundary(end) {
+                    end -= 1;
+                }
+                message.truncate(end);
+                message.push_str("\n…[truncated]");
+            }
             let timestamp = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
