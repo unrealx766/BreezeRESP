@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from "vue";
+import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
+import { save } from "@tauri-apps/plugin-dialog";
+import { writeTextFile } from "@tauri-apps/plugin-fs";
 import { tauriApi } from "@/services/tauriApi";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { usePubsubStore } from "@/stores/pubsubStore";
 import type { PubSubMessageItem } from "@/stores/pubsubStore";
 import { toast } from "@/utils/toast";
 import NumberedTextarea from "@/components/shared/NumberedTextarea.vue";
-import { Radio, Plus, Send, MessageSquare, RefreshCw, X, ArrowDown, History, Regex } from "lucide-vue-next";
+import SmartPayloadInspector from "@/components/shared/SmartPayloadInspector.vue";
+import { Radio, Plus, Send, MessageSquare, RefreshCw, X, ArrowDown, History, Regex, Download } from "lucide-vue-next";
 
 const { t } = useI18n();
 const connStore = useConnectionStore();
@@ -179,6 +182,82 @@ const clearMessages = (): void => {
   if (conn) pubsubStore.clearMessages(conn.id);
   toast.info(t("pubsub.messagesCleared"));
 };
+
+// ─── Export Functions ────────────────────────────────────────────────
+
+const showExportMenu = ref(false);
+const exportMenuRef = ref<HTMLElement | null>(null);
+
+// Close export menu when clicking outside
+function handleClickOutside(event: MouseEvent) {
+  if (exportMenuRef.value && !exportMenuRef.value.contains(event.target as Node)) {
+    showExportMenu.value = false;
+  }
+}
+
+onMounted(() => {
+  document.addEventListener("click", handleClickOutside);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener("click", handleClickOutside);
+});
+
+async function exportAsJson() {
+  const conn = connStore.activeConnection;
+  if (!conn) return;
+
+  const filePath = await save({
+    filters: [{ name: "JSON Files", extensions: ["json"] }],
+    defaultPath: `pubsub-${conn.name}-${Date.now()}.json`,
+  });
+
+  if (!filePath) return;
+
+  const data = messages.value.map((msg) => ({
+    channel: msg.channel,
+    message: msg.message,
+    timestamp: msg.timestamp,
+    pattern: msg.pattern || null,
+  }));
+
+  const json = JSON.stringify(data, null, 2);
+  await writeTextFile(filePath, json);
+  showExportMenu.value = false;
+  toast.success(t("pubsub.payloadInspector.exportJsonSuccess"));
+}
+
+async function exportAsCsv() {
+  const conn = connStore.activeConnection;
+  if (!conn) return;
+
+  const filePath = await save({
+    filters: [{ name: "CSV Files", extensions: ["csv"] }],
+    defaultPath: `pubsub-${conn.name}-${Date.now()}.csv`,
+  });
+
+  if (!filePath) return;
+
+  const headers = ["Channel", "Message", "Timestamp", "Pattern"];
+  const rows = messages.value.map((msg) => [
+    escapeCsv(msg.channel),
+    escapeCsv(msg.message),
+    escapeCsv(new Date(msg.timestamp).toISOString()),
+    escapeCsv(msg.pattern || ""),
+  ]);
+
+  const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+  await writeTextFile(filePath, csv);
+  showExportMenu.value = false;
+  toast.success(t("pubsub.payloadInspector.exportCsvSuccess"));
+}
+
+function escapeCsv(value: string): string {
+  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
 
 // Distance (px) from the bottom within which we consider the list "at bottom".
 const BOTTOM_THRESHOLD = 40;
@@ -362,7 +441,7 @@ onMounted(async () => {
         </div>
 
         <!-- Channels List -->
-        <div class="card p-4 flex-1 overflow-hidden flex flex-col">
+        <div class="card p-4 flex-1 min-h-0 overflow-hidden flex flex-col">
           <div class="flex items-center justify-between mb-3">
             <h3 class="text-sm font-semibold text-text-primary">{{ t("pubsub.availableChannels") }}</h3>
             <button
@@ -396,6 +475,58 @@ onMounted(async () => {
             <p class="text-xs italic">{{ t("pubsub.noAvailableChannels") }}</p>
           </div>
         </div>
+
+        <!-- Publish History -->
+        <div class="card p-4 mt-4 max-h-[35%] flex flex-col min-h-0">
+          <div class="flex items-center justify-between mb-2 shrink-0">
+            <h3 class="text-sm font-semibold text-text-secondary flex items-center gap-1.5">
+              <History :size="13" />
+              {{ t("pubsub.publishHistory") }}
+              <span
+                v-if="publishes.length > 0"
+                class="badge inline-flex items-center px-1.5 py-0.5 text-[11px] font-mono rounded-md bg-redis/10 text-redis"
+              >
+                {{ publishes.length }}
+              </span>
+            </h3>
+            <button
+              v-if="publishes.length > 0"
+              @click="clearPublishHistory"
+              class="text-xs text-text-secondary hover:text-danger transition-colors"
+            >
+              {{ t("pubsub.clearPublishHistory") }}
+            </button>
+          </div>
+
+          <div v-if="publishes.length > 0" class="flex-1 min-h-0 overflow-y-auto space-y-1.5" style="scrollbar-gutter: stable">
+            <button
+              v-for="(item, index) in publishes"
+              :key="index"
+              @click="reusePublish(item)"
+              class="w-full text-left px-3 py-2 bg-bg-primary rounded-lg border border-border-light hover:border-redis/40 hover:bg-bg-hover transition-colors"
+              :title="t('pubsub.publish')"
+            >
+              <div class="flex items-center justify-between gap-2 mb-1">
+                <span class="text-xs font-mono font-semibold text-redis truncate" :title="item.channel">
+                  {{ item.channel }}
+                </span>
+                <span class="flex items-center gap-2 shrink-0">
+                  <span
+                    class="badge inline-flex items-center px-1.5 py-0.5 text-[11px] font-mono rounded-md"
+                    :class="item.count > 0 ? 'bg-success/10 text-success' : 'bg-bg-secondary text-text-muted'"
+                  >
+                    {{ t("pubsub.deliveredCount", { count: item.count }) }}
+                  </span>
+                  <span class="text-[11px] font-mono text-text-muted">{{ formatTime(item.timestamp) }}</span>
+                </span>
+              </div>
+              <div class="text-xs font-mono text-text-secondary truncate" :title="item.message">
+                {{ item.message }}
+              </div>
+            </button>
+          </div>
+          <p v-else class="text-xs text-text-muted italic">{{ t("pubsub.noPublishHistory") }}</p>
+        </div>
       </div>
 
       <!-- Right Panel: Message Reception & Publishing -->
@@ -412,13 +543,43 @@ onMounted(async () => {
                 {{ messages.length }}
               </span>
             </h3>
-            <button
-              v-if="messages.length > 0"
-              @click="clearMessages"
-              class="text-xs text-text-secondary hover:text-danger transition-colors"
-            >
-              {{ t("pubsub.clearMessages") }}
-            </button>
+            <div class="flex items-center gap-3">
+              <!-- TODO: 导出功能暂时隐藏
+              <div v-if="messages.length > 0" ref="exportMenuRef" class="relative">
+                <button
+                  @click.stop="showExportMenu = !showExportMenu"
+                  class="inline-flex items-center gap-1.5 text-xs text-text-secondary hover:text-redis transition-colors"
+                >
+                  <Download :size="13" />
+                  {{ t("pubsub.payloadInspector.exportAll") }}
+                </button>
+                <div
+                  v-if="showExportMenu"
+                  class="absolute right-0 top-full mt-1 w-40 bg-bg-primary border border-border rounded-lg shadow-lg z-10"
+                >
+                  <button
+                    @click="exportAsJson"
+                    class="w-full text-left px-3 py-2 text-xs text-text-primary hover:bg-bg-hover transition-colors rounded-t-lg"
+                  >
+                    {{ t("pubsub.payloadInspector.exportJson") }}
+                  </button>
+                  <button
+                    @click="exportAsCsv"
+                    class="w-full text-left px-3 py-2 text-xs text-text-primary hover:bg-bg-hover transition-colors rounded-b-lg"
+                  >
+                    {{ t("pubsub.payloadInspector.exportCsv") }}
+                  </button>
+                </div>
+              </div>
+              -->
+              <button
+                v-if="messages.length > 0"
+                @click="clearMessages"
+                class="text-xs text-text-secondary hover:text-danger transition-colors"
+              >
+                {{ t("pubsub.clearMessages") }}
+              </button>
+            </div>
           </div>
 
           <div class="relative flex-1 min-h-0">
@@ -437,7 +598,7 @@ onMounted(async () => {
                 :key="index"
                 class="p-3 bg-bg-secondary rounded-lg border border-border-light text-sm"
               >
-                <div class="flex items-center justify-between mb-1">
+                <div class="flex items-center justify-between mb-2">
                   <span class="text-xs font-mono font-semibold text-redis truncate" :title="msg.channel">
                     {{ msg.channel }}
                   </span>
@@ -445,9 +606,7 @@ onMounted(async () => {
                     {{ formatTime(msg.timestamp) }}
                   </span>
                 </div>
-                <div class="text-xs font-mono text-text-primary break-all whitespace-pre-wrap">
-                  {{ msg.message }}
-                </div>
+                <SmartPayloadInspector :payload="msg.message" :channel="msg.channel" :timestamp="msg.timestamp" />
               </div>
             </div>
 
@@ -489,60 +648,9 @@ onMounted(async () => {
               v-model="publishMessage"
               :placeholder="t('pubsub.messageContentPlaceholder')"
               :rows="2"
+              max-height="150px"
               class="w-full"
             />
-
-            <!-- Publish History -->
-            <div class="pt-2 border-t border-border-light">
-              <div class="flex items-center justify-between mb-2">
-                <h4 class="text-xs font-semibold text-text-secondary flex items-center gap-1.5">
-                  <History :size="13" />
-                  {{ t("pubsub.publishHistory") }}
-                  <span
-                    v-if="publishes.length > 0"
-                    class="badge inline-flex items-center px-1.5 py-0.5 text-[11px] font-mono rounded-md bg-redis/10 text-redis"
-                  >
-                    {{ publishes.length }}
-                  </span>
-                </h4>
-                <button
-                  v-if="publishes.length > 0"
-                  @click="clearPublishHistory"
-                  class="text-xs text-text-secondary hover:text-danger transition-colors"
-                >
-                  {{ t("pubsub.clearPublishHistory") }}
-                </button>
-              </div>
-
-              <div v-if="publishes.length > 0" class="max-h-32 overflow-y-auto space-y-1.5">
-                <button
-                  v-for="(item, index) in publishes"
-                  :key="index"
-                  @click="reusePublish(item)"
-                  class="w-full text-left px-3 py-2 bg-bg-primary rounded-lg border border-border-light hover:border-redis/40 hover:bg-bg-hover transition-colors"
-                  :title="t('pubsub.publish')"
-                >
-                  <div class="flex items-center justify-between gap-2 mb-1">
-                    <span class="text-xs font-mono font-semibold text-redis truncate" :title="item.channel">
-                      {{ item.channel }}
-                    </span>
-                    <span class="flex items-center gap-2 shrink-0">
-                      <span
-                        class="badge inline-flex items-center px-1.5 py-0.5 text-[11px] font-mono rounded-md"
-                        :class="item.count > 0 ? 'bg-success/10 text-success' : 'bg-bg-secondary text-text-muted'"
-                      >
-                        {{ t("pubsub.deliveredCount", { count: item.count }) }}
-                      </span>
-                      <span class="text-[11px] font-mono text-text-muted">{{ formatTime(item.timestamp) }}</span>
-                    </span>
-                  </div>
-                  <div class="text-xs font-mono text-text-secondary truncate" :title="item.message">
-                    {{ item.message }}
-                  </div>
-                </button>
-              </div>
-              <p v-else class="text-xs text-text-muted italic">{{ t("pubsub.noPublishHistory") }}</p>
-            </div>
           </div>
         </div>
       </div>

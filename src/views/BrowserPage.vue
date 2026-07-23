@@ -1677,7 +1677,7 @@ onBeforeUnmount(() => {
                 <Code2 :size="11" class="shrink-0 opacity-60" />
                 {{ newKeyBatchHint }}
               </p>
-              <NumberedTextarea v-model="newKeyBatchData" :placeholder="newKeyBatchPlaceholder || newKeyBatchHint" :rows="5" />
+              <NumberedTextarea v-model="newKeyBatchData" :placeholder="newKeyBatchPlaceholder || newKeyBatchHint" :rows="5" max-height="200px" />
             </div>
           </div>
           <!-- Footer -->
@@ -1718,7 +1718,7 @@ onBeforeUnmount(() => {
                 <Code2 :size="11" class="shrink-0 opacity-60" />
                 {{ addFieldBatchHint }}
               </p>
-              <NumberedTextarea v-model="addFieldBatchData" :placeholder="addFieldBatchPlaceholder || addFieldBatchHint" :rows="7" />
+              <NumberedTextarea v-model="addFieldBatchData" :placeholder="addFieldBatchPlaceholder || addFieldBatchHint" :rows="7" max-height="250px" />
             </div>
             <!-- Field TTL (hash only, Redis >= 7.4) -->
             <div v-if="addFieldSupportsTtl" class="pt-1">

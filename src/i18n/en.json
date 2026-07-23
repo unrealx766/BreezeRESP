@@ -288,6 +288,22 @@
     "clearPublishHistory": "Clear History",
     "deliveredCount": "{count} received",
     "noPublishHistory": "No published messages",
+    "payloadInspector": {
+      "formatJson": "JSON",
+      "formatXml": "XML",
+      "formatHex": "Hex",
+      "formatText": "Text",
+      "copyPayload": "Copy Payload",
+      "exportAll": "Export All",
+      "exportJson": "Export as JSON",
+      "exportCsv": "Export as CSV",
+      "expandAll": "Expand All",
+      "collapseAll": "Collapse All",
+      "rawView": "Raw View",
+      "formattedView": "Formatted View",
+      "exportJsonSuccess": "Messages exported as JSON successfully",
+      "exportCsvSuccess": "Messages exported as CSV successfully"
+    },
     "errors": {
       "loadChannelsFailed": "Failed to load channel list",
       "subscribeFailed": "Subscribe failed",

@@ -5,8 +5,10 @@ const props = withDefaults(defineProps<{
   modelValue: string;
   placeholder?: string;
   rows?: number;
+  maxHeight?: string;
 }>(), {
   rows: 5,
+  maxHeight: undefined,
 });
 
 const emit = defineEmits<{
@@ -103,7 +105,7 @@ function syncScroll() {
 </script>
 
 <template>
-  <div ref="containerRef" class="relative flex rounded-xl border border-border bg-bg-primary overflow-hidden focus-within:border-redis focus-within:ring-2 focus-within:ring-redis/20 transition-all">
+  <div ref="containerRef" class="relative flex rounded-xl border border-border bg-bg-primary overflow-hidden focus-within:border-redis focus-within:ring-2 focus-within:ring-redis/20 transition-all" :style="maxHeight ? { maxHeight, overflowY: 'auto' } : undefined">
     <!-- Hidden char width measurer -->
     <span
       ref="measureRef"

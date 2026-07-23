@@ -288,6 +288,22 @@
     "clearPublishHistory": "清空历史",
     "deliveredCount": "{count} 个接收",
     "noPublishHistory": "暂无发布记录",
+    "payloadInspector": {
+      "formatJson": "JSON",
+      "formatXml": "XML",
+      "formatHex": "十六进制",
+      "formatText": "文本",
+      "copyPayload": "复制内容",
+      "exportAll": "导出全部",
+      "exportJson": "导出为 JSON",
+      "exportCsv": "导出为 CSV",
+      "expandAll": "展开全部",
+      "collapseAll": "折叠全部",
+      "rawView": "原始视图",
+      "formattedView": "格式化视图",
+      "exportJsonSuccess": "消息已导出为 JSON",
+      "exportCsvSuccess": "消息已导出为 CSV"
+    },
     "errors": {
       "loadChannelsFailed": "加载频道列表失败",
       "subscribeFailed": "订阅失败",
