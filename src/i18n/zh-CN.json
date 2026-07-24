@@ -253,6 +253,7 @@
     "subscribeChannel": "订阅频道",
     "inputChannelPlaceholder": "输入频道名称，支持 * ? [] 通配符...",
     "subscribe": "订阅",
+    "subscribed": "已订阅",
     "subscribing": "订阅中...",
     "subscribedCount": "已订阅 {count} 个频道",
     "subscribedCountWithPatterns": "已订阅 {channels} 个频道 · {patterns} 个模式",

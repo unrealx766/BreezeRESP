@@ -253,6 +253,7 @@
     "subscribeChannel": "Subscribe to Channel",
     "inputChannelPlaceholder": "Enter channel name, supports * ? [] wildcards...",
     "subscribe": "Subscribe",
+    "subscribed": "Subscribed",
     "subscribing": "Subscribing...",
     "subscribedCount": "{count} channels subscribed",
     "subscribedCountWithPatterns": "{channels} channels · {patterns} patterns",

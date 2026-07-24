@@ -93,8 +93,8 @@ import {
   FileCode,
   Hash,
   FileText,
-  Eye,
-  EyeOff,
+  UnfoldVertical,
+  FoldVertical,
   X,
   Maximize2,
 } from "lucide-vue-next";
@@ -359,10 +359,10 @@ function copyPayload(event: Event) {
             <!-- Expand/Collapse all (JSON) -->
             <template v-if="format === 'json' && parsedJson !== null && !showRaw">
               <button @click="expandAll" class="p-1.5 rounded text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors" :title="t('pubsub.payloadInspector.expandAll')">
-                <Eye :size="13" />
+                <UnfoldVertical :size="13" />
               </button>
               <button @click="collapseAll" class="p-1.5 rounded text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors" :title="t('pubsub.payloadInspector.collapseAll')">
-                <EyeOff :size="13" />
+                <FoldVertical :size="13" />
               </button>
             </template>
             <!-- Toggle raw/formatted -->
@@ -394,7 +394,7 @@ function copyPayload(event: Event) {
             </div>
           </template>
           <!-- JSON Raw -->
-          <pre v-else-if="format === 'json' && showRaw" class="text-xs font-mono whitespace-pre-wrap text-text-primary">{{ JSON.stringify(parsedJson, null, 2) }}</pre>
+          <pre v-else-if="format === 'json' && showRaw" class="text-xs font-mono whitespace-pre-wrap text-text-primary">{{ props.payload }}</pre>
           <!-- XML Formatted -->
           <pre v-else-if="format === 'xml' && formattedXml && !showRaw" class="text-xs font-mono whitespace-pre-wrap xml-view" v-html="highlightXml(formattedXml)"></pre>
           <!-- XML Raw -->

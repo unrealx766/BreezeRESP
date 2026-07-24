@@ -10,7 +10,7 @@ import type { PubSubMessageItem } from "@/stores/pubsubStore";
 import { toast } from "@/utils/toast";
 import NumberedTextarea from "@/components/shared/NumberedTextarea.vue";
 import SmartPayloadInspector from "@/components/shared/SmartPayloadInspector.vue";
-import { Radio, Plus, Send, MessageSquare, RefreshCw, X, ArrowDown, History, Regex, Download } from "lucide-vue-next";
+import { Radio, Plus, Send, MessageSquare, RefreshCw, X, ArrowDown, History, Regex, Download, BellPlus, Bell } from "lucide-vue-next";
 
 const { t } = useI18n();
 const connStore = useConnectionStore();
@@ -58,6 +58,30 @@ const channels = ref<string[]>([]);
 // Publishing related state
 const publishChannel = ref("");
 const publishMessage = ref("");
+const showChannelDropdown = ref(false);
+const showPublishHistory = ref(false);
+
+// Channel suggestions: merge subscribed channels + active channels (deduplicated)
+const channelSuggestions = computed(() => {
+  const all = new Set<string>([...subscriptions.value, ...channels.value]);
+  return [...all].sort();
+});
+
+// Filtered suggestions based on current input
+const filteredSuggestions = computed(() => {
+  const q = publishChannel.value.trim().toLowerCase();
+  if (!q) return channelSuggestions.value;
+  return channelSuggestions.value.filter((c) => c.toLowerCase().includes(q));
+});
+
+function selectChannel(channel: string) {
+  publishChannel.value = channel;
+  showChannelDropdown.value = false;
+}
+
+function handleChannelBlur() {
+  showChannelDropdown.value = false;
+}
 
 // Loading states
 const loadingChannels = ref(false);
@@ -83,6 +107,30 @@ const loadChannels = async (): Promise<void> => {
 };
 
 // Subscribe to a channel
+// Check if a channel is already subscribed
+const isChannelSubscribed = (channel: string): boolean => {
+  return subscriptions.value.includes(channel) || patterns.value.includes(channel);
+};
+
+// Subscribe directly from channel list
+const handleSubscribeChannel = async (channel: string): Promise<void> => {
+  const conn = connStore.activeConnection;
+  if (!conn) return;
+
+  const isPattern = isPatternExpr(channel);
+  const existing = isPattern ? patterns.value : subscriptions.value;
+  if (existing.includes(channel)) return;
+
+  try {
+    subscribing.value = true;
+    await pubsubStore.subscribe(conn.id, channel, isPattern);
+  } catch (error: any) {
+    toast.error(error.message || t("pubsub.errors.subscribeFailed"));
+  } finally {
+    subscribing.value = false;
+  }
+};
+
 const handleSubscribe = async (): Promise<void> => {
   const conn = connStore.activeConnection;
   if (!conn || !channelInput.value.trim()) return;
@@ -462,12 +510,27 @@ onMounted(async () => {
               class="flex items-center justify-between px-3 py-2 bg-bg-primary rounded-lg border border-border-light text-sm"
             >
               <span class="text-text-primary font-mono truncate" :title="channel">{{ channel }}</span>
-              <button
-                @click="publishChannel = channel"
-                class="shrink-0 text-xs text-redis hover:text-redis-dark transition-colors"
-              >
-                {{ t("pubsub.publishMessage") }}
-              </button>
+              <div class="flex items-center gap-1 shrink-0">
+                <button
+                  v-if="!isChannelSubscribed(channel)"
+                  @click="handleSubscribeChannel(channel)"
+                  class="w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-redis hover:bg-redis/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  :disabled="subscribing"
+                  :title="t('pubsub.subscribe')"
+                >
+                  <BellPlus :size="13" />
+                </button>
+                <span v-else class="w-6 h-6 flex items-center justify-center text-redis" :title="t('pubsub.subscribed')">
+                  <Bell :size="13" />
+                </span>
+                <button
+                  @click="publishChannel = channel"
+                  class="w-6 h-6 flex items-center justify-center rounded text-text-muted hover:text-redis hover:bg-redis/10 transition-colors"
+                  :title="t('pubsub.publishMessage')"
+                >
+                  <Send :size="12" />
+                </button>
+              </div>
             </div>
           </div>
           <div v-else class="flex-1 flex flex-col items-center justify-center text-text-muted">
@@ -476,61 +539,11 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- Publish History -->
-        <div class="card p-4 mt-4 max-h-[35%] flex flex-col min-h-0">
-          <div class="flex items-center justify-between mb-2 shrink-0">
-            <h3 class="text-sm font-semibold text-text-secondary flex items-center gap-1.5">
-              <History :size="13" />
-              {{ t("pubsub.publishHistory") }}
-              <span
-                v-if="publishes.length > 0"
-                class="badge inline-flex items-center px-1.5 py-0.5 text-[11px] font-mono rounded-md bg-redis/10 text-redis"
-              >
-                {{ publishes.length }}
-              </span>
-            </h3>
-            <button
-              v-if="publishes.length > 0"
-              @click="clearPublishHistory"
-              class="text-xs text-text-secondary hover:text-danger transition-colors"
-            >
-              {{ t("pubsub.clearPublishHistory") }}
-            </button>
-          </div>
-
-          <div v-if="publishes.length > 0" class="flex-1 min-h-0 overflow-y-auto space-y-1.5" style="scrollbar-gutter: stable">
-            <button
-              v-for="(item, index) in publishes"
-              :key="index"
-              @click="reusePublish(item)"
-              class="w-full text-left px-3 py-2 bg-bg-primary rounded-lg border border-border-light hover:border-redis/40 hover:bg-bg-hover transition-colors"
-              :title="t('pubsub.publish')"
-            >
-              <div class="flex items-center justify-between gap-2 mb-1">
-                <span class="text-xs font-mono font-semibold text-redis truncate" :title="item.channel">
-                  {{ item.channel }}
-                </span>
-                <span class="flex items-center gap-2 shrink-0">
-                  <span
-                    class="badge inline-flex items-center px-1.5 py-0.5 text-[11px] font-mono rounded-md"
-                    :class="item.count > 0 ? 'bg-success/10 text-success' : 'bg-bg-secondary text-text-muted'"
-                  >
-                    {{ t("pubsub.deliveredCount", { count: item.count }) }}
-                  </span>
-                  <span class="text-[11px] font-mono text-text-muted">{{ formatTime(item.timestamp) }}</span>
-                </span>
-              </div>
-              <div class="text-xs font-mono text-text-secondary truncate" :title="item.message">
-                {{ item.message }}
-              </div>
-            </button>
-          </div>
-          <p v-else class="text-xs text-text-muted italic">{{ t("pubsub.noPublishHistory") }}</p>
-        </div>
+        <!-- Publish History (moved to right panel) -->
       </div>
 
       <!-- Right Panel: Message Reception & Publishing -->
-      <div class="w-3/4 flex flex-col min-h-0">
+      <div class="flex-1 flex flex-col min-h-0">
         <!-- Message Display Section -->
         <div class="card p-4 flex-1 overflow-hidden flex flex-col">
           <div class="flex items-center justify-between mb-3">
@@ -627,13 +640,31 @@ onMounted(async () => {
           <h3 class="text-sm font-semibold text-text-primary mb-2">{{ t("pubsub.publishMessage") }}</h3>
           <div class="space-y-2">
             <div class="flex gap-2">
-              <input
-                v-model="publishChannel"
-                type="text"
-                :placeholder="t('pubsub.channelNamePlaceholder')"
-                class="flex-1 min-w-0 px-3 py-1.5 text-sm border border-border rounded-lg bg-bg-primary text-text-primary focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                :disabled="!isConnected"
-              />
+              <div class="relative flex-1 min-w-0">
+                <input
+                  v-model="publishChannel"
+                  type="text"
+                  :placeholder="t('pubsub.channelNamePlaceholder')"
+                  class="w-full px-3 py-1.5 text-sm border border-border rounded-lg bg-bg-primary text-text-primary focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                  :disabled="!isConnected"
+                  @focus="showChannelDropdown = true"
+                  @blur="handleChannelBlur"
+                />
+                <div
+                  v-if="showChannelDropdown && filteredSuggestions.length > 0"
+                  class="absolute left-0 bottom-full mb-1 w-full max-h-[140px] overflow-y-auto bg-bg-primary border border-border rounded-lg shadow-lg z-20"
+                >
+                  <button
+                    v-for="ch in filteredSuggestions"
+                    :key="ch"
+                    @mousedown.prevent="selectChannel(ch)"
+                    class="w-full text-left px-3 py-1.5 text-xs font-mono text-text-primary hover:bg-bg-hover transition-colors truncate"
+                    :title="ch"
+                  >
+                    {{ ch }}
+                  </button>
+                </div>
+              </div>
               <button
                 @click="handlePublish"
                 class="shrink-0 whitespace-nowrap inline-flex items-center justify-center gap-1.5 px-4 py-1.5 text-sm font-medium text-white bg-redis rounded-lg hover:bg-redis-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
@@ -642,6 +673,14 @@ onMounted(async () => {
               >
                 <Send :size="14" />
                 {{ publishing ? t("pubsub.publishing") : t("pubsub.publish") }}
+              </button>
+              <button
+                @click="showPublishHistory = !showPublishHistory"
+                class="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border transition-colors"
+                :class="showPublishHistory ? 'text-redis border-redis/40 bg-redis/10' : 'text-text-muted border-border hover:text-redis hover:border-redis/40'"
+                :title="t('pubsub.publishHistory')"
+              >
+                <History :size="14" />
               </button>
             </div>
             <NumberedTextarea
@@ -652,6 +691,60 @@ onMounted(async () => {
               class="w-full"
             />
           </div>
+        </div>
+      </div>
+
+      <!-- Third Column: Publish History (toggleable) -->
+      <div v-if="showPublishHistory" class="w-1/4 flex flex-col min-h-0">
+        <div class="card p-4 flex-1 flex flex-col min-h-0">
+          <div class="flex items-center justify-between mb-3 shrink-0">
+            <h3 class="text-sm font-semibold text-text-primary flex items-center gap-1.5">
+              <History :size="13" />
+              {{ t("pubsub.publishHistory") }}
+              <span
+                v-if="publishes.length > 0"
+                class="badge inline-flex items-center px-1.5 py-0.5 text-[11px] font-mono rounded-md bg-redis/10 text-redis"
+              >
+                {{ publishes.length }}
+              </span>
+            </h3>
+            <button
+              v-if="publishes.length > 0"
+              @click="clearPublishHistory"
+              class="text-xs text-text-secondary hover:text-danger transition-colors"
+            >
+              {{ t("pubsub.clearPublishHistory") }}
+            </button>
+          </div>
+
+          <div v-if="publishes.length > 0" class="flex-1 min-h-0 overflow-y-auto space-y-1.5" style="scrollbar-gutter: stable">
+            <button
+              v-for="(item, index) in publishes"
+              :key="index"
+              @click="reusePublish(item)"
+              class="w-full text-left px-3 py-2 bg-bg-primary rounded-lg border border-border-light hover:border-redis/40 hover:bg-bg-hover transition-colors"
+              :title="t('pubsub.publish')"
+            >
+              <div class="flex items-center justify-between gap-2 mb-1">
+                <span class="text-xs font-mono font-semibold text-redis truncate" :title="item.channel">
+                  {{ item.channel }}
+                </span>
+                <span class="flex items-center gap-2 shrink-0">
+                  <span
+                    class="badge inline-flex items-center px-1.5 py-0.5 text-[11px] font-mono rounded-md"
+                    :class="item.count > 0 ? 'bg-success/10 text-success' : 'bg-bg-secondary text-text-muted'"
+                  >
+                    {{ t("pubsub.deliveredCount", { count: item.count }) }}
+                  </span>
+                  <span class="text-[11px] font-mono text-text-muted">{{ formatTime(item.timestamp) }}</span>
+                </span>
+              </div>
+              <div class="text-xs font-mono text-text-secondary truncate" :title="item.message">
+                {{ item.message }}
+              </div>
+            </button>
+          </div>
+          <p v-else class="text-xs text-text-muted italic">{{ t("pubsub.noPublishHistory") }}</p>
         </div>
       </div>
     </div>
