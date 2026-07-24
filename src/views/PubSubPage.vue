@@ -243,10 +243,6 @@ function handleClickOutside(event: MouseEvent) {
   }
 }
 
-onMounted(() => {
-  document.addEventListener("click", handleClickOutside);
-});
-
 onBeforeUnmount(() => {
   document.removeEventListener("click", handleClickOutside);
 });
@@ -363,6 +359,7 @@ watch(messages, (list) => {
 });
 
 onMounted(async () => {
+  document.addEventListener("click", handleClickOutside);
   // Register the app-wide real-time listener (idempotent) so messages keep
   // arriving into the store even when this page is not mounted.
   await pubsubStore.init();
@@ -539,7 +536,6 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- Publish History (moved to right panel) -->
       </div>
 
       <!-- Right Panel: Message Reception & Publishing -->
