@@ -3,7 +3,7 @@
 [English](README_EN.md) | 中文
 > A lightweight and fast Redis GUI tool built with Tauri v2 + Vue 3.
 
-![Version](https://img.shields.io/badge/version-1.2.0-blue)
+![Version](https://img.shields.io/badge/version-1.3.0-blue)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 
@@ -13,6 +13,8 @@
 
 - **Connection Config** — Card-based multi-instance configuration, SSL/TLS encryption, system Keychain secret storage (AES-GCM), connectivity testing, 16 DB switching, auto disconnect detection & status sync
 - **Data Browser** — `:`-delimited cascading tree directory with virtual scrolling, view & inline edit for String / Hash / List / Set / ZSet, Text / Hex / JSON / ASCII multi-view toggle, binary-safe (Bitmaps / HyperLogLog / Geospatial auto-adapted), per-field TTL for Hash (Redis ≥ 7.4), content encoding detection, TTL ring gauge, floating window for long values, debounced search
+- **Pub/Sub** — Channel / pattern subscription (SUBSCRIBE / PSUBSCRIBE), real-time message stream, Smart Payload Inspector (auto-detect JSON / XML / Hex with tree expand), channel suggestions dropdown, publish history reuse
+- **Command History** — Full write operation logging, filter by connection / DB, success / failure status badges, one-click command copy
 - **Real-time Monitoring** — QPS trend chart, dashboard for memory / hit rate / CPU and other key metrics
 - **Pipeline** — Visual batch command orchestration, drag-and-drop sorting, per-command result & latency stats (with RTT savings), encrypted script save / load
 - **Sandbox Mode** — Pre-execution diff preview, built-in write command templates, snapshot & one-click rollback (auto-generated inverse operations), dangerous command frontend interception
@@ -57,7 +59,7 @@ BreezeRESP/
 │   ├── components/         # Cascade tree / charts / layout / shared components
 │   ├── i18n/               # Internationalization (zh-CN / en)
 │   ├── stores/             # Pinia state management
-│   ├── views/              # Connection / Browser / Pipeline / Sandbox
+│   ├── views/              # Connection / Browser / PubSub / History / Pipeline / Sandbox
 │   └── utils/              # Formatting / rollback inverse / command templates
 ├── src-tauri/              # Rust backend
 │   ├── src/commands/       # Tauri IPC commands

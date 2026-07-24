@@ -3,7 +3,7 @@
 [English](README_EN.md) | 中文
 > 一款轻量、快速的 Redis 可视化工具，基于 Tauri v2 + Vue 3 构建。
 
-![Version](https://img.shields.io/badge/version-1.2.0-blue)
+![Version](https://img.shields.io/badge/version-1.3.0-blue)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 
@@ -13,6 +13,8 @@
 
 - **连接配置** — 卡片式多实例配置，SSL/TLS 加密，系统 Keychain 密钥存储（AES-GCM），连通性测试，16 个 DB 切换
 - **数据浏览** — `:` 分隔的树形级联目录 + 虚拟滚动，String / Hash / List / Set / ZSet 五类型查看与内联编辑，Text / Hex / JSON / ASCII 多视图切换，TTL 环形进度条，长值浮窗查看，搜索防抖
+- **发布订阅** — 频道 / 模式订阅（SUBSCRIBE / PSUBSCRIBE），实时消息流，智能 Payload 解析（JSON / XML / Hex 自动识别 + 树形展开），频道下拉建议，发布历史复用
+- **命令历史** — 全量写操作记录，按连接 / DB 分组筛选，成功 / 失败状态标识，一键复制命令
 - **实时监控** — QPS 趋势图，内存 / 命中率 / CPU 等关键指标仪表盘
 - **流水线** — 可视化编排批量命令，拖拽排序，逐条结果与延迟统计（含 RTT 节省率），脚本加密保存 / 加载
 - **沙箱模式** — 执行前 Diff 预览，内置写命令模板，快照与一键回滚（自动生成逆操作），危险命令前端拦截
@@ -57,7 +59,7 @@ BreezeRESP/
 │   ├── components/         # 级联树 / 图表 / 布局 / 共享组件
 │   ├── i18n/               # 国际化 (zh-CN / en)
 │   ├── stores/             # Pinia 状态
-│   ├── views/              # 连接 / 浏览 / Pipeline / 沙箱
+│   ├── views/              # 连接 / 浏览 / PubSub / 历史 / Pipeline / 沙箱
 │   └── utils/              # 格式化 / 回滚逆运算 / 命令模板
 ├── src-tauri/              # Rust 后端
 │   ├── src/commands/       # Tauri IPC 命令
