@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from "vue";
 import { useI18n } from "vue-i18n";
-import { save } from "@tauri-apps/plugin-dialog";
-import { writeTextFile } from "@tauri-apps/plugin-fs";
+
+
 import { tauriApi } from "@/services/tauriApi";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { usePubsubStore } from "@/stores/pubsubStore";
@@ -10,7 +10,7 @@ import type { PubSubMessageItem } from "@/stores/pubsubStore";
 import { toast } from "@/utils/toast";
 import NumberedTextarea from "@/components/shared/NumberedTextarea.vue";
 import SmartPayloadInspector from "@/components/shared/SmartPayloadInspector.vue";
-import { Radio, Plus, Send, MessageSquare, RefreshCw, X, ArrowDown, History, Regex, Download, BellPlus, Bell } from "lucide-vue-next";
+import { Radio, Plus, Send, MessageSquare, RefreshCw, X, ArrowDown, History, Regex, BellPlus, Bell } from "lucide-vue-next";
 
 const { t } = useI18n();
 const connStore = useConnectionStore();
@@ -18,7 +18,7 @@ const pubsubStore = usePubsubStore();
 const isConnected = computed(() => connStore.activeConnection?.status === "connected");
 
 // Subscriptions & received messages live in the store (keyed by connection id)
-// so they persist across tab switches — this page unmounts on navigation.
+// so they persist across tab switches �?this page unmounts on navigation.
 const subscriptions = computed(() => pubsubStore.channelsOf(connStore.activeConnectionId));
 const patterns = computed(() => pubsubStore.patternsOf(connStore.activeConnectionId));
 const messages = computed(() => pubsubStore.messagesOf(connStore.activeConnectionId));
@@ -231,77 +231,10 @@ const clearMessages = (): void => {
   toast.info(t("pubsub.messagesCleared"));
 };
 
-// ─── Export Functions ────────────────────────────────────────────────
-
-const showExportMenu = ref(false);
-const exportMenuRef = ref<HTMLElement | null>(null);
-
-// Close export menu when clicking outside
-function handleClickOutside(event: MouseEvent) {
-  if (exportMenuRef.value && !exportMenuRef.value.contains(event.target as Node)) {
-    showExportMenu.value = false;
-  }
-}
-
 onBeforeUnmount(() => {
-  document.removeEventListener("click", handleClickOutside);
+  const connId = connStore.activeConnectionId;
+  if (connId) pubsubStore.clearConnection(connId);
 });
-
-async function exportAsJson() {
-  const conn = connStore.activeConnection;
-  if (!conn) return;
-
-  const filePath = await save({
-    filters: [{ name: "JSON Files", extensions: ["json"] }],
-    defaultPath: `pubsub-${conn.name}-${Date.now()}.json`,
-  });
-
-  if (!filePath) return;
-
-  const data = messages.value.map((msg) => ({
-    channel: msg.channel,
-    message: msg.message,
-    timestamp: msg.timestamp,
-    pattern: msg.pattern || null,
-  }));
-
-  const json = JSON.stringify(data, null, 2);
-  await writeTextFile(filePath, json);
-  showExportMenu.value = false;
-  toast.success(t("pubsub.payloadInspector.exportJsonSuccess"));
-}
-
-async function exportAsCsv() {
-  const conn = connStore.activeConnection;
-  if (!conn) return;
-
-  const filePath = await save({
-    filters: [{ name: "CSV Files", extensions: ["csv"] }],
-    defaultPath: `pubsub-${conn.name}-${Date.now()}.csv`,
-  });
-
-  if (!filePath) return;
-
-  const headers = ["Channel", "Message", "Timestamp", "Pattern"];
-  const rows = messages.value.map((msg) => [
-    escapeCsv(msg.channel),
-    escapeCsv(msg.message),
-    escapeCsv(new Date(msg.timestamp).toISOString()),
-    escapeCsv(msg.pattern || ""),
-  ]);
-
-  const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-  await writeTextFile(filePath, csv);
-  showExportMenu.value = false;
-  toast.success(t("pubsub.payloadInspector.exportCsvSuccess"));
-}
-
-function escapeCsv(value: string): string {
-  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
-}
 
 // Distance (px) from the bottom within which we consider the list "at bottom".
 const BOTTOM_THRESHOLD = 40;
@@ -359,7 +292,6 @@ watch(messages, (list) => {
 });
 
 onMounted(async () => {
-  document.addEventListener("click", handleClickOutside);
   // Register the app-wide real-time listener (idempotent) so messages keep
   // arriving into the store even when this page is not mounted.
   await pubsubStore.init();
