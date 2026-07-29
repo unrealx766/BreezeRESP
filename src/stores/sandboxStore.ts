@@ -17,7 +17,8 @@ export const useSandboxStore = defineStore("sandbox", () => {
   const commandError = ref<string | null>(null);
   const currentDiff = ref<DiffEntry[]>([]);
   const commandResult = ref<string | null>(null);
-  const history = ref<SandboxHistoryItem[]>([]);
+  // Change: per-connection history map to preserve history when switching back
+  const historyMap = ref<Record<string, SandboxHistoryItem[]>>({});
   const showPreview = ref(false);
   const currentCommand = ref<string>("");
   const currentKeyTypes = ref<Record<string, string>>({});
@@ -256,19 +257,18 @@ export const useSandboxStore = defineStore("sandbox", () => {
         currentKeyTypes.value,
       );
 
-      history.value.unshift({
-        id: `sb-${Date.now()}`,
-        snapshotId: "",
-        command: cmd,
-        timestamp: Date.now(),
-        status: "applied",
-        diffCount: currentDiff.value.length,
-        rollbackCommands,
-      });
-      // Cap history to prevent unbounded growth
-      if (history.value.length > MAX_HISTORY) {
-        history.value = history.value.slice(0, MAX_HISTORY);
-      }
+      historyMap.value[connId] = [
+        {
+          id: `sb-${Date.now()}`,
+          snapshotId: "",
+          command: cmd,
+          timestamp: Date.now(),
+          status: "applied" as const,
+          diffCount: currentDiff.value.length,
+          rollbackCommands,
+        },
+        ...(historyMap.value[connId]?.slice(0, MAX_HISTORY - 1) ?? []),
+      ].slice(0, MAX_HISTORY);
 
       // Record to command history
       const connStore = useConnectionStore();
@@ -314,16 +314,23 @@ export const useSandboxStore = defineStore("sandbox", () => {
     commandError.value = null;
   }
 
+  /** Get history for the active connection */
+  const history = computed(() => {
+    const connStore = useConnectionStore();
+    const connId = connStore.activeConnectionId;
+    if (!connId) return [];
+    return historyMap.value[connId] || [];
+  });
+
   /**
    * Reset all sandbox state when the active connection changes. Unlike
    * `resetPreview`, this issues no backend call (the previous connection's
    * shadow state is per-connection and harmless); it only clears the local
-   * preview UI and history so a switch never shows the previous connection's
-   * data (and never lets a rollback target the wrong connection).
+   * preview UI (not history, so switching back works).
    */
   function resetForConnectionSwitch() {
     resetPreviewUI();
-    history.value = [];
+    // Don't clear historyMap — keep per-connection history so switching back works.
   }
 
   /**
@@ -347,15 +354,15 @@ export const useSandboxStore = defineStore("sandbox", () => {
   }
 
   async function rollbackHistoryItem(id: string) {
-    const item = history.value.find((h) => h.id === id);
-    if (!item || item.status !== "applied") return;
-
     const connStore = useConnectionStore();
     const connId = connStore.activeConnectionId;
     if (!connId) {
       toast.error("No active connection.");
       return;
     }
+
+    const item = historyMap.value[connId]?.find((h) => h.id === id);
+    if (!item || item.status !== "applied") return;
 
     rollingBack.value = true;
 
@@ -365,7 +372,11 @@ export const useSandboxStore = defineStore("sandbox", () => {
         toast.error("Rollback returned false.");
         return;
       }
-      item.status = "rolled-back";
+      // Update history status
+      const idx = historyMap.value[connId].findIndex((h) => h.id === id);
+      if (idx >= 0) {
+        historyMap.value[connId][idx].status = "rolled-back";
+      }
 
       // Refresh keys after rollback
       try {
@@ -389,7 +400,8 @@ export const useSandboxStore = defineStore("sandbox", () => {
     commandError,
     currentDiff,
     commandResult,
-    history,
+    history,  // computed: history for active connection
+    historyMap,  // exported for potential debugging/inspection
     showPreview,
     hasDiff,
     addedCount,

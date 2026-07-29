@@ -43,14 +43,11 @@ function useTemplate(tpl: typeof commandTemplates[0]) {
   sandbox.commandInput = [tpl.cmd, ...tpl.args].join(" ");
 }
 
-// Reset sandbox state when connection changes (disconnect or switch)
-watch(
-  () => connStore.activeConnectionId,
-  () => {
-    sandbox.resetPreview();
-    sandbox.history = [];
-  }
-);
+// Reset sandbox preview state when connection changes (disconnect or switch)
+// History is now per-connection, so no manual clear needed — it will auto-switch
+watch(() => connStore.activeConnectionId, () => {
+  sandbox.resetPreview();
+});
 </script>
 
 <template>
