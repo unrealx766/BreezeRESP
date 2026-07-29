@@ -106,6 +106,25 @@ const loadChannels = async (): Promise<void> => {
   }
 };
 
+// The available-channels list is a per-request snapshot; when the active
+// connection changes it must be discarded (it belongs to the old connection)
+// and re-loaded for the new one if it is connected. The publish/subscribe
+// input state is also connection-specific and must be reset.
+watch(
+  () => connStore.activeConnectionId,
+  () => {
+    channels.value = [];
+    channelInput.value = "";
+    publishChannel.value = "";
+    publishMessage.value = "";
+    showChannelDropdown.value = false;
+    showPublishHistory.value = false;
+    if (isConnected.value) {
+      loadChannels();
+    }
+  }
+);
+
 // Subscribe to a channel
 // Check if a channel is already subscribed
 const isChannelSubscribed = (channel: string): boolean => {
