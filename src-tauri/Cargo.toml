@@ -1,6 +1,6 @@
 [package]
 name = "BreezeResp"
-version = "1.3.0"
+version = "1.4.0"
 description = "A Redis visualization tool for managing and exploring Redis data"
 authors = ["unrealx766"]
 license = "Apache-2.0"
