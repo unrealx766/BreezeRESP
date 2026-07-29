@@ -11,6 +11,8 @@ export interface RedisConnection {
   password: string;
   db: number;
   ssl: boolean;
+  cluster?: boolean;
+  nodes?: string[];
   status: ConnectionStatus;
   lastUsed?: number;
   pinned?: boolean;

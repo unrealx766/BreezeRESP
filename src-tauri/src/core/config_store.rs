@@ -19,6 +19,12 @@ pub struct StoredConnection {
     pub ssl: bool,
     #[serde(default)]
     pub pinned: bool,
+    /// Redis Cluster mode (multi-DB is unavailable; db is always 0)
+    #[serde(default)]
+    pub cluster: bool,
+    /// Extra cluster seed nodes (`host:port`), beyond the primary host/port
+    #[serde(default)]
+    pub nodes: Vec<String>,
 }
 
 impl std::fmt::Debug for StoredConnection {
@@ -32,6 +38,8 @@ impl std::fmt::Debug for StoredConnection {
             .field("db", &self.db)
             .field("ssl", &self.ssl)
             .field("pinned", &self.pinned)
+            .field("cluster", &self.cluster)
+            .field("nodes", &self.nodes)
             .finish()
     }
 }

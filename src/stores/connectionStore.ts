@@ -66,6 +66,8 @@ export const useConnectionStore = defineStore("connection", () => {
         password: "", // password not returned from backend for security
         db: info.db,
         ssl: info.ssl,
+        cluster: info.cluster ?? false,
+        nodes: info.nodes ?? [],
         status: "disconnected" as ConnectionStatus,
         pinned: info.pinned ?? false,
         hasPassword: info.hasPassword ?? false,
@@ -89,6 +91,8 @@ export const useConnectionStore = defineStore("connection", () => {
       password: conn.password,
       db: conn.db,
       ssl: conn.ssl,
+      cluster: conn.cluster ?? false,
+      nodes: conn.nodes ?? [],
       pinned: conn.pinned ?? false,
     };
     // If frontend doesn't have the real password (always empty after load),
@@ -203,9 +207,10 @@ export const useConnectionStore = defineStore("connection", () => {
       activeConnectionId.value = id;
       conn.lastUsed = Date.now();
       sessionConnectedIds.value = new Set([...sessionConnectedIds.value, id]);
-      // Restore last active DB if it differs from the default (session persistence across reconnect)
+      // Restore last active DB if it differs from the default (session persistence across reconnect).
+      // Cluster connections have no multi-DB, so skip.
       const savedDb = activeDbMap.value[id];
-      if (savedDb !== undefined && savedDb !== conn.db) {
+      if (!conn.cluster && savedDb !== undefined && savedDb !== conn.db) {
         try {
           await tauriApi.connection.switchDb(id, savedDb);
         } catch (e) {
@@ -294,6 +299,8 @@ export const useConnectionStore = defineStore("connection", () => {
       password: config.password,
       db: config.db,
       ssl: config.ssl,
+      cluster: config.cluster ?? false,
+      nodes: config.nodes ?? [],
       pinned: false,
       useSavedPassword: useSavedPw || undefined,
     };
@@ -322,6 +329,8 @@ export const useConnectionStore = defineStore("connection", () => {
   async function switchDb(db: number) {
     const id = activeConnectionId.value;
     if (!id) return;
+    // Cluster mode has a single logical DB; nothing to switch.
+    if (activeConnection.value?.cluster) return;
 
     try {
       await tauriApi.connection.switchDb(id, db);

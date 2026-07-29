@@ -10,6 +10,7 @@ pub struct AppState {
     pub pipeline_store: Mutex<core::pipeline_store::PipelineStore>,
     pub shadow_store: Mutex<core::shadow_store::ShadowStore>,
     pub pubsub_manager: core::pubsub_manager::PubSubManager,
+    pub cluster_scans: core::cluster::ClusterScanManager,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -62,6 +63,7 @@ pub fn run() {
                 pipeline_store: Mutex::new(pipeline_store),
                 shadow_store: Mutex::new(core::shadow_store::ShadowStore::new()),
                 pubsub_manager: core::pubsub_manager::PubSubManager::new(),
+                cluster_scans: core::cluster::ClusterScanManager::new(),
             });
 
             Ok(())

@@ -27,6 +27,8 @@ export interface RustConnectionConfig {
   password: string;
   db: number;
   ssl: boolean;
+  cluster: boolean;
+  nodes: string[];
   pinned: boolean;
   useSavedPassword?: boolean;
   keepPassword?: boolean;
@@ -39,6 +41,8 @@ export interface RustConnectionInfo {
   port: number;
   db: number;
   ssl: boolean;
+  cluster: boolean;
+  nodes: string[];
   status: string;
   pinned: boolean;
   hasPassword: boolean;

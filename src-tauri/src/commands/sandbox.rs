@@ -576,7 +576,7 @@ pub async fn sandbox_preview(
             redis_cmd.arg(arg);
         }
         let result: redis::Value = redis_cmd
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(|e| format!("Command error: {}", e))?;
         return Ok(SandboxPreview {
@@ -606,7 +606,7 @@ pub async fn sandbox_preview(
             pipe.cmd("TYPE").arg(key);
         }
         let type_values: Vec<redis::Value> = pipe
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .unwrap_or_default();
 
@@ -854,7 +854,7 @@ pub async fn sandbox_apply(
         redis_cmd.arg(arg);
     }
     let _: redis::Value = redis_cmd
-        .query_async(&mut *conn)
+        .query_async(&mut conn)
         .await
         .map_err(|e| format!("Apply error: {}", e))?;
 
@@ -908,7 +908,7 @@ pub async fn sandbox_rollback(
             redis_cmd.arg(arg);
         }
         let _: redis::Value = redis_cmd
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(|e| format!("Rollback cmd '{}' error: {}", cmd_str, e))?;
     }

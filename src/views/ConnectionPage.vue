@@ -55,11 +55,35 @@ const form = ref({
   password: "",
   db: 0,
   ssl: false,
+  cluster: false,
+  nodesText: "",
 });
+
+/** Parse the extra seed nodes textarea: one host:port per line */
+function parseNodes(text: string): string[] {
+  return text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+}
+
+/** Build a connection payload from the form (cluster forces db 0) */
+function formData() {
+  return {
+    name: form.value.name,
+    host: form.value.host,
+    port: form.value.port,
+    password: form.value.password,
+    db: form.value.cluster ? 0 : form.value.db,
+    ssl: form.value.ssl,
+    cluster: form.value.cluster,
+    nodes: form.value.cluster ? parseNodes(form.value.nodesText) : [],
+  };
+}
 
 function openNew() {
   editingId.value = null;
-  form.value = { name: "", host: "127.0.0.1", port: 6379, password: "", db: 0, ssl: false };
+  form.value = { name: "", host: "127.0.0.1", port: 6379, password: "", db: 0, ssl: false, cluster: false, nodesText: "" };
   usePassword.value = false;
   hadPassword.value = false;
   testResult.value = null;
@@ -68,7 +92,16 @@ function openNew() {
 
 function openEdit(conn: RedisConnection) {
   editingId.value = conn.id;
-  form.value = { name: conn.name, host: conn.host, port: conn.port, password: "", db: conn.db, ssl: conn.ssl };
+  form.value = {
+    name: conn.name,
+    host: conn.host,
+    port: conn.port,
+    password: "",
+    db: conn.db,
+    ssl: conn.ssl,
+    cluster: conn.cluster ?? false,
+    nodesText: (conn.nodes ?? []).join("\n"),
+  };
   usePassword.value = conn.hasPassword || !!conn.password;
   hadPassword.value = conn.hasPassword || !!conn.password;
   testResult.value = null;
@@ -83,7 +116,7 @@ async function saveForm() {
   }
   savingForm.value = true;
   try {
-    const data = { ...form.value };
+    const data = formData();
     if (!usePassword.value) {
       data.password = "";
     }
@@ -129,7 +162,7 @@ async function handleFormTest() {
     const editId = usePassword.value && editingId.value && !form.value.password
       ? editingId.value
       : null;
-    const ok = await connStore.testFormConnection(form.value, editId);
+    const ok = await connStore.testFormConnection(formData(), editId);
     if (!formTesting.value) return; // cancelled
     formTesting.value = false;
     testResult.value = ok ? "success" : "error";
@@ -311,7 +344,8 @@ function statusColor(status: string) {
 
         <!-- Info -->
         <div class="flex items-center gap-3 mb-4 text-xs text-text-muted">
-          <span>DB{{ conn.db }}</span>
+          <span v-if="conn.cluster" class="badge bg-redis/10 text-redis">Cluster</span>
+          <span v-else>DB{{ conn.db }}</span>
           <span v-if="conn.ssl" class="badge bg-info/10 text-info">SSL</span>
           <span v-if="conn.hasPassword || conn.password" class="badge bg-danger/10 text-danger">Auth</span>
         </div>
@@ -390,15 +424,48 @@ function statusColor(status: string) {
               <label class="block text-xs font-medium text-text-secondary mb-1.5">{{ t("connection.name") }}</label>
               <input v-model="form.name" maxlength="50" class="w-full px-3 py-2 text-sm border border-border rounded-lg bg-bg-primary focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20" />
             </div>
+            <!-- Standalone / Cluster mode switch -->
+            <div>
+              <label class="block text-xs font-medium text-text-secondary mb-1.5">{{ t("connection.mode") }}</label>
+              <div class="inline-flex p-0.5 bg-bg-primary border border-border rounded-lg">
+                <button
+                  type="button"
+                  @click="form.cluster = false"
+                  class="px-3 py-1 text-xs font-medium rounded-md transition-colors"
+                  :class="!form.cluster ? 'bg-redis text-white shadow-sm' : 'text-text-muted hover:text-text-secondary'"
+                >
+                  {{ t("connection.standalone") }}
+                </button>
+                <button
+                  type="button"
+                  @click="form.cluster = true"
+                  class="px-3 py-1 text-xs font-medium rounded-md transition-colors"
+                  :class="form.cluster ? 'bg-redis text-white shadow-sm' : 'text-text-muted hover:text-text-secondary'"
+                >
+                  {{ t("connection.cluster") }}
+                </button>
+              </div>
+            </div>
             <div class="grid grid-cols-3 gap-3">
               <div class="col-span-2">
-                <label class="block text-xs font-medium text-text-secondary mb-1.5">{{ t("connection.host") }}</label>
+                <label class="block text-xs font-medium text-text-secondary mb-1.5">{{ form.cluster ? t("connection.seedHost") : t("connection.host") }}</label>
                 <input v-model="form.host" class="w-full px-3 py-2 text-sm border border-border rounded-lg bg-bg-primary focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20" />
               </div>
               <div>
                 <label class="block text-xs font-medium text-text-secondary mb-1.5">{{ t("connection.port") }}</label>
                 <input v-model.number="form.port" type="number" class="w-full px-3 py-2 text-sm border border-border rounded-lg bg-bg-primary focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20" />
               </div>
+            </div>
+            <!-- Extra seed nodes (cluster only) -->
+            <div v-if="form.cluster">
+              <label class="block text-xs font-medium text-text-secondary mb-1.5">{{ t("connection.seedNodes") }}</label>
+              <textarea
+                v-model="form.nodesText"
+                rows="3"
+                :placeholder="t('connection.seedNodesPlaceholder')"
+                class="w-full px-3 py-2 text-sm border border-border rounded-lg bg-bg-primary focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20 font-mono resize-y"
+              ></textarea>
+              <p class="text-[11px] text-text-muted mt-1">{{ t("connection.clusterNoDb") }}</p>
             </div>
             <div>
               <div class="flex items-center justify-between mb-1.5">
@@ -425,7 +492,7 @@ function statusColor(status: string) {
               />
             </div>
             <div class="grid grid-cols-2 gap-3">
-              <div>
+              <div v-if="!form.cluster">
                 <label class="block text-xs font-medium text-text-secondary mb-1.5">{{ t("connection.db") }}</label>
                 <input v-model.number="form.db" type="number" min="0" max="15" class="w-full px-3 py-2 text-sm border border-border rounded-lg bg-bg-primary focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20" />
               </div>

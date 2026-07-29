@@ -55,7 +55,10 @@ async fn create_pubsub(
             .iter()
             .find(|c| c.id == connection_id)
             .ok_or_else(|| format!("Connection not found: {}", connection_id))?;
-        (conn.host.clone(), conn.port, conn.password.clone(), conn.db, conn.ssl)
+        // Cluster has no multi-DB; subscribing on the first seed node is enough
+        // for regular (broadcast) pub/sub messages.
+        let db = if conn.cluster { 0 } else { conn.db };
+        (conn.host.clone(), conn.port, conn.password.clone(), db, conn.ssl)
     };
 
     let url = build_redis_url(&host, port, &password, db, ssl);
@@ -112,7 +115,7 @@ pub async fn pubsub_publish(
     let num_subscribers: isize = redis::cmd("PUBLISH")
         .arg(&channel)
         .arg(&message)
-        .query_async(&mut *conn)
+        .query_async(&mut conn)
         .await
         .map_err(|e| format!("Publish error: {}", e))?;
 
@@ -240,20 +243,28 @@ pub async fn pubsub_list_channels(
     };
     let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
 
-    let channels: Vec<String> = if let Some(p) = pattern {
-        redis::cmd("PUBSUB")
-            .arg("CHANNELS")
-            .arg(&p)
-            .query_async(&mut *conn)
-            .await
-            .map_err(|e| format!("List channels error: {}", e))?
-    } else {
-        redis::cmd("PUBSUB")
-            .arg("CHANNELS")
-            .query_async(&mut *conn)
-            .await
-            .map_err(|e| format!("List channels error: {}", e))?
-    };
+    let mut cmd = redis::cmd("PUBSUB");
+    cmd.arg("CHANNELS");
+    if let Some(ref p) = pattern {
+        cmd.arg(p);
+    }
+
+    // Cluster: PUBSUB CHANNELS is node-local; union the results of all nodes
+    if let Some(cluster) = conn.as_cluster() {
+        let values = crate::core::cluster::per_node_values(cluster, &cmd).await?;
+        let mut set = std::collections::BTreeSet::new();
+        for (_addr, value) in values {
+            let chans: Vec<String> = redis::from_redis_value(&value)
+                .map_err(|e| format!("List channels error: {}", e))?;
+            set.extend(chans);
+        }
+        return Ok(set.into_iter().collect());
+    }
+
+    let channels: Vec<String> = cmd
+        .query_async(&mut conn)
+        .await
+        .map_err(|e| format!("List channels error: {}", e))?;
 
     Ok(channels)
 }
@@ -274,10 +285,23 @@ pub async fn pubsub_num_subs(
     };
     let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
 
-    let result: HashMap<String, usize> = redis::cmd("PUBSUB")
-        .arg("NUMSUB")
-        .arg(&channel)
-        .query_async(&mut *conn)
+    let mut cmd = redis::cmd("PUBSUB");
+    cmd.arg("NUMSUB").arg(&channel);
+
+    // Cluster: PUBSUB NUMSUB is node-local; sum subscriber counts across nodes
+    if let Some(cluster) = conn.as_cluster() {
+        let values = crate::core::cluster::per_node_values(cluster, &cmd).await?;
+        let mut total = 0usize;
+        for (_addr, value) in values {
+            let result: HashMap<String, usize> = redis::from_redis_value(&value)
+                .map_err(|e| format!("Num subs error: {}", e))?;
+            total += result.get(&channel).copied().unwrap_or(0);
+        }
+        return Ok(total);
+    }
+
+    let result: HashMap<String, usize> = cmd
+        .query_async(&mut conn)
         .await
         .map_err(|e| format!("Num subs error: {}", e))?;
 

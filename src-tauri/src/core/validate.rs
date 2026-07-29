@@ -233,6 +233,26 @@ pub fn validate_connection_config(
     Ok(())
 }
 
+const MAX_CLUSTER_NODES: usize = 32;
+
+/// Validate extra cluster seed node addresses (`host:port` format).
+pub fn validate_cluster_nodes(nodes: &[String]) -> Result<(), String> {
+    if nodes.len() > MAX_CLUSTER_NODES {
+        return Err(format!("too many cluster nodes (max {})", MAX_CLUSTER_NODES));
+    }
+    for node in nodes {
+        reject_null_bytes(node, "node")?;
+        if node.len() > MAX_HOST_LEN + 6 {
+            return Err(format!("cluster node address too long: {}", node));
+        }
+        match crate::core::pool::parse_node_addr(node) {
+            Some((_, port)) if port > 0 => {}
+            _ => return Err(format!("invalid cluster node address (expected host:port): {}", node)),
+        }
+    }
+    Ok(())
+}
+
 /// Validate the count parameter for SCAN commands.
 pub fn validate_scan_count(count: u64) -> Result<(), String> {
     if count == 0 {

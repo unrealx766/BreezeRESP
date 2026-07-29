@@ -108,8 +108,16 @@ const colorMap = {
         />
         <span class="text-sm font-medium text-text-primary truncate max-w-[40%]" :title="connStore.activeConnection.name">{{ connStore.activeConnection.name }}</span>
         <span class="text-xs text-text-muted whitespace-nowrap shrink-0">{{ connStore.activeConnection.host }}:{{ connStore.activeConnection.port }}</span>
+        <!-- Cluster badge (no DB switching in cluster mode) -->
+        <span
+          v-if="connStore.activeConnection.status === 'connected' && connStore.activeConnection.cluster"
+          class="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-mono font-semibold text-redis bg-redis/5 border border-redis/20 rounded-lg shrink-0"
+        >
+          <Database :size="11" class="shrink-0" />
+          <span>Cluster</span>
+        </span>
         <!-- DB switcher -->
-        <div v-if="connStore.activeConnection.status === 'connected'" class="relative shrink-0">
+        <div v-else-if="connStore.activeConnection.status === 'connected'" class="relative shrink-0">
           <button
             @click="toggleDbDropdown"
             :disabled="switchingDb"

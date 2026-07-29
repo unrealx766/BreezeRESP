@@ -82,7 +82,7 @@ pub fn format_for_display(raw: &str, key_type: &str) -> String {
 /// Used for storage, comparison, and rollback — must be stable/deterministic.
 /// Accepts pre-fetched type to avoid redundant TYPE call.
 pub async fn get_key_value_string_with_type(
-    conn: &mut deadpool_redis::Connection,
+    conn: &mut (impl redis::aio::ConnectionLike + Send),
     key: &str,
     type_str: &str,
 ) -> Option<String> {
@@ -128,7 +128,7 @@ pub async fn get_key_value_string_with_type(
                 .arg(0)
                 .arg(-1)
                 .arg("WITHSCORES")
-                .query_async(&mut **conn)
+                .query_async(&mut *conn)
                 .await
                 .ok()?;
             members.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal).then(a.0.cmp(&b.0)));

@@ -1,4 +1,4 @@
-use crate::core::validate::{validate_connection_config, validate_connection_id};
+use crate::core::validate::{validate_cluster_nodes, validate_connection_config, validate_connection_id};
 use crate::AppState;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -19,6 +19,12 @@ pub struct ConnectionConfig {
     pub ssl: bool,
     #[serde(default)]
     pub pinned: bool,
+    /// Redis Cluster mode (multi-DB is unavailable; db is always 0)
+    #[serde(default)]
+    pub cluster: bool,
+    /// Extra cluster seed nodes (`host:port`), beyond the primary host/port
+    #[serde(default)]
+    pub nodes: Vec<String>,
     /// When true and password is empty, look up the saved password from config_store
     #[serde(default)]
     pub use_saved_password: Option<bool>,
@@ -38,6 +44,8 @@ impl std::fmt::Debug for ConnectionConfig {
             .field("db", &self.db)
             .field("ssl", &self.ssl)
             .field("pinned", &self.pinned)
+            .field("cluster", &self.cluster)
+            .field("nodes", &self.nodes)
             .finish()
     }
 }
@@ -54,6 +62,12 @@ pub struct ConnectionInfo {
     pub status: String,
     #[serde(default)]
     pub pinned: bool,
+    /// Redis Cluster mode
+    #[serde(default)]
+    pub cluster: bool,
+    /// Extra cluster seed nodes (`host:port`)
+    #[serde(default)]
+    pub nodes: Vec<String>,
     /// Whether this connection has a password stored (for UI display)
     pub has_password: bool,
 }
@@ -66,6 +80,7 @@ pub async fn connect(
 ) -> Result<ConnectionInfo, String> {
     validate_connection_id(&config.id)?;
     validate_connection_config(&config.host, config.port, &config.name, &config.password)?;
+    validate_cluster_nodes(&config.nodes)?;
 
     // Resolve password: if keep_password is set and password is empty, look up from config_store
     let resolved_password = if config.password.is_empty() && config.keep_password.unwrap_or(false) {
@@ -94,7 +109,16 @@ pub async fn connect(
         } else {
             Some(resolved_password.as_str())
         };
-        pm.get_or_create(&config.id, &config.host, config.port, pw, config.db, config.ssl)?
+        pm.get_or_create(
+            &config.id,
+            &config.host,
+            config.port,
+            pw,
+            config.db,
+            config.ssl,
+            config.cluster,
+            &config.nodes,
+        )?
     };
 
     // Capture has_password before clearing, then zeroize
@@ -107,7 +131,7 @@ pub async fn connect(
         .await
         .map_err(|_| "Connection timed out. If using SSL/TLS, ensure the server supports TLS.".to_string())?
         .map_err(|e| format!("Pool get error: {}", e))?;
-    let _: String = tokio::time::timeout(CONN_TIMEOUT, redis::cmd("PING").query_async(&mut *conn))
+    let _: String = tokio::time::timeout(CONN_TIMEOUT, redis::cmd("PING").query_async(&mut conn))
         .await
         .map_err(|_| "PING timed out".to_string())?
         .map_err(|e| format!("PING failed: {}", e))?;
@@ -117,10 +141,12 @@ pub async fn connect(
         name: config.name,
         host: config.host,
         port: config.port,
-        db: config.db,
+        db: if config.cluster { 0 } else { config.db },
         ssl: config.ssl,
         status: "connected".to_string(),
         pinned: config.pinned,
+        cluster: config.cluster,
+        nodes: config.nodes,
         has_password,
     })
 }
@@ -135,6 +161,9 @@ pub async fn disconnect(state: State<'_, AppState>, id: String) -> Result<(), St
 
     // Tear down any active pubsub listener for this connection
     state.pubsub_manager.clear(&id);
+
+    // Drop any in-flight cluster scan state
+    state.cluster_scans.clear(&id);
 
     // Clear any pending sandbox state to prevent stale data leaking across connections
     let ss = state.shadow_store.lock().map_err(|e| e.to_string())?;
@@ -152,6 +181,7 @@ pub async fn test_connection(
 ) -> Result<bool, String> {
     validate_connection_id(&config.id)?;
     validate_connection_config(&config.host, config.port, &config.name, &config.password)?;
+    validate_cluster_nodes(&config.nodes)?;
 
     let test_id = format!("__test_{}", config.id);
 
@@ -177,7 +207,16 @@ pub async fn test_connection(
     // Create temp pool
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
-        pm.get_or_create(&test_id, &config.host, config.port, pw, config.db, config.ssl)?
+        pm.get_or_create(
+            &test_id,
+            &config.host,
+            config.port,
+            pw,
+            config.db,
+            config.ssl,
+            config.cluster,
+            &config.nodes,
+        )?
     };
 
     // Clear password from memory after pool creation
@@ -190,7 +229,7 @@ pub async fn test_connection(
             .await
             .map_err(|_| "Connection timed out. If using SSL/TLS, ensure the server supports TLS.".to_string())?
             .map_err(|e| format!("Pool get error: {}", e))?;
-        let _: String = tokio::time::timeout(CONN_TIMEOUT, redis::cmd("PING").query_async(&mut *conn))
+        let _: String = tokio::time::timeout(CONN_TIMEOUT, redis::cmd("PING").query_async(&mut conn))
             .await
             .map_err(|_| "PING timed out".to_string())?
             .map_err(|e| format!("PING failed: {}", e))?;
@@ -223,6 +262,8 @@ pub async fn get_connections(state: State<'_, AppState>) -> Result<Vec<Connectio
             ssl: c.ssl,
             status: "disconnected".to_string(),
             pinned: c.pinned,
+            cluster: c.cluster,
+            nodes: c.nodes,
             has_password: !c.password.is_empty(),
         })
         .collect())
@@ -236,6 +277,7 @@ pub async fn save_connection(
 ) -> Result<(), String> {
     validate_connection_id(&config.id)?;
     validate_connection_config(&config.host, config.port, &config.name, &config.password)?;
+    validate_cluster_nodes(&config.nodes)?;
 
     let cs = state.config_store.lock().map_err(|e| e.to_string())?;
     let mut connections = cs.load()?;
@@ -258,9 +300,11 @@ pub async fn save_connection(
         host: config.host,
         port: config.port,
         password,
-        db: config.db,
+        db: if config.cluster { 0 } else { config.db },
         ssl: config.ssl,
         pinned: config.pinned,
+        cluster: config.cluster,
+        nodes: config.nodes,
     };
 
     if let Some(idx) = connections.iter().position(|c| c.id == config.id) {
@@ -289,6 +333,9 @@ pub async fn switch_db(
             .iter()
             .find(|c| c.id == id)
             .ok_or_else(|| format!("Connection not found: {}", id))?;
+        if conn.cluster {
+            return Err("Cluster mode does not support database switching".to_string());
+        }
         (conn.host.clone(), conn.port, conn.password.clone(), conn.ssl)
     };
 
@@ -305,7 +352,7 @@ pub async fn switch_db(
     let pw = if password.is_empty() { None } else { Some(password.as_str()) };
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
-        pm.get_or_create(&id, &host, port, pw, db, ssl)?
+        pm.get_or_create(&id, &host, port, pw, db, ssl, false, &[])?
     };
 
     // Zeroize password from memory after pool creation
@@ -317,7 +364,7 @@ pub async fn switch_db(
         .await
         .map_err(|_| "Connection timed out. If using SSL/TLS, ensure the server supports TLS.".to_string())?
         .map_err(|e| format!("Pool get error: {}", e))?;
-    let _: String = tokio::time::timeout(CONN_TIMEOUT, redis::cmd("PING").query_async(&mut *conn))
+    let _: String = tokio::time::timeout(CONN_TIMEOUT, redis::cmd("PING").query_async(&mut conn))
         .await
         .map_err(|_| "PING timed out".to_string())?
         .map_err(|e| format!("PING failed: {}", e))?;
@@ -338,6 +385,9 @@ pub async fn delete_connection(state: State<'_, AppState>, id: String) -> Result
 
     // Tear down any active pubsub listener for this connection
     state.pubsub_manager.clear(&id);
+
+    // Drop any in-flight cluster scan state
+    state.cluster_scans.clear(&id);
 
     // Clear any pending sandbox state
     {

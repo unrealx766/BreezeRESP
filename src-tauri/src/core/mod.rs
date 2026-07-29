@@ -1,4 +1,5 @@
 pub mod pool;
+pub mod cluster;
 pub mod metrics;
 pub mod config_store;
 pub mod pipeline_store;

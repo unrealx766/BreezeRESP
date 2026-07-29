@@ -304,31 +304,65 @@ pub async fn scan_keys(
     };
     let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
 
-    // SCAN to get keys - parse as raw Value for robust handling
-    let scan_val: redis::Value = redis::cmd("SCAN")
-        .arg(cursor)
-        .arg("MATCH")
-        .arg(&pattern)
-        .arg("COUNT")
-        .arg(count)
-        .query_async(&mut *conn)
-        .await
-        .map_err(|e| format!("SCAN error: {}", e))?;
+    let (next_cursor, keys) = if let Some(cluster) = conn.as_cluster() {
+        // Cluster: iterate every master node via the scan state machine
+        state
+            .cluster_scans
+            .scan_step(&connection_id, cluster, cursor, &pattern, count)
+            .await?
+    } else {
+        // SCAN to get keys - parse as raw Value for robust handling
+        let scan_val: redis::Value = redis::cmd("SCAN")
+            .arg(cursor)
+            .arg("MATCH")
+            .arg(&pattern)
+            .arg("COUNT")
+            .arg(count)
+            .query_async(&mut conn)
+            .await
+            .map_err(|e| format!("SCAN error: {}", e))?;
 
-    // Parse SCAN response: [cursor, [keys...]]
-    let elements = match scan_val {
-        redis::Value::Array(items) if items.len() == 2 => items,
-        _ => return Err(format!("Unexpected SCAN response format: {:?}", scan_val)),
+        // Parse SCAN response: [cursor, [keys...]]
+        let elements = match scan_val {
+            redis::Value::Array(items) if items.len() == 2 => items,
+            _ => return Err(format!("Unexpected SCAN response format: {:?}", scan_val)),
+        };
+
+        let next_cursor: u64 = redis::from_redis_value(&elements[0])
+            .map_err(|e| format!("Failed to parse SCAN cursor: {}", e))?;
+        let keys: Vec<String> = redis::from_redis_value(&elements[1])
+            .map_err(|e| format!("Failed to parse SCAN keys: {}", e))?;
+        (next_cursor, keys)
     };
-
-    let next_cursor: u64 = redis::from_redis_value(&elements[0])
-        .map_err(|e| format!("Failed to parse SCAN cursor: {}", e))?;
-    let keys: Vec<String> = redis::from_redis_value(&elements[1])
-        .map_err(|e| format!("Failed to parse SCAN keys: {}", e))?;
 
     let mut result = Vec::with_capacity(keys.len());
 
     if keys.is_empty() {
+        return Ok((next_cursor, result));
+    }
+
+    // Cluster: cross-key pipelines can hit CROSSSLOT errors; query metadata per key
+    if pool.is_cluster() {
+        for key in &keys {
+            let type_str: String = redis::cmd("TYPE")
+                .arg(key)
+                .query_async(&mut conn)
+                .await
+                .unwrap_or_else(|_| "none".to_string());
+            let ttl: i64 = conn.ttl(key).await.unwrap_or(-1);
+            let size: u64 = redis::cmd("MEMORY")
+                .arg("USAGE")
+                .arg(key)
+                .query_async(&mut conn)
+                .await
+                .unwrap_or(0);
+            result.push(RedisKeyInfo {
+                key: key.clone(),
+                key_type: type_str,
+                ttl,
+                size,
+            });
+        }
         return Ok((next_cursor, result));
     }
 
@@ -344,7 +378,7 @@ pub async fn scan_keys(
     let n = keys.len();
     let expected = 2 * n;
     let values: Vec<redis::Value> = pipe
-        .query_async(&mut *conn)
+        .query_async(&mut conn)
         .await
         .unwrap_or_default();
 
@@ -354,14 +388,14 @@ pub async fn scan_keys(
         for key in &keys {
             let type_str: String = redis::cmd("TYPE")
                 .arg(key)
-                .query_async(&mut *conn)
+                .query_async(&mut conn)
                 .await
                 .unwrap_or_else(|_| "none".to_string());
             let ttl: i64 = conn.ttl(key).await.unwrap_or(-1);
             let size: u64 = redis::cmd("MEMORY")
                 .arg("USAGE")
                 .arg(key)
-                .query_async(&mut *conn)
+                .query_async(&mut conn)
                 .await
                 .unwrap_or(0);
             result.push(RedisKeyInfo {
@@ -381,7 +415,7 @@ pub async fn scan_keys(
             size_pipe.cmd("MEMORY").arg("USAGE").arg(key);
         }
         let size_vals: Vec<redis::Value> = size_pipe
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .unwrap_or_default();
         if size_vals.len() == n {
@@ -450,7 +484,7 @@ pub async fn get_key_detail(
             .cmd("TTL").arg(&key)
             .cmd("OBJECT").arg("ENCODING").arg(&key);
         let values: Vec<redis::Value> = pipe
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(|e| format!("Pipeline error: {}", e))?;
 
@@ -469,16 +503,16 @@ pub async fn get_key_detail(
     let size: u64 = redis::cmd("MEMORY")
         .arg("USAGE")
         .arg(&key)
-        .query_async(&mut *conn)
+        .query_async(&mut conn)
         .await
         .unwrap_or(0);
 
     // Step 2: Send only the matching count command (avoids WRONGTYPE errors)
     let total_count: usize = match type_str.as_str() {
-        "hash" => redis::cmd("HLEN").arg(&key).query_async(&mut *conn).await.unwrap_or(0),
-        "list" => redis::cmd("LLEN").arg(&key).query_async(&mut *conn).await.unwrap_or(0),
-        "set" => redis::cmd("SCARD").arg(&key).query_async(&mut *conn).await.unwrap_or(0),
-        "zset" => redis::cmd("ZCARD").arg(&key).query_async(&mut *conn).await.unwrap_or(0),
+        "hash" => redis::cmd("HLEN").arg(&key).query_async(&mut conn).await.unwrap_or(0),
+        "list" => redis::cmd("LLEN").arg(&key).query_async(&mut conn).await.unwrap_or(0),
+        "set" => redis::cmd("SCARD").arg(&key).query_async(&mut conn).await.unwrap_or(0),
+        "zset" => redis::cmd("ZCARD").arg(&key).query_async(&mut conn).await.unwrap_or(0),
         _ => 0,
     };
 
@@ -514,7 +548,7 @@ pub async fn get_key_detail(
                     .arg(cursor)
                     .arg("COUNT")
                     .arg(1000)
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .map_err(|e| format!("HSCAN error: {}", e))?;
                 for (f, v) in batch {
@@ -556,7 +590,7 @@ pub async fn get_key_detail(
                         .arg(chunk.iter().map(|(f, _)| f.as_slice()).collect::<Vec<_>>());
                 }
                 let ttl_vals: Vec<redis::Value> = ttl_pipe
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .unwrap_or_default();
                 // Flatten all batch results into a single Vec<i64>
@@ -647,7 +681,7 @@ pub async fn get_key_detail(
                     .arg(cursor)
                     .arg("COUNT")
                     .arg(1000)
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .map_err(|e| format!("SSCAN error: {}", e))?;
                 for m in batch {
@@ -691,7 +725,7 @@ pub async fn get_key_detail(
                     .arg(cursor)
                     .arg("COUNT")
                     .arg(1000)
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .map_err(|e| format!("ZSCAN error: {}", e))?;
                 for (m, s) in batch {
@@ -755,7 +789,7 @@ pub async fn delete_key(
     let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
     let deleted: i64 = redis::cmd("DEL")
         .arg(&key)
-        .query_async(&mut *conn)
+        .query_async(&mut conn)
         .await
         .map_err(|e| format!("DEL error: {}", e))?;
     Ok(deleted > 0)
@@ -792,7 +826,7 @@ pub async fn set_hash_field_ttl(
             .arg("FIELDS")
             .arg(1)
             .arg(&field)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(|e| format!("HEXPIRE error: {}", e))?;
         // HEXPIRE returns 1 on success, 0 if field doesn't exist
@@ -804,7 +838,7 @@ pub async fn set_hash_field_ttl(
             .arg("FIELDS")
             .arg(1)
             .arg(&field)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(|e| format!("HPERSIST error: {}", e))?;
         Ok(result > 0)
@@ -835,14 +869,14 @@ pub async fn set_key_ttl(
         let result: bool = redis::cmd("EXPIRE")
             .arg(&key)
             .arg(ttl)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(|e| format!("EXPIRE error: {}", e))?;
         Ok(result)
     } else if ttl == -1 {
         let result: bool = redis::cmd("PERSIST")
             .arg(&key)
-            .query_async(&mut *conn)
+            .query_async(&mut conn)
             .await
             .map_err(|e| format!("PERSIST error: {}", e))?;
         Ok(result)
@@ -871,7 +905,7 @@ pub async fn rename_key(
     let _: () = redis::cmd("RENAME")
         .arg(&old_key)
         .arg(&new_key)
-        .query_async(&mut *conn)
+        .query_async(&mut conn)
         .await
         .map_err(|e| format!("RENAME error: {}", e))?;
     Ok(true)
@@ -890,8 +924,14 @@ pub async fn db_size(
         pm.get_pool(&connection_id)?
     };
     let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
+
+    // Cluster: DBSIZE only reflects one node; sum across all masters
+    if let Some(cluster) = conn.as_cluster() {
+        return crate::core::cluster::sum_on_all_masters(cluster, &redis::cmd("DBSIZE")).await;
+    }
+
     let size: u64 = redis::cmd("DBSIZE")
-        .query_async(&mut *conn)
+        .query_async(&mut conn)
         .await
         .map_err(|e| format!("DBSIZE error: {}", e))?;
     Ok(size)
@@ -945,7 +985,7 @@ pub async fn set_value(
                 let _: () = redis::cmd("SET")
                     .arg(&key)
                     .arg(&val)
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .map_err(|e| format!("SET error: {}", e))?;
                 Ok(true)
@@ -957,7 +997,7 @@ pub async fn set_value(
                     .arg(&key)
                     .arg(&f)
                     .arg(&val)
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .map_err(|e| format!("HSET error: {}", e))?;
                 Ok(true)
@@ -969,7 +1009,7 @@ pub async fn set_value(
                     .arg(&key)
                     .arg(idx)
                     .arg(&val)
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .map_err(|e| format!("LSET error: {}", e))?;
                 Ok(true)
@@ -981,13 +1021,13 @@ pub async fn set_value(
                 let _: i64 = redis::cmd("SREM")
                     .arg(&key)
                     .arg(&old)
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .map_err(|e| format!("SREM error: {}", e))?;
                 let _: i64 = redis::cmd("SADD")
                     .arg(&key)
                     .arg(&new_val)
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .map_err(|e| format!("SADD error: {}", e))?;
                 Ok(true)
@@ -1001,7 +1041,7 @@ pub async fn set_value(
                     let _: i64 = redis::cmd("ZREM")
                         .arg(&key)
                         .arg(old_member)
-                        .query_async(&mut *conn)
+                        .query_async(&mut conn)
                         .await
                         .map_err(|e| format!("ZREM error: {}", e))?;
                 }
@@ -1009,7 +1049,7 @@ pub async fn set_value(
                     .arg(&key)
                     .arg(s)
                     .arg(&new_member)
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .map_err(|e| format!("ZADD error: {}", e))?;
                 Ok(true)
@@ -1022,7 +1062,7 @@ pub async fn set_value(
                 let _: i64 = redis::cmd("HDEL")
                     .arg(&key)
                     .arg(&f)
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .map_err(|e| format!("HDEL error: {}", e))?;
                 Ok(true)
@@ -1033,7 +1073,7 @@ pub async fn set_value(
                     .arg(&key)
                     .arg(1)
                     .arg(&val)
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .map_err(|e| format!("LREM error: {}", e))?;
                 Ok(true)
@@ -1043,7 +1083,7 @@ pub async fn set_value(
                 let _: i64 = redis::cmd("SREM")
                     .arg(&key)
                     .arg(&val)
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .map_err(|e| format!("SREM error: {}", e))?;
                 Ok(true)
@@ -1053,7 +1093,7 @@ pub async fn set_value(
                 let _: i64 = redis::cmd("ZREM")
                     .arg(&key)
                     .arg(&member)
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .map_err(|e| format!("ZREM error: {}", e))?;
                 Ok(true)
@@ -1068,7 +1108,7 @@ pub async fn set_value(
                     .arg(&key)
                     .arg(&f)
                     .arg(&val)
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .map_err(|e| format!("HSET error: {}", e))?;
                 Ok(true)
@@ -1078,7 +1118,7 @@ pub async fn set_value(
                 let _: i64 = redis::cmd("RPUSH")
                     .arg(&key)
                     .arg(&val)
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .map_err(|e| format!("RPUSH error: {}", e))?;
                 Ok(true)
@@ -1088,7 +1128,7 @@ pub async fn set_value(
                 let _: i64 = redis::cmd("SADD")
                     .arg(&key)
                     .arg(&val)
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .map_err(|e| format!("SADD error: {}", e))?;
                 Ok(true)
@@ -1100,7 +1140,7 @@ pub async fn set_value(
                     .arg(&key)
                     .arg(s)
                     .arg(&member)
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .map_err(|e| format!("ZADD error: {}", e))?;
                 Ok(true)
@@ -1118,7 +1158,7 @@ pub async fn set_value(
                 let exists: bool = redis::cmd("HEXISTS")
                     .arg(&key)
                     .arg(&new_field)
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .map_err(|e| format!("HEXISTS error: {}", e))?;
                 if exists {
@@ -1128,7 +1168,7 @@ pub async fn set_value(
                 let val: Option<Vec<u8>> = redis::cmd("HGET")
                     .arg(&key)
                     .arg(&old_field)
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .map_err(|e| format!("HGET error: {}", e))?;
                 let val = val.ok_or("Source field does not exist".to_string())?;
@@ -1137,7 +1177,7 @@ pub async fn set_value(
                 pipe.cmd("HDEL").arg(&key).arg(&old_field);
                 pipe.cmd("HSET").arg(&key).arg(&new_field).arg(val);
                 let _: Vec<redis::Value> = pipe
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .map_err(|e| format!("Rename field pipeline error: {}", e))?;
                 Ok(true)
@@ -1196,7 +1236,7 @@ pub async fn create_key(
                     cmd.arg("EX").arg(t);
                 }
             }
-            let _: () = cmd.query_async(&mut *conn).await.map_err(|e| format!("SET error: {}", e))?;
+            let _: () = cmd.query_async(&mut conn).await.map_err(|e| format!("SET error: {}", e))?;
         }
         "hash" => {
             // Accept [[field, value], ...] or {field: value, ...}
@@ -1245,7 +1285,7 @@ pub async fn create_key(
                     pipe.cmd("EXPIRE").arg(&key).arg(t);
                 }
             }
-            let _: Vec<redis::Value> = pipe.query_async(&mut *conn).await.map_err(|e| format!("HSET error: {}", e))?;
+            let _: Vec<redis::Value> = pipe.query_async(&mut conn).await.map_err(|e| format!("HSET error: {}", e))?;
             // Set field TTL for hash fields (Redis >= 7.4)
             if let Some(fttl) = field_ttl {
                 if fttl > 0 && !pairs.is_empty() {
@@ -1256,7 +1296,7 @@ pub async fn create_key(
                         .arg("FIELDS")
                         .arg(fields.len())
                         .arg(&fields)
-                        .query_async(&mut *conn)
+                        .query_async(&mut conn)
                         .await
                         .map_err(|e| format!("HEXPIRE error: {}", e))?;
                 }
@@ -1285,7 +1325,7 @@ pub async fn create_key(
                     pipe.cmd("EXPIRE").arg(&key).arg(t);
                 }
             }
-            let _: Vec<redis::Value> = pipe.query_async(&mut *conn).await.map_err(|e| format!("RPUSH error: {}", e))?;
+            let _: Vec<redis::Value> = pipe.query_async(&mut conn).await.map_err(|e| format!("RPUSH error: {}", e))?;
         }
         "set" => {
             let members: Vec<String> = match initial_data {
@@ -1310,7 +1350,7 @@ pub async fn create_key(
                     pipe.cmd("EXPIRE").arg(&key).arg(t);
                 }
             }
-            let _: Vec<redis::Value> = pipe.query_async(&mut *conn).await.map_err(|e| format!("SADD error: {}", e))?;
+            let _: Vec<redis::Value> = pipe.query_async(&mut conn).await.map_err(|e| format!("SADD error: {}", e))?;
         }
         "zset" => {
             // Accept [[member, score], ...]
@@ -1348,7 +1388,7 @@ pub async fn create_key(
                     pipe.cmd("EXPIRE").arg(&key).arg(t);
                 }
             }
-            let _: Vec<redis::Value> = pipe.query_async(&mut *conn).await.map_err(|e| format!("ZADD error: {}", e))?;
+            let _: Vec<redis::Value> = pipe.query_async(&mut conn).await.map_err(|e| format!("ZADD error: {}", e))?;
         }
         _ => return Err(format!("Unsupported key type: {}", key_type)),
     }
@@ -1414,7 +1454,7 @@ pub async fn batch_add_fields(
                 pipe.cmd("HSET").arg(&key).arg(f).arg(v);
             }
             let _: Vec<redis::Value> = pipe
-                .query_async(&mut *conn)
+                .query_async(&mut conn)
                 .await
                 .map_err(|e| format!("HSET error: {}", e))?;
             // Set field TTL if provided (Redis >= 7.4)
@@ -1427,7 +1467,7 @@ pub async fn batch_add_fields(
                         .arg("FIELDS")
                         .arg(fields.len())
                         .arg(&fields)
-                        .query_async(&mut *conn)
+                        .query_async(&mut conn)
                         .await
                         .map_err(|e| format!("HEXPIRE error: {}", e))?;
                 }
@@ -1454,7 +1494,7 @@ pub async fn batch_add_fields(
                     pipe.cmd("RPUSH").arg(&key).arg(v);
                 }
                 let _: Vec<redis::Value> = pipe
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .map_err(|e| format!("RPUSH error: {}", e))?;
             }
@@ -1478,7 +1518,7 @@ pub async fn batch_add_fields(
                 let _: i64 = redis::cmd("SADD")
                     .arg(&key)
                     .arg(&members)
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .map_err(|e| format!("SADD error: {}", e))?;
             }
@@ -1509,7 +1549,7 @@ pub async fn batch_add_fields(
                     pipe.cmd("ZADD").arg(&key).arg(s).arg(m);
                 }
                 let _: Vec<redis::Value> = pipe
-                    .query_async(&mut *conn)
+                    .query_async(&mut conn)
                     .await
                     .map_err(|e| format!("ZADD error: {}", e))?;
             }

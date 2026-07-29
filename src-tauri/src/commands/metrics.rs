@@ -18,5 +18,9 @@ pub async fn get_metrics(
     let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
 
     let collector = MetricsCollector::new();
-    collector.collect(&mut *conn).await
+    // Cluster: INFO is per-node; aggregate across all masters
+    if let Some(cluster) = conn.as_cluster() {
+        return collector.collect_cluster(cluster).await;
+    }
+    collector.collect(&mut conn).await
 }

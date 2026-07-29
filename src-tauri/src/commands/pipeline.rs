@@ -49,6 +49,50 @@ pub async fn execute_pipeline(
     };
     let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
 
+    // Cluster: an arbitrary command batch may span multiple slots, which a
+    // single pipeline cannot serve. Execute commands one by one instead
+    // (each individually timed; no atomicity in cluster mode).
+    if pool.is_cluster() {
+        let mut pipeline_results = Vec::with_capacity(commands.len());
+        let mut individual_sum = 0.0_f64;
+        let total_start = std::time::Instant::now();
+
+        for cmd in &commands {
+            let mut redis_cmd = redis::cmd(&cmd.command);
+            for arg in &cmd.args {
+                redis_cmd.arg(arg);
+            }
+            let start = std::time::Instant::now();
+            let res: Result<redis::Value, redis::RedisError> =
+                redis_cmd.query_async(&mut conn).await;
+            let elapsed = start.elapsed().as_secs_f64() * 1000.0;
+
+            let result = match res {
+                Ok(val) => PipelineResult {
+                    success: true,
+                    value: format_redis_value(&val),
+                    error: None,
+                    latency_ms: (elapsed * 100.0).round() / 100.0,
+                },
+                Err(e) => PipelineResult {
+                    success: false,
+                    value: String::new(),
+                    error: Some(e.to_string()),
+                    latency_ms: (elapsed * 100.0).round() / 100.0,
+                },
+            };
+            individual_sum += result.latency_ms;
+            pipeline_results.push(result);
+        }
+
+        let total_elapsed = total_start.elapsed().as_secs_f64() * 1000.0;
+        return Ok(PipelineResponse {
+            results: pipeline_results,
+            total_latency_ms: (total_elapsed * 100.0).round() / 100.0,
+            individual_sum_ms: (individual_sum * 100.0).round() / 100.0,
+        });
+    }
+
     let mut pipe = redis::pipe();
     for cmd in &commands {
         let mut pipeline_cmd = redis::cmd(&cmd.command);
@@ -60,7 +104,7 @@ pub async fn execute_pipeline(
 
     let start = std::time::Instant::now();
     let results: Vec<redis::Value> = pipe
-        .query_async(&mut *conn)
+        .query_async(&mut conn)
         .await
         .map_err(|e| format!("Pipeline execution error: {}", e))?;
     let total_elapsed = start.elapsed().as_secs_f64() * 1000.0;

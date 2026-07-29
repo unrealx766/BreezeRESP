@@ -188,6 +188,7 @@ function resetDrag() {
           {{ t("pipeline.title") }}
         </h2>
         <p class="text-sm text-text-muted mt-1">{{ t("pipeline.commandsQueued", { count: pipeline.commandCount }) }}</p>
+        <p v-if="connStore.activeConnection?.cluster" class="text-xs text-warning mt-1">{{ t("pipeline.clusterHint") }}</p>
       </div>
       <div class="flex items-center gap-2 flex-wrap">
         <button @click="openSaveDialog()" :disabled="pipeline.commandCount === 0 || !isConnected"
