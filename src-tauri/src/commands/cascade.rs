@@ -476,26 +476,29 @@ pub async fn get_key_detail(
     };
     let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
 
-    // Step 1: TYPE + TTL + OBJECT ENCODING (safe commands, 1 round-trip)
+    // Step 1: TYPE + TTL + OBJECT ENCODING (separate commands for cluster compatibility)
     // MEMORY USAGE is queried separately because it doesn't exist on Redis < 4.0
     let (type_str, ttl, encoding) = {
-        let mut pipe = redis::pipe();
-        pipe.cmd("TYPE").arg(&key)
-            .cmd("TTL").arg(&key)
-            .cmd("OBJECT").arg("ENCODING").arg(&key);
-        let values: Vec<redis::Value> = pipe
+        // Execute in separate calls to avoid CrossSlot errors in cluster mode
+        let type_str: String = redis::cmd("TYPE")
+            .arg(&key)
             .query_async(&mut conn)
             .await
-            .map_err(|e| format!("Pipeline error: {}", e))?;
-
-        if values.len() < 3 {
-            return Err(format!("Failed to get key metadata: expected 3 results, got {}", values.len()));
-        }
-
-        let type_str: String = redis::from_redis_value(&values[0])
             .map_err(|e| format!("TYPE error: {}", e))?;
-        let ttl: i64 = redis::from_redis_value(&values[1]).unwrap_or(-1);
-        let encoding: String = redis::from_redis_value(&values[2]).unwrap_or_else(|_| "unknown".to_string());
+        
+        let ttl: i64 = redis::cmd("TTL")
+            .arg(&key)
+            .query_async(&mut conn)
+            .await
+            .unwrap_or(-1);
+        
+        let encoding: String = redis::cmd("OBJECT")
+            .arg("ENCODING")
+            .arg(&key)
+            .query_async(&mut conn)
+            .await
+            .unwrap_or_else(|_| "unknown".to_string());
+        
         (type_str, ttl, encoding)
     };
 

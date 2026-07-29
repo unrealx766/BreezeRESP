@@ -1016,10 +1016,13 @@ onBeforeUnmount(() => {
             <button
               @click="toggleTypeDropdown"
               :disabled="!isConnected"
-              class="w-full px-3 py-1 text-[11px] font-mono font-semibold text-redis bg-redis/5 border border-redis/20 rounded-lg hover:border-redis/40 focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20 transition-colors disabled:opacity-50 inline-flex items-center justify-between gap-1"
+              class="w-full px-3 py-1 text-[11px] font-mono font-semibold transition-colors inline-flex items-center justify-between gap-1 disabled:opacity-50 border border-border rounded-lg hover:border-border-light focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20"
+              :class="cascade.typeFilter === 'all'
+                ? 'text-text-secondary bg-bg-primary' 
+                : `text-type-${cascade.typeFilter} bg-type-${cascade.typeFilter}/10 hover:bg-type-${cascade.typeFilter}/20`"
             >
-              <span>{{ capitalizeFirst(cascade.typeFilter) }}</span>
-              <ChevronDown :size="11" class="text-redis/50 transition-transform" :class="showTypeDropdown ? 'rotate-180' : ''" />
+              <span>{{ cascade.typeFilter === 'all' ? t('browser.allTypes') : capitalizeFirst(cascade.typeFilter) }}</span>
+              <ChevronDown :size="11" class="shrink-0 text-redis/50 transition-transform" :class="showTypeDropdown ? 'rotate-180' : ''" />
             </button>
             <!-- Backdrop -->
             <div v-if="showTypeDropdown" class="fixed inset-0 z-40" @click="savedTypeScrollTop = typeDropdownEl?.scrollTop ?? 0; showTypeDropdown = false" />
@@ -1041,7 +1044,7 @@ onBeforeUnmount(() => {
                   ? 'text-redis font-semibold bg-redis/5'
                   : 'text-text-secondary font-medium hover:bg-bg-hover hover:text-text-primary'"
               >
-                <span>{{ capitalizeFirst(type) }}</span>
+                <span>{{ type === 'all' ? t('browser.allTypes') : capitalizeFirst(type) }}</span>
                 <Check v-if="cascade.typeFilter === type" :size="11" class="text-redis" />
               </button>
             </div>
