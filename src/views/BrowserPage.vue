@@ -18,7 +18,7 @@ import {
   Search, RefreshCw, Trash2, Copy, Tag, Plus, Key,
   Type, Hash, List, CircleDot, BarChart3,
   AlertTriangle, X, Pencil, Save,
-  ChevronLeft, ChevronRight, Clock, Database, Code2,
+  ChevronLeft, ChevronRight, ChevronDown, Clock, Database, Code2, Check,
 } from "lucide-vue-next";
 
 const { t } = useI18n();
@@ -30,6 +30,37 @@ const metricsStore = useMetricsStore();
 const confirmDialog = ref<InstanceType<typeof ConfirmDialog>>();
 
 const isConnected = computed(() => connStore.activeConnection?.status === "connected");
+
+// Type filter dropdown state
+const showTypeDropdown = ref(false);
+const typeDropdownEl = ref<HTMLElement | null>(null);
+const savedTypeScrollTop = ref(0);
+const typeOptions = ["all", "string", "hash", "list", "set", "zset"] as const;
+type TypeOption = typeof typeOptions[number];
+
+function toggleTypeDropdown() {
+  if (showTypeDropdown.value) {
+    savedTypeScrollTop.value = typeDropdownEl.value?.scrollTop ?? 0;
+    showTypeDropdown.value = false;
+  } else {
+    showTypeDropdown.value = true;
+    nextTick(() => {
+      if (typeDropdownEl.value) {
+        typeDropdownEl.value.scrollTop = savedTypeScrollTop.value;
+      }
+    });
+  }
+}
+
+async function handleTypeSelect(type: TypeOption) {
+  cascade.typeFilter = type;
+  showTypeDropdown.value = false;
+}
+
+// Helper to capitalize first letter: "string" → "String", "all" → "All"
+function capitalizeFirst(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
 
 // Debounce search input: wait 300ms after user stops typing before triggering filter/scan
 let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -980,20 +1011,49 @@ onBeforeUnmount(() => {
             class="w-full pl-8 pr-3 py-1.5 text-xs bg-bg-primary border border-border rounded-lg focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20 disabled:opacity-50 disabled:cursor-not-allowed" />
         </div>
         <div class="flex items-center gap-2">
-          <select v-model="cascade.typeFilter" :disabled="!isConnected" class="flex-1 px-2 py-1.5 text-xs bg-bg-primary border border-border rounded-lg focus:outline-none focus:border-redis disabled:opacity-50 disabled:cursor-not-allowed">
-            <option value="all">{{ t("browser.allTypes") }}</option>
-            <option value="string">String</option>
-            <option value="hash">Hash</option>
-            <option value="list">List</option>
-            <option value="set">Set</option>
-            <option value="zset">ZSet</option>
-          </select>
-          <button @click="cascade.refreshKeys()" :disabled="!isConnected" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-bg-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-            <RefreshCw :size="14" :class="cascade.loading ? 'animate-spin' : ''" class="text-text-muted" />
-          </button>
-          <button @click="openNewKeyDialog" :disabled="!isConnected" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-redis/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" :title="t('browser.addKey')">
-            <Plus :size="14" class="text-redis" />
-          </button>
+          <!-- Type filter dropdown - takes remaining space -->
+          <div class="relative flex-grow min-w-0">
+            <button
+              @click="toggleTypeDropdown"
+              :disabled="!isConnected"
+              class="w-full px-3 py-1 text-[11px] font-mono font-semibold text-redis bg-redis/5 border border-redis/20 rounded-lg hover:border-redis/40 focus:outline-none focus:border-redis focus:ring-1 focus:ring-redis/20 transition-colors disabled:opacity-50 inline-flex items-center justify-between gap-1"
+            >
+              <span>{{ capitalizeFirst(cascade.typeFilter) }}</span>
+              <ChevronDown :size="11" class="text-redis/50 transition-transform" :class="showTypeDropdown ? 'rotate-180' : ''" />
+            </button>
+            <!-- Backdrop -->
+            <div v-if="showTypeDropdown" class="fixed inset-0 z-40" @click="savedTypeScrollTop = typeDropdownEl?.scrollTop ?? 0; showTypeDropdown = false" />
+            <!-- Dropdown -->
+            <div
+              v-if="showTypeDropdown"
+              ref="typeDropdownEl"
+              class="absolute top-full left-0 mt-1 bg-bg-secondary border border-border rounded-lg shadow-lg py-1 z-50 max-h-[212px] overflow-y-auto min-w-full"
+            >
+              <div class="px-2.5 py-1 border-b border-border-light mb-0.5">
+                <span class="text-[9px] font-semibold text-text-muted uppercase tracking-wider">{{ t('browser.typeFilter') }}</span>
+              </div>
+              <button
+                v-for="type in typeOptions"
+                :key="type"
+                @click="handleTypeSelect(type)"
+                class="w-full flex items-center justify-between px-2.5 py-1.5 text-xs font-mono transition-colors"
+                :class="cascade.typeFilter === type
+                  ? 'text-redis font-semibold bg-redis/5'
+                  : 'text-text-secondary font-medium hover:bg-bg-hover hover:text-text-primary'"
+              >
+                <span>{{ capitalizeFirst(type) }}</span>
+                <Check v-if="cascade.typeFilter === type" :size="11" class="text-redis" />
+              </button>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <button @click="cascade.refreshKeys()" :disabled="!isConnected" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-bg-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              <RefreshCw :size="14" :class="cascade.loading ? 'animate-spin' : ''" class="text-text-muted" />
+            </button>
+            <button @click="openNewKeyDialog" :disabled="!isConnected" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-redis/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" :title="t('browser.addKey')">
+              <Plus :size="14" class="text-redis" />
+            </button>
+          </div>
         </div>
         <div class="text-[11px] text-text-muted flex items-center justify-between">
           <span>

@@ -79,6 +79,7 @@
     "title": "Data Browser",
     "search": "Search keys...",
     "filterType": "Filter Type",
+    "typeFilter": "Type Filter",
     "allTypes": "All Types",
     "refresh": "Refresh",
     "keyCount": "{count} keys total",

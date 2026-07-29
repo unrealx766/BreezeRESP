@@ -79,6 +79,7 @@
     "title": "数据浏览器",
     "search": "搜索 Key...",
     "filterType": "筛选类型",
+    "typeFilter": "类型筛选",
     "allTypes": "所有类型",
     "refresh": "刷新",
     "keyCount": "共 {count} 个 Key",

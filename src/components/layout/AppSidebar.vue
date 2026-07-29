@@ -156,7 +156,7 @@ async function handleSidebarDisconnect(id: string) {
             style="transition: all 0.2s ease"
             :title="conn.name"
           >{{ conn.name }}</span>
-          <!-- DB badge for connected connections -->
+          <!-- DB/Cluster badge for connected connections -->
           <span
             :class="[
               conn.status === 'connected' ? 'opacity-100' : 'opacity-0 pointer-events-none',
@@ -164,7 +164,7 @@ async function handleSidebarDisconnect(id: string) {
             ]"
             class="text-[10px] font-mono font-semibold text-redis/70 bg-redis/8 px-1.5 py-0.5 rounded shrink-0 transition-opacity overflow-hidden whitespace-nowrap"
             style="transition: all 0.2s ease"
-          >DB{{ conn.db }}</span>
+          >{{ conn.cluster ? 'Cluster' : `DB${conn.db}` }}</span>
           <button
             v-if="conn.status === 'connected' || conn.status === 'connecting'"
             @click.stop="handleSidebarDisconnect(conn.id)"
