@@ -315,6 +315,18 @@ export const useSandboxStore = defineStore("sandbox", () => {
   }
 
   /**
+   * Reset all sandbox state when the active connection changes. Unlike
+   * `resetPreview`, this issues no backend call (the previous connection's
+   * shadow state is per-connection and harmless); it only clears the local
+   * preview UI and history so a switch never shows the previous connection's
+   * data (and never lets a rollback target the wrong connection).
+   */
+  function resetForConnectionSwitch() {
+    resetPreviewUI();
+    history.value = [];
+  }
+
+  /**
    * Cancel all pending sandbox previews.
    * Since previews always rollback (Redis is never modified), this only
    * clears the in-memory shadow state on the backend and resets the UI.
@@ -388,6 +400,7 @@ export const useSandboxStore = defineStore("sandbox", () => {
     executePreview,
     applyChange,
     resetPreview,
+    resetForConnectionSwitch,
     rollbackHistoryItem,
   };
 });

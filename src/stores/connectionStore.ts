@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import type { RedisConnection, ConnectionStatus } from "@/types";
 import { tauriApi, type RustConnectionConfig } from "@/services/tauriApi";
 import { toast } from "@/utils/toast";
@@ -8,6 +8,9 @@ import { useCascadeStore } from "@/stores/cascadeStore";
 import { useDetailStore } from "@/stores/detailStore";
 import { useHistoryStore } from "@/stores/historyStore";
 import { usePubsubStore } from "@/stores/pubsubStore";
+import { usePipelineStore } from "@/stores/pipelineStore";
+import { useMetricsStore } from "@/stores/metricsStore";
+import { useSandboxStore } from "@/stores/sandboxStore";
 
 export const useConnectionStore = defineStore("connection", () => {
   const connections = ref<RedisConnection[]>([]);
@@ -366,6 +369,39 @@ export const useConnectionStore = defineStore("connection", () => {
     // Clear active if it was the dismissed connection
     if (activeConnectionId.value === id) activeConnectionId.value = null;
   }
+
+  // Centralized reset of connection-scoped global (single-value) store state.
+  // This fires on EVERY active-connection change regardless of which page is
+  // currently mounted, so switching connections never leaves the previous
+  // connection's data behind — closing the blind spot of per-page watches that
+  // don't run while their page is unmounted. Stores keyed by connectionId
+  // (pubsub, history) switch automatically and are not touched here; pages
+  // still own their own data reload (e.g. BrowserPage re-fetches keys).
+  watch(activeConnectionId, (newId, oldId) => {
+    if (newId === oldId) return;
+
+    const cascade = useCascadeStore();
+    const detail = useDetailStore();
+    cascade.keys = [];
+    cascade.selectedKey = null;
+    cascade.searchQuery = "";
+    cascade.debouncedSearchQuery = "";
+    cascade.typeFilter = "all";
+    cascade.expandedPaths = new Set<string>();
+    cascade.totalKeyCount = 0;
+    detail.clearDetail();
+
+    // Pipeline: keep the authored command queue (it intentionally survives
+    // navigation) but drop the previous connection's execution results.
+    usePipelineStore().clearResults();
+
+    // Metrics: scalars self-heal on the next poll, but qpsHistory only appends
+    // and would otherwise mix both connections' samples into one chart.
+    useMetricsStore().resetMetrics();
+
+    // Sandbox: preview diff / result / input / history are connection-specific.
+    useSandboxStore().resetForConnectionSwitch();
+  });
 
   // Load saved connections on store init
   loadSavedConnections();

@@ -121,6 +121,28 @@ export const useMetricsStore = defineStore("metrics", () => {
     if (monitorTimer) { clearInterval(monitorTimer); monitorTimer = null; }
   }
 
+  /**
+   * Reset all metrics to their initial empty state. Called when the active
+   * connection changes so the display (and especially the qpsHistory chart,
+   * which only appends) never mixes samples from the previous connection.
+   */
+  function resetMetrics() {
+    consecutiveFailures = 0;
+    metrics.value = {
+      qps: 0,
+      qpsHistory: [],
+      memoryUsed: 0,
+      memoryTotal: 0,
+      version: "",
+      connectedClients: 0,
+      uptimeSeconds: 0,
+      usedCpuSys: 0,
+      usedCpuUser: 0,
+      keyspaceHits: 0,
+      keyspaceMisses: 0,
+    };
+  }
+
   return {
     metrics,
     monitoring,
@@ -138,5 +160,6 @@ export const useMetricsStore = defineStore("metrics", () => {
     formatBytes,
     startMonitoring,
     stopMonitoring,
+    resetMetrics,
   };
 });
