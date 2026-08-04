@@ -11,6 +11,7 @@
     "sandbox": "Sandbox",
     "history": "Command History",
     "pubsub": "Pub/Sub",
+    "slowlog": "Slow Log",
     "collapse": "Collapse",
     "expand": "Expand"
   },
@@ -320,6 +321,33 @@
       "unsubscribeFailed": "Unsubscribe failed",
       "publishFailed": "Publish failed"
     }
+  },
+  "slowlog": {
+    "title": "Slow Log Analysis",
+    "totalEntries": "{count} entries",
+    "count20": "20 entries",
+    "count50": "50 entries",
+    "count128": "128 entries",
+    "count200": "200 entries",
+    "filterAll": "All Durations",
+    "filter10ms": "> 10ms",
+    "filter100ms": "> 100ms",
+    "filter1s": "> 1s",
+    "searchPlaceholder": "Search commands...",
+    "autoRefresh": "Auto",
+    "refresh": "Refresh",
+    "totalLen": "Total Entries",
+    "threshold": "Slow Threshold",
+    "fetchedCount": "Fetched",
+    "noConnection": "Please connect to Redis first",
+    "noEntries": "No slow log entries found",
+    "colId": "ID",
+    "colTime": "Time",
+    "colDuration": "Duration",
+    "colCommand": "Command",
+    "colClient": "Client",
+    "copyCommand": "Copy Command",
+    "disabled": "Disabled"
   },
   "status": {
     "memory": "Memory",

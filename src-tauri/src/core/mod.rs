@@ -9,3 +9,4 @@ pub mod crypto;
 pub mod validate;
 pub mod keystore;
 pub mod pubsub_manager;
+pub mod slowlog;

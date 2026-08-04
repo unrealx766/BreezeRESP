@@ -3,7 +3,7 @@ import { computed, reactive } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useConnectionStore } from "@/stores/connectionStore";
-import { Database, Server, Layers, FlaskConical, History, Plus, Unplug, X, Pin, PanelLeftClose, PanelLeftOpen, Radio } from "lucide-vue-next";
+import { Database, Server, Layers, FlaskConical, History, Plus, Unplug, X, Pin, PanelLeftClose, PanelLeftOpen, Radio, Activity } from "lucide-vue-next";
 import type { RedisConnection } from "@/types";
 import { toast } from "@/utils/toast";
 import { sidebarCollapsed, toggleSidebar, getDotColor } from "@/utils/uiSettings";
@@ -20,6 +20,7 @@ const navItems = computed(() => [
   { name: "sandbox", icon: FlaskConical, label: t("nav.sandbox"), path: "/sandbox" },
   { name: "history", icon: History, label: t("nav.history"), path: "/history" },
   { name: "pubsub", icon: Radio, label: t("nav.pubsub"), path: "/pubsub" },
+  { name: "slowlog", icon: Activity, label: t("nav.slowlog"), path: "/slowlog" },
 ]);
 
 function isActive(path: string) {

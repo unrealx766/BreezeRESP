@@ -192,3 +192,20 @@ export interface CommandHistoryItem {
 export type ViewMode = "tree" | "list";
 export type SortField = "name" | "type" | "ttl" | "size";
 export type SortOrder = "asc" | "desc";
+
+// Slowlog
+export interface SlowlogEntry {
+  id: number;
+  timestamp: number;
+  durationUs: number;
+  command: string;
+  argsCount: number;
+  clientAddr: string | null;
+  clientName: string | null;
+}
+
+export interface SlowlogInfo {
+  entries: SlowlogEntry[];
+  totalLen: number;
+  slowlogLogSlowerThan: number;
+}

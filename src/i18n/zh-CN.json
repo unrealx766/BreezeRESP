@@ -11,6 +11,7 @@
     "sandbox": "命令沙盒",
     "history": "命令记录",
     "pubsub": "发布/订阅",
+    "slowlog": "慢查询",
     "collapse": "收起面板",
     "expand": "展开面板"
   },
@@ -320,6 +321,33 @@
       "unsubscribeFailed": "取消订阅失败",
       "publishFailed": "发布消息失败"
     }
+  },
+  "slowlog": {
+    "title": "慢查询分析",
+    "totalEntries": "共 {count} 条记录",
+    "count20": "20 条",
+    "count50": "50 条",
+    "count128": "128 条",
+    "count200": "200 条",
+    "filterAll": "全部耗时",
+    "filter10ms": "> 10ms",
+    "filter100ms": "> 100ms",
+    "filter1s": "> 1s",
+    "searchPlaceholder": "搜索命令...",
+    "autoRefresh": "自动刷新",
+    "refresh": "刷新",
+    "totalLen": "总条目数",
+    "threshold": "慢查询阈值",
+    "fetchedCount": "已获取",
+    "noConnection": "请先连接 Redis",
+    "noEntries": "暂无慢查询记录",
+    "colId": "ID",
+    "colTime": "时间",
+    "colDuration": "耗时",
+    "colCommand": "命令",
+    "colClient": "客户端",
+    "copyCommand": "复制命令",
+    "disabled": "未启用"
   },
   "status": {
     "memory": "内存",

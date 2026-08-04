@@ -106,6 +106,8 @@ pub fn run() {
             commands::pubsub::pubsub_unsubscribe,
             commands::pubsub::pubsub_list_channels,
             commands::pubsub::pubsub_num_subs,
+            // Slowlog commands
+            commands::slowlog::get_slowlog,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

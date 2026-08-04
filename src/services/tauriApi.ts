@@ -119,6 +119,22 @@ export interface PubSubMessage {
   timestamp: number;
 }
 
+export interface RustSlowlogEntry {
+  id: number;
+  timestamp: number;
+  durationUs: number;
+  command: string;
+  argsCount: number;
+  clientAddr: string | null;
+  clientName: string | null;
+}
+
+export interface RustSlowlogInfo {
+  entries: RustSlowlogEntry[];
+  totalLen: number;
+  slowlogLogSlowerThan: number;
+}
+
 /** Real-time message pushed from the backend `pubsub-message` event. */
 export interface PubSubEvent {
   connectionId: string;
@@ -262,6 +278,11 @@ export const tauriApi = {
   metrics: {
     get: (connectionId: string) =>
       withConn(connectionId, () => invoke<RustServerMetrics>("get_metrics", { connectionId })),
+  },
+
+  slowlog: {
+    get: (connectionId: string, count?: number) =>
+      withConn(connectionId, () => invoke<RustSlowlogInfo>("get_slowlog", { connectionId, count: count ?? null })),
   },
 
   pubsub: {

@@ -48,7 +48,7 @@ const BLOCKED_COMMANDS: &[&str] = &[
     "WAIT",         // block until replication catches up
     "OBJECT",       // internal object introspection
     "LATENCY",      // latency monitoring
-    "SLOWLOG",      // slow-log management
+
     // ── Scripting / replication ──
     "SCRIPT",       // arbitrary Lua execution
     "EVAL",         // arbitrary Lua execution

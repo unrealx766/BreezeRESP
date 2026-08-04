@@ -4,3 +4,4 @@ pub mod pipeline;
 pub mod sandbox;
 pub mod metrics;
 pub mod pubsub;
+pub mod slowlog;
