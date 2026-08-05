@@ -18,9 +18,9 @@ const navItems = computed(() => [
   { name: "browser", icon: Database, label: t("nav.browser"), path: "/browser" },
   { name: "pipeline", icon: Layers, label: t("nav.pipeline"), path: "/pipeline" },
   { name: "sandbox", icon: FlaskConical, label: t("nav.sandbox"), path: "/sandbox" },
-  { name: "history", icon: History, label: t("nav.history"), path: "/history" },
-  { name: "pubsub", icon: Radio, label: t("nav.pubsub"), path: "/pubsub" },
   { name: "slowlog", icon: Activity, label: t("nav.slowlog"), path: "/slowlog" },
+  { name: "pubsub", icon: Radio, label: t("nav.pubsub"), path: "/pubsub" },
+  { name: "history", icon: History, label: t("nav.history"), path: "/history" },
 ]);
 
 function isActive(path: string) {

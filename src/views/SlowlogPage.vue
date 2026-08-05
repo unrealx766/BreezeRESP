@@ -232,12 +232,11 @@ function drawTrendChart() {
   const chartW = w - padding.left - padding.right;
   const chartH = h - padding.top - padding.bottom;
 
-  const minTs = entries[0].timestamp;
-  const maxTs = entries[entries.length - 1].timestamp;
-  const tsRange = Math.max(maxTs - minTs, 1);
   const maxDur = Math.max(...entries.map((e) => e.durationUs)) * 1.1;
 
-  const toX = (ts: number) => padding.left + ((ts - minTs) / tsRange) * chartW;
+  // Index-based X positions: even spacing avoids clustering when the time span has large gaps
+  const toX = (idx: number) =>
+    padding.left + (entries.length === 1 ? chartW / 2 : (idx / (entries.length - 1)) * chartW);
   const toY = (dur: number) => padding.top + chartH - (dur / maxDur) * chartH;
 
   const gridColor = getCssColor("--color-border", "#e2e6ef");
@@ -260,19 +259,31 @@ function drawTrendChart() {
     ctx.fillText(formatDuration(val), padding.left - 6, y + 3);
   }
 
-  // X-axis labels
+  // X-axis time labels at evenly spaced indexes (first / middle / last)
   ctx.fillStyle = labelColor;
   ctx.font = "9px Inter, sans-serif";
-  ctx.textAlign = "left";
-  ctx.fillText(formatTime(minTs), padding.left, h - 4);
-  ctx.textAlign = "right";
-  ctx.fillText(formatTime(maxTs), w - padding.right, h - 4);
+  const tickCount = Math.min(entries.length, 5);
+  for (let tIdx = 0; tIdx < tickCount; tIdx++) {
+    const entryIdx = tickCount === 1 ? 0 : Math.round((tIdx / (tickCount - 1)) * (entries.length - 1));
+    const x = toX(entryIdx);
+    ctx.textAlign = tIdx === 0 ? "left" : tIdx === tickCount - 1 ? "right" : "center";
+    ctx.fillText(formatTime(entries[entryIdx].timestamp), x, h - 4);
+    // Vertical grid line at each tick (skip edges)
+    if (tIdx > 0 && tIdx < tickCount - 1) {
+      ctx.strokeStyle = gridColor;
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(x, padding.top);
+      ctx.lineTo(x, padding.top + chartH);
+      ctx.stroke();
+    }
+  }
 
   // Draw connecting line
   if (entries.length > 1) {
     ctx.beginPath();
     for (let i = 0; i < entries.length; i++) {
-      const x = toX(entries[i].timestamp);
+      const x = toX(i);
       const y = toY(entries[i].durationUs);
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
@@ -283,8 +294,8 @@ function drawTrendChart() {
   }
 
   // Draw dots
-  for (const entry of entries) {
-    const x = toX(entry.timestamp);
+  entries.forEach((entry, i) => {
+    const x = toX(i);
     const y = toY(entry.durationUs);
     const color = entry.durationUs >= 1000000 ? "#ef4444"
       : entry.durationUs >= 100000 ? "#f59e0b"
@@ -299,19 +310,50 @@ function drawTrendChart() {
     ctx.arc(x, y, 6, 0, Math.PI * 2);
     ctx.fillStyle = color + "33";
     ctx.fill();
-  }
+  });
 }
 
+// Redraw immediately when the container is resized (window resize / resolution change)
+let trendResizeObserver: ResizeObserver | null = null;
+let trendObservedEl: HTMLElement | null = null;
+let trendResizeRaf = 0;
+
+function setupTrendResizeObserver() {
+  const el = trendContainerRef.value;
+  if (!el) return;
+  // Container is recreated on view toggle; rebind when the element changes
+  if (trendResizeObserver && trendObservedEl === el) return;
+  trendResizeObserver?.disconnect();
+  trendResizeObserver = new ResizeObserver(() => {
+    cancelAnimationFrame(trendResizeRaf);
+    trendResizeRaf = requestAnimationFrame(() => drawTrendChart());
+  });
+  trendObservedEl = el;
+  trendResizeObserver.observe(el);
+}
+
+onBeforeUnmount(() => {
+  trendResizeObserver?.disconnect();
+  trendResizeObserver = null;
+  trendObservedEl = null;
+  cancelAnimationFrame(trendResizeRaf);
+});
 // Watch for data changes to redraw
 watch([trendEntries, viewMode], () => {
   if (viewMode.value === "analytics") {
-    nextTick(() => drawTrendChart());
+    nextTick(() => {
+      drawTrendChart();
+      setupTrendResizeObserver();
+    });
   }
 });
 
 watch(() => slowlogStore.entries, () => {
   if (viewMode.value === "analytics") {
-    nextTick(() => drawTrendChart());
+    nextTick(() => {
+      drawTrendChart();
+      setupTrendResizeObserver();
+    });
   }
 });
 
