@@ -202,33 +202,69 @@ fn build_pending_entries(raw: &redis::Value) -> Vec<PendingEntry> {
 /// Collects stream data from a Redis instance.
 pub struct StreamsCollector;
 
+/// Fallback for Redis < 6.0 (SCAN lacks the TYPE option): run a pipelined
+/// TYPE check over the scanned batch and keep only stream keys.
+async fn filter_stream_keys(
+    conn: &mut impl AsyncCommands,
+    batch: Vec<String>,
+) -> Result<Vec<String>, String> {
+    if batch.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut pipe = redis::pipe();
+    for k in &batch {
+        pipe.cmd("TYPE").arg(k);
+    }
+    let types: Vec<String> = pipe
+        .query_async(conn)
+        .await
+        .map_err(|e| format!("TYPE error: {}", e))?;
+    Ok(batch
+        .into_iter()
+        .zip(types)
+        .filter(|(_, t)| t == "stream")
+        .map(|(k, _)| k)
+        .collect())
+}
+
 impl StreamsCollector {
     pub fn new() -> Self {
         Self
     }
 
     /// List stream keys via `SCAN ... TYPE stream` (standalone).
+    /// `type_filter_supported` must be true only on Redis >= 6.0; on 5.x the
+    /// TYPE option is rejected, so we fall back to a plain SCAN plus a
+    /// batched TYPE check per candidate key.
     pub async fn list_streams(
         &self,
         conn: &mut impl AsyncCommands,
         pattern: &str,
         limit: usize,
+        type_filter_supported: bool,
     ) -> Result<Vec<String>, String> {
         let mut keys = Vec::new();
         let mut cursor: u64 = 0;
         loop {
-            let (next, batch): (u64, Vec<String>) = redis::cmd("SCAN")
-                .arg(cursor)
+            let mut cmd = redis::cmd("SCAN");
+            cmd.arg(cursor)
                 .arg("MATCH")
                 .arg(pattern)
                 .arg("COUNT")
-                .arg(1000)
-                .arg("TYPE")
-                .arg("stream")
+                .arg(1000);
+            if type_filter_supported {
+                cmd.arg("TYPE").arg("stream");
+            }
+            let (next, batch): (u64, Vec<String>) = cmd
                 .query_async(conn)
                 .await
                 .map_err(|e| format!("SCAN error: {}", e))?;
-            for k in batch {
+            let candidates = if type_filter_supported {
+                batch
+            } else {
+                filter_stream_keys(conn, batch).await?
+            };
+            for k in candidates {
                 if !keys.contains(&k) {
                     keys.push(k);
                 }
@@ -252,6 +288,7 @@ impl StreamsCollector {
         conn: &mut redis::cluster_async::ClusterConnection,
         pattern: &str,
         limit: usize,
+        type_filter_supported: bool,
     ) -> Result<Vec<String>, String> {
         let addrs = master_addrs(conn).await?;
         let mut keys = Vec::new();
@@ -263,9 +300,10 @@ impl StreamsCollector {
                     .arg("MATCH")
                     .arg(pattern)
                     .arg("COUNT")
-                    .arg(1000)
-                    .arg("TYPE")
-                    .arg("stream");
+                    .arg(1000);
+                if type_filter_supported {
+                    cmd.arg("TYPE").arg("stream");
+                }
                 let val = conn
                     .route_command(
                         &cmd,
@@ -284,7 +322,12 @@ impl StreamsCollector {
                     redis::from_redis_value(&elements[0]).unwrap_or(0);
                 let batch: Vec<String> =
                     redis::from_redis_value(&elements[1]).unwrap_or_default();
-                for k in batch {
+                let candidates = if type_filter_supported {
+                    batch
+                } else {
+                    filter_stream_keys(conn, batch).await?
+                };
+                for k in candidates {
                     if !keys.contains(&k) {
                         keys.push(k);
                     }

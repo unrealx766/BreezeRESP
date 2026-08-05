@@ -14,6 +14,8 @@
     "slowlog": "慢查询",
     "streams": "Streams",
     "search": "向量检索",
+    "streamsUnsupported": "当前 Redis {version} 不支持 Streams（需 5.0+）",
+    "searchUnsupported": "未安装 RediSearch 模块，向量检索不可用",
     "collapse": "收起面板",
     "expand": "展开面板"
   },
@@ -121,6 +123,7 @@
     "streamIdPlaceholder": "留空自动生成（*）",
     "streamIdHint": "手动格式为 毫秒-序号，如 1785921332386-0，需大于已有 ID",
     "streamIdInvalid": "消息 ID 格式无效，应为数字或 毫秒-序号 形式（如 1785921332386-0）",
+    "streamTypeUnsupported": "当前 Redis {version} 不支持 Stream（需 5.0+）",
     "zsetScoreInvalid": "第 {line} 行的 score \"{value}\" 不是有效数字"
   },
   "detail": {

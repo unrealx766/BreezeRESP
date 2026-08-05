@@ -69,7 +69,12 @@ async function refreshAll() {
   if (!connId.value) return;
   await capStore.fetchCapability(connId.value);
   if (!streamsSupported.value) return;
-  await streamsStore.loadKeys(connId.value);
+  try {
+    await streamsStore.loadKeys(connId.value);
+  } catch (e: any) {
+    toast.error(e?.toString() ?? t("common.error"));
+    return;
+  }
   if (streamsStore.selectedKey && streamsStore.streamKeys.includes(streamsStore.selectedKey)) {
     await selectKey(streamsStore.selectedKey);
   } else if (streamsStore.streamKeys.length > 0) {

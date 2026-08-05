@@ -76,14 +76,20 @@ pub async fn list_streams(
     let limit = limit.unwrap_or(500).min(5000) as usize;
 
     let pool = pool_of(&state, &connection_id)?;
-    ensure_streams(&pool, &connection_id).await?;
+    let cap = ensure_streams(&pool, &connection_id).await?;
     let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
 
+    // SCAN TYPE filter requires Redis >= 6.0 (same threshold as XINFO FULL)
+    let type_filter_supported = cap.stream_full_supported;
     let collector = StreamsCollector::new();
     if let Some(cluster) = conn.as_cluster() {
-        return collector.list_streams_cluster(cluster, &pattern, limit).await;
+        return collector
+            .list_streams_cluster(cluster, &pattern, limit, type_filter_supported)
+            .await;
     }
-    collector.list_streams(&mut conn, &pattern, limit).await
+    collector
+        .list_streams(&mut conn, &pattern, limit, type_filter_supported)
+        .await
 }
 
 /// Fetch stream metadata (XINFO STREAM, FULL form on Redis 6.0+).

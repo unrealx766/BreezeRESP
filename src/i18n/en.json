@@ -14,6 +14,8 @@
     "slowlog": "Slow Log",
     "streams": "Streams",
     "search": "Search",
+    "streamsUnsupported": "Streams unavailable on Redis {version} (requires 5.0+)",
+    "searchUnsupported": "RediSearch module not installed; search is unavailable",
     "collapse": "Collapse",
     "expand": "Expand"
   },
@@ -121,6 +123,7 @@
     "streamIdPlaceholder": "Leave empty to auto-generate (*)",
     "streamIdHint": "Manual ID format is ms-seq, e.g. 1785921332386-0. Must be greater than existing IDs",
     "streamIdInvalid": "Invalid entry ID. Expected digits or ms-seq form (e.g. 1785921332386-0)",
+    "streamTypeUnsupported": "Stream type requires Redis 5.0+ (current: {version})",
     "zsetScoreInvalid": "Line {line} score \"{value}\" is not a valid number"
   },
   "detail": {

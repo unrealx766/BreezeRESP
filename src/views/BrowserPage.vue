@@ -587,12 +587,21 @@ const newKeyBatchPlaceholder = computed(() => {
   }
 });
 
-// Key types available in the create dialog; stream requires Redis >= 5.0
-const newKeyTypeOptions = computed<RedisDataType[]>(() => {
-  const base: RedisDataType[] = ['string', 'hash', 'list', 'set', 'zset'];
-  if (capStore.activeCapability?.streamsSupported !== false) base.push('stream');
-  return base;
-});
+// Key types available in the create dialog; stream is shown but disabled when
+// the server does not support it (Redis < 5.0)
+const newKeyTypeOptions: RedisDataType[] = ['string', 'hash', 'list', 'set', 'zset', 'stream'];
+const streamUnsupported = computed(() => capStore.activeCapability?.streamsSupported === false);
+
+function typeButtonDisabled(tp: RedisDataType): boolean {
+  return tp === 'stream' && streamUnsupported.value;
+}
+
+function typeButtonTitle(tp: RedisDataType): string | undefined {
+  if (tp === 'stream' && streamUnsupported.value) {
+    return t('browser.streamTypeUnsupported', { version: capStore.activeCapability?.redisVersion ?? '-' });
+  }
+  return undefined;
+}
 
 async function submitNewKey() {
   const name = newKeyName.value.trim();
@@ -1879,8 +1888,10 @@ onBeforeUnmount(() => {
             <div>
               <label class="block text-xs font-medium text-text-secondary mb-2">{{ t('browser.keyType') }}</label>
               <div class="grid grid-cols-3 gap-1.5">
-                <button v-for="tp in newKeyTypeOptions" :key="tp" @click="newKeyType = tp"
-                  class="group flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg border transition-all duration-200 min-w-0"
+                <button v-for="tp in newKeyTypeOptions" :key="tp" @click="!typeButtonDisabled(tp) && (newKeyType = tp)"
+                  :disabled="typeButtonDisabled(tp)"
+                  :title="typeButtonTitle(tp)"
+                  class="group flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg border transition-all duration-200 min-w-0 disabled:opacity-40 disabled:cursor-not-allowed"
                   :style="newKeyType === tp ? { borderColor: typeBorderColors[tp], backgroundColor: typeBorderColors[tp] + '14' } : undefined"
                   :class="newKeyType === tp ? '' : 'border-border bg-bg-primary hover:bg-bg-hover'">
                   <component :is="typeIcons[tp]" :size="14" :class="newKeyType === tp ? `text-type-${tp}` : 'text-text-muted group-hover:text-text-secondary'" class="transition-colors shrink-0" />
