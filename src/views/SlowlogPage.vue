@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
-import { Activity, RefreshCw, Search, Copy, Database, Zap, Timer, List, BarChart3, Download, TrendingUp } from "lucide-vue-next";
+import { Activity, RefreshCw, Search, Copy, Database, Zap, Timer, List, BarChart3, Download, TrendingUp, KeyRound, BookOpen, PenLine, X } from "lucide-vue-next";
 import { useSlowlogStore } from "@/stores/slowlogStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { toast } from "@/utils/toast";
@@ -31,6 +31,8 @@ watch(() => connStore.activeConnectionId, (newId) => {
   searchQuery.value = "";
   durationFilter.value = "all";
   viewMode.value = "list";
+  clearChartFilters();
+  expandedId.value = null;
   if (newId) {
     slowlogStore.fetchSlowlog(fetchCount.value);
   }
@@ -53,7 +55,114 @@ const filteredEntries = computed(() => {
     const q = searchQuery.value.trim().toLowerCase();
     items = items.filter((e) => e.command.toLowerCase().includes(q));
   }
+  // Chart-linked filters
+  if (bucketFilterIdx.value !== null) {
+    const b = BUCKET_DEFS[bucketFilterIdx.value];
+    if (b) items = items.filter((e) => e.durationUs >= b.minUs && e.durationUs < b.maxUs);
+  }
+  if (cmdFilter.value) {
+    const verb = cmdFilter.value;
+    items = items.filter((e) => cmdVerb(e.command).toUpperCase() === verb);
+  }
+  if (keyFilter.value) {
+    const k = keyFilter.value;
+    items = items.filter((e) => extractKeys(e.command).includes(k));
+  }
   return items;
+});
+
+// ---- Chart-linked filtering ----
+const bucketFilterIdx = ref<number | null>(null);
+const cmdFilter = ref<string | null>(null);
+const keyFilter = ref<string | null>(null);
+
+function applyBucketFilter(idx: number) {
+  bucketFilterIdx.value = bucketFilterIdx.value === idx ? null : idx;
+  viewMode.value = "list";
+}
+
+function applyCmdFilter(name: string) {
+  cmdFilter.value = cmdFilter.value === name ? null : name;
+  viewMode.value = "list";
+}
+
+function applyKeyFilter(key: string) {
+  keyFilter.value = keyFilter.value === key ? null : key;
+  viewMode.value = "list";
+}
+
+function clearChartFilters() {
+  bucketFilterIdx.value = null;
+  cmdFilter.value = null;
+  keyFilter.value = null;
+}
+
+const hasChartFilters = computed(
+  () => bucketFilterIdx.value !== null || cmdFilter.value !== null || keyFilter.value !== null
+);
+
+// ---- Row detail expansion ----
+const expandedId = ref<number | null>(null);
+
+function toggleExpand(id: number) {
+  expandedId.value = expandedId.value === id ? null : id;
+}
+
+// ---- Analytics: Key hotspot ----
+interface HotKey {
+  key: string;
+  count: number;
+  totalDurationUs: number;
+  avgDurationUs: number;
+}
+
+/** Commands whose arguments are all keys */
+const MULTI_KEY_CMDS = new Set(["DEL", "UNLINK", "MGET", "MSET", "MSETNX", "TOUCH", "EXISTS", "WATCH", "SINTER", "SUNION", "SDIFF", "SMOVE", "RPOPLPUSH", "LMOVE", "PFCOUNT", "PFMERGE", "GEORADIUS", "RENAME", "RENAMENX", "COPY"]);
+/** Commands with no key argument */
+const NO_KEY_CMDS = new Set(["KEYS", "SCAN", "RANDOMKEY", "INFO", "PING", "ECHO", "SELECT", "AUTH", "DBSIZE", "TIME", "CONFIG", "CLIENT", "SLOWLOG", "DEBUG", "WAIT", "SCRIPT", "EVAL", "EVALSHA", "FLUSHDB", "FLUSHALL", "SAVE", "BGSAVE", "MONITOR", "SUBSCRIBE", "UNSUBSCRIBE", "PUBLISH", "RESET", "COMMAND", "MEMORY", "SHUTDOWN", "OBJECT", "SWAPDB", "LATENCY", "CLUSTER", "READONLY", "READWRITE", "REPLICAOF", "SLAVEOF"]);
+
+/** Extract key names from a slowlog command string (heuristic) */
+function extractKeys(cmd: string): string[] {
+  const parts = cmd.split(/\s+/);
+  if (parts.length === 0) return [];
+  const verb = parts[0].toUpperCase();
+  if (NO_KEY_CMDS.has(verb)) return [];
+  if (MULTI_KEY_CMDS.has(verb)) return parts.slice(1);
+  return parts.length > 1 ? [parts[1]] : [];
+}
+
+const hotKeys = computed<HotKey[]>(() => {
+  const map = new Map<string, { count: number; total: number }>();
+  for (const entry of filteredEntries.value) {
+    for (const key of extractKeys(entry.command)) {
+      const existing = map.get(key) ?? { count: 0, total: 0 };
+      existing.count++;
+      existing.total += entry.durationUs;
+      map.set(key, existing);
+    }
+  }
+  return Array.from(map.entries())
+    .map(([key, v]) => ({ key, count: v.count, totalDurationUs: v.total, avgDurationUs: v.total / v.count }))
+    .sort((a, b) => b.count - a.count || b.totalDurationUs - a.totalDurationUs)
+    .slice(0, 20);
+});
+
+// ---- Analytics: Read/Write classification ----
+const WRITE_CMDS = new Set(["DEL", "UNLINK", "SET", "SETNX", "SETEX", "PSETEX", "MSET", "MSETNX", "APPEND", "INCR", "INCRBY", "INCRBYFLOAT", "DECR", "DECRBY", "SETRANGE", "EXPIRE", "EXPIREAT", "PEXPIRE", "PEXPIREAT", "PERSIST", "RENAME", "RENAMENX", "RESTORE", "HSET", "HSETNX", "HMSET", "HDEL", "HINCRBY", "HINCRBYFLOAT", "LPUSH", "LPUSHX", "RPUSH", "RPUSHX", "LPOP", "RPOP", "LSET", "LREM", "LTRIM", "LINSERT", "LMOVE", "RPOPLPUSH", "SADD", "SREM", "SPOP", "SMOVE", "SINTERSTORE", "SUNIONSTORE", "SDIFFSTORE", "ZADD", "ZREM", "ZINCRBY", "ZPOPMIN", "ZPOPMAX", "ZRANGESTORE", "ZUNIONSTORE", "ZINTERSTORE", "XADD", "XDEL", "XTRIM", "PFADD", "PFMERGE", "GEOADD", "PUBLISH", "COPY", "FLUSHDB", "FLUSHALL", "EVAL", "EVALSHA", "SCRIPT", "TOUCH", "SORT"]);
+
+const readWriteStats = computed(() => {
+  let readCount = 0, readTotal = 0, writeCount = 0, writeTotal = 0;
+  for (const entry of filteredEntries.value) {
+    const verb = cmdVerb(entry.command).toUpperCase();
+    if (WRITE_CMDS.has(verb)) {
+      writeCount++;
+      writeTotal += entry.durationUs;
+    } else {
+      readCount++;
+      readTotal += entry.durationUs;
+    }
+  }
+  return { readCount, readTotal, writeCount, writeTotal };
 });
 
 // ---- Analytics: Command type grouping ----
@@ -98,18 +207,20 @@ interface DurationBucket {
   count: number;
 }
 
+const BUCKET_DEFS: Omit<DurationBucket, "count">[] = [
+  { label: "<1ms", minUs: 0, maxUs: 1000 },
+  { label: "1-5ms", minUs: 1000, maxUs: 5000 },
+  { label: "5-10ms", minUs: 5000, maxUs: 10000 },
+  { label: "10-50ms", minUs: 10000, maxUs: 50000 },
+  { label: "50-100ms", minUs: 50000, maxUs: 100000 },
+  { label: "100-500ms", minUs: 100000, maxUs: 500000 },
+  { label: "500ms-1s", minUs: 500000, maxUs: 1000000 },
+  { label: ">1s", minUs: 1000000, maxUs: Infinity },
+];
+
 const durationBuckets = computed<DurationBucket[]>(() => {
-  const buckets: DurationBucket[] = [
-    { label: "<1ms", minUs: 0, maxUs: 1000, count: 0 },
-    { label: "1-5ms", minUs: 1000, maxUs: 5000, count: 0 },
-    { label: "5-10ms", minUs: 5000, maxUs: 10000, count: 0 },
-    { label: "10-50ms", minUs: 10000, maxUs: 50000, count: 0 },
-    { label: "50-100ms", minUs: 50000, maxUs: 100000, count: 0 },
-    { label: "100-500ms", minUs: 100000, maxUs: 500000, count: 0 },
-    { label: "500ms-1s", minUs: 500000, maxUs: 1000000, count: 0 },
-    { label: ">1s", minUs: 1000000, maxUs: Infinity, count: 0 },
-  ];
-  for (const entry of filteredEntries.value) {
+  const buckets: DurationBucket[] = BUCKET_DEFS.map((d) => ({ ...d, count: 0 }));
+  for (const entry of slowlogStore.entries) {
     for (const bucket of buckets) {
       if (entry.durationUs >= bucket.minUs && entry.durationUs < bucket.maxUs) {
         bucket.count++;
@@ -216,7 +327,7 @@ function drawTrendChart() {
   if (entries.length === 0) return;
 
   const w = container.clientWidth;
-  const h = 160;
+  const h = 190;
   const dpr = window.devicePixelRatio || 1;
   canvas.width = w * dpr;
   canvas.height = h * dpr;
@@ -531,7 +642,7 @@ function handleCountChange() {
     </div>
 
     <!-- Summary cards -->
-    <div v-if="connStore.activeConnectionId" class="grid grid-cols-3 gap-3 mb-4 shrink-0">
+    <div v-if="connStore.activeConnectionId" class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 shrink-0">
       <div class="flex items-center gap-2 p-3 rounded-lg border border-border bg-bg-secondary/50">
         <Database :size="16" class="text-redis shrink-0" />
         <div class="min-w-0">
@@ -585,6 +696,34 @@ function handleCountChange() {
     <!-- List View -->
     <template v-else-if="viewMode === 'list'">
       <div class="flex-1 overflow-y-auto">
+        <!-- Active chart-linked filters -->
+        <div v-if="hasChartFilters" class="flex items-center gap-2 flex-wrap px-3 py-2 border-b border-border bg-bg-secondary/40">
+          <span class="text-[11px] text-text-muted">{{ t("slowlog.activeFilters") }}:</span>
+          <span
+            v-if="bucketFilterIdx !== null"
+            class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-redis/10 text-redis text-[11px]"
+          >
+            {{ BUCKET_DEFS[bucketFilterIdx]?.label }}
+            <button @click="bucketFilterIdx = null" class="hover:opacity-70"><X :size="10" /></button>
+          </span>
+          <span
+            v-if="cmdFilter"
+            class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-redis/10 text-redis text-[11px]"
+          >
+            {{ cmdFilter }}
+            <button @click="cmdFilter = null" class="hover:opacity-70"><X :size="10" /></button>
+          </span>
+          <span
+            v-if="keyFilter"
+            class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-redis/10 text-redis text-[11px] max-w-[240px]"
+          >
+            <span class="truncate font-mono">{{ keyFilter }}</span>
+            <button @click="keyFilter = null" class="hover:opacity-70 shrink-0"><X :size="10" /></button>
+          </span>
+          <button @click="clearChartFilters" class="text-[11px] text-text-muted underline hover:text-text-primary transition-colors">
+            {{ t("slowlog.clearFilters") }}
+          </button>
+        </div>
         <div class="sticky top-0 z-10 grid grid-cols-[60px_140px_100px_1fr_120px_40px] gap-2 px-3 py-2 text-[11px] font-semibold text-text-muted uppercase tracking-wider bg-bg-primary border-b border-border">
           <span>{{ t("slowlog.colId") }}</span>
           <span>{{ t("slowlog.colTime") }}</span>
@@ -594,34 +733,71 @@ function handleCountChange() {
           <span></span>
         </div>
         <div class="divide-y divide-border/50">
-          <div
-            v-for="entry in filteredEntries"
-            :key="entry.id"
-            class="group grid grid-cols-[60px_140px_100px_1fr_120px_40px] gap-2 px-3 py-2 hover:bg-bg-secondary/60 transition-colors items-center"
-          >
-            <span class="text-xs font-mono text-text-muted">#{{ entry.id }}</span>
-            <span class="text-xs font-mono text-text-secondary" :title="new Date(entry.timestamp * 1000).toLocaleString()">
-              {{ formatTime(entry.timestamp) }}
-            </span>
-            <span class="text-xs font-mono font-semibold" :class="durationColor(entry.durationUs)">
-              {{ formatDuration(entry.durationUs) }}
-            </span>
-            <div class="flex items-center min-w-0" :title="entry.command">
-              <code class="text-xs font-mono truncate">
-                <span class="text-redis font-semibold">{{ cmdVerb(entry.command) }}</span>
-                <span v-if="cmdArgs(entry.command)" class="text-text-secondary ml-1">{{ cmdArgs(entry.command) }}</span>
-              </code>
-            </div>
-            <span class="text-[11px] font-mono text-text-muted truncate" :title="entry.clientAddr || ''">
-              {{ entry.clientAddr || '-' }}
-            </span>
-            <button
-              @click="copyCommand(entry.command)"
-              class="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-bg-hover"
-              :title="t('slowlog.copyCommand')"
+          <div v-for="entry in filteredEntries" :key="entry.id">
+            <div
+              @click="toggleExpand(entry.id)"
+              class="group grid grid-cols-[60px_140px_100px_1fr_120px_40px] gap-2 px-3 py-2 hover:bg-bg-secondary/60 transition-colors items-center cursor-pointer"
+              :class="expandedId === entry.id ? 'bg-bg-secondary/60' : ''"
             >
-              <Copy :size="12" class="text-text-muted" />
-            </button>
+              <span class="text-xs font-mono text-text-muted">#{{ entry.id }}</span>
+              <span class="text-xs font-mono text-text-secondary" :title="new Date(entry.timestamp * 1000).toLocaleString()">
+                {{ formatTime(entry.timestamp) }}
+              </span>
+              <span class="text-xs font-mono font-semibold" :class="durationColor(entry.durationUs)">
+                {{ formatDuration(entry.durationUs) }}
+              </span>
+              <div class="flex items-center min-w-0" :title="entry.command">
+                <code class="text-xs font-mono truncate">
+                  <span class="text-redis font-semibold">{{ cmdVerb(entry.command) }}</span>
+                  <span v-if="cmdArgs(entry.command)" class="text-text-secondary ml-1">{{ cmdArgs(entry.command) }}</span>
+                </code>
+              </div>
+              <span class="text-[11px] font-mono text-text-muted truncate" :title="entry.clientAddr || ''">
+                {{ entry.clientAddr || '-' }}
+              </span>
+              <button
+                @click.stop="copyCommand(entry.command)"
+                class="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-bg-hover"
+                :title="t('slowlog.copyCommand')"
+              >
+                <Copy :size="12" class="text-text-muted" />
+              </button>
+            </div>
+            <!-- Expanded detail panel -->
+            <div
+              v-if="expandedId === entry.id"
+              class="px-3 py-3 bg-bg-secondary/50 border-l-2 border-redis mx-3 mb-1 rounded-r-lg"
+            >
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                <div>
+                  <p class="text-[10px] text-text-muted uppercase tracking-wider mb-0.5">{{ t("slowlog.colTimestamp") }}</p>
+                  <p class="text-xs font-mono text-text-primary">{{ new Date(entry.timestamp * 1000).toLocaleString() }}</p>
+                </div>
+                <div>
+                  <p class="text-[10px] text-text-muted uppercase tracking-wider mb-0.5">{{ t("slowlog.colArgsCount") }}</p>
+                  <p class="text-xs font-mono text-text-primary">{{ entry.argsCount }}</p>
+                </div>
+                <div>
+                  <p class="text-[10px] text-text-muted uppercase tracking-wider mb-0.5">{{ t("slowlog.colClient") }}</p>
+                  <p class="text-xs font-mono text-text-primary">{{ entry.clientAddr || '-' }}</p>
+                </div>
+                <div>
+                  <p class="text-[10px] text-text-muted uppercase tracking-wider mb-0.5">{{ t("slowlog.colClientName") }}</p>
+                  <p class="text-xs font-mono text-text-primary">{{ entry.clientName || '-' }}</p>
+                </div>
+              </div>
+              <p class="text-[10px] text-text-muted uppercase tracking-wider mb-1">{{ t("slowlog.fullCommand") }}</p>
+              <div class="flex items-start gap-2">
+                <pre class="flex-1 text-xs font-mono text-text-primary bg-bg-primary/60 rounded-lg p-3 whitespace-pre-wrap break-all border border-border">{{ entry.command }}</pre>
+                <button
+                  @click="copyCommand(entry.command)"
+                  class="shrink-0 p-1.5 rounded-lg border border-border text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors"
+                  :title="t('slowlog.copyCommand')"
+                >
+                  <Copy :size="13" />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -629,18 +805,85 @@ function handleCountChange() {
 
     <!-- Analytics View -->
     <template v-else>
-      <div class="flex-1 overflow-y-auto space-y-6">
+      <div class="flex-1 overflow-y-auto grid grid-cols-1 xl:grid-cols-2 gap-4 content-start items-start">
+        <!-- Read/Write Classification -->
+        <div class="rounded-lg border border-border p-4">
+          <h3 class="text-sm font-semibold text-text-primary flex items-center gap-2 mb-3">
+            <BookOpen :size="15" class="text-redis" />
+            {{ t("slowlog.readWriteStats") }}
+          </h3>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="flex items-center gap-3 p-3 rounded-lg bg-bg-secondary/50 border border-border">
+              <BookOpen :size="18" class="text-info shrink-0" />
+              <div class="min-w-0">
+                <p class="text-[11px] text-text-muted">{{ t("slowlog.readCmds") }}</p>
+                <p class="text-sm font-semibold text-text-primary">
+                  {{ readWriteStats.readCount }}
+                  <span class="text-[11px] font-normal text-text-muted ml-1">{{ t("slowlog.totalTime") }} {{ formatDuration(readWriteStats.readTotal) }}</span>
+                </p>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 p-3 rounded-lg bg-bg-secondary/50 border border-border">
+              <PenLine :size="18" class="text-warning shrink-0" />
+              <div class="min-w-0">
+                <p class="text-[11px] text-text-muted">{{ t("slowlog.writeCmds") }}</p>
+                <p class="text-sm font-semibold text-text-primary">
+                  {{ readWriteStats.writeCount }}
+                  <span class="text-[11px] font-normal text-text-muted ml-1">{{ t("slowlog.totalTime") }} {{ formatDuration(readWriteStats.writeTotal) }}</span>
+                </p>
+              </div>
+            </div>
+          </div>
+          <!-- Read vs Write ratio bar -->
+          <div v-if="readWriteStats.readCount + readWriteStats.writeCount > 0" class="mt-3 flex h-2 rounded-full overflow-hidden bg-bg-secondary">
+            <div
+              class="bg-info transition-all duration-300"
+              :style="{ width: `${(readWriteStats.readCount / (readWriteStats.readCount + readWriteStats.writeCount)) * 100}%` }"
+            ></div>
+            <div class="flex-1 bg-warning"></div>
+          </div>
+        </div>
+
+        <!-- Duration Distribution -->
+        <div class="rounded-lg border border-border p-4">
+          <h3 class="text-sm font-semibold text-text-primary flex items-center gap-2 mb-3">
+            <Timer :size="15" class="text-redis" />
+            {{ t("slowlog.durationDistribution") }}
+          </h3>
+          <div class="flex items-end gap-1 h-32">
+            <div
+              v-for="(bucket, idx) in durationBuckets"
+              :key="bucket.label"
+              @click="bucket.count > 0 && applyBucketFilter(idx)"
+              class="flex-1 flex flex-col items-center gap-1 rounded-lg pb-1 transition-colors"
+              :class="[bucket.count > 0 ? 'cursor-pointer hover:bg-bg-secondary/60' : 'cursor-default', bucketFilterIdx === idx ? 'bg-redis/10 ring-1 ring-redis/40' : '']"
+              :title="bucket.count > 0 ? t('slowlog.clickToFilter') : ''"
+            >
+              <span class="text-[10px] text-text-secondary font-mono">{{ bucket.count }}</span>
+              <div
+                class="w-full rounded-t transition-all duration-300"
+                :class="bucketColor(idx)"
+                :style="{ height: `${(bucket.count / maxBucketCount) * 80}px`, minHeight: bucket.count > 0 ? '4px' : '2px', opacity: bucket.count > 0 ? 1 : 0.2 }"
+              ></div>
+              <span class="text-[9px] text-text-muted whitespace-nowrap">{{ bucket.label }}</span>
+            </div>
+          </div>
+        </div>
+
         <!-- Command Type Distribution -->
         <div class="rounded-lg border border-border p-4">
           <h3 class="text-sm font-semibold text-text-primary flex items-center gap-2 mb-3">
             <BarChart3 :size="15" class="text-redis" />
             {{ t("slowlog.commandDistribution") }}
           </h3>
-          <div class="space-y-2">
+          <div class="space-y-2 max-h-72 overflow-y-auto overflow-x-hidden pr-1">
             <div
               v-for="group in commandGroups"
               :key="group.name"
-              class="flex items-center gap-3"
+              @click="applyCmdFilter(group.name)"
+              class="flex items-center gap-3 px-2 py-1 -mx-2 rounded-lg cursor-pointer transition-colors"
+              :class="cmdFilter === group.name ? 'bg-redis/10' : 'hover:bg-bg-secondary/60'"
+              :title="t('slowlog.clickToFilter')"
             >
               <span class="text-xs font-mono font-semibold text-redis w-20 shrink-0 text-right">{{ group.name }}</span>
               <div class="flex-1 h-5 bg-bg-secondary rounded overflow-hidden relative">
@@ -659,37 +902,46 @@ function handleCountChange() {
           </div>
         </div>
 
-        <!-- Duration Distribution -->
+        <!-- Key Hotspot -->
         <div class="rounded-lg border border-border p-4">
           <h3 class="text-sm font-semibold text-text-primary flex items-center gap-2 mb-3">
-            <Timer :size="15" class="text-redis" />
-            {{ t("slowlog.durationDistribution") }}
+            <KeyRound :size="15" class="text-redis" />
+            {{ t("slowlog.keyHotspot") }}
+            <span class="text-[10px] font-normal text-text-muted">{{ t("slowlog.keyHotspotHint") }}</span>
           </h3>
-          <div class="flex items-end gap-1 h-32">
+          <div v-if="hotKeys.length > 0" class="space-y-1.5 max-h-72 overflow-y-auto overflow-x-hidden pr-1">
             <div
-              v-for="(bucket, idx) in durationBuckets"
-              :key="bucket.label"
-              class="flex-1 flex flex-col items-center gap-1"
+              v-for="hk in hotKeys"
+              :key="hk.key"
+              @click="applyKeyFilter(hk.key)"
+              class="flex items-center gap-3 px-2 py-1.5 rounded-lg cursor-pointer transition-colors"
+              :class="keyFilter === hk.key ? 'bg-redis/10 border border-redis/30' : 'hover:bg-bg-secondary/60 border border-transparent'"
+              :title="t('slowlog.clickToFilter')"
             >
-              <span class="text-[10px] text-text-secondary font-mono">{{ bucket.count }}</span>
-              <div
-                class="w-full rounded-t transition-all duration-300"
-                :class="bucketColor(idx)"
-                :style="{ height: `${(bucket.count / maxBucketCount) * 80}px`, minHeight: bucket.count > 0 ? '4px' : '2px', opacity: bucket.count > 0 ? 1 : 0.2 }"
-              ></div>
-              <span class="text-[9px] text-text-muted whitespace-nowrap">{{ bucket.label }}</span>
+              <span class="text-xs font-mono text-text-primary flex-1 min-w-0 truncate" :title="hk.key">{{ hk.key }}</span>
+              <div class="w-24 shrink-0 h-4 bg-bg-secondary rounded overflow-hidden">
+                <div
+                  class="h-full bg-redis/25 rounded transition-all duration-300"
+                  :style="{ width: `${(hk.count / (hotKeys[0]?.count || 1)) * 100}%` }"
+                ></div>
+              </div>
+              <span class="text-[11px] font-mono text-text-secondary w-10 shrink-0 text-right">{{ hk.count }}×</span>
+              <span class="text-[11px] font-mono text-text-muted w-16 shrink-0 text-right">{{ formatDuration(hk.avgDurationUs) }}</span>
             </div>
+          </div>
+          <div v-else class="text-xs text-text-muted text-center py-4">
+            {{ t("slowlog.noEntries") }}
           </div>
         </div>
 
-        <!-- Trend Chart -->
-        <div class="rounded-lg border border-border p-4">
+        <!-- Trend Chart (bottom, full width) -->
+        <div class="rounded-lg border border-border p-4 xl:col-span-2">
           <h3 class="text-sm font-semibold text-text-primary flex items-center gap-2 mb-3">
             <TrendingUp :size="15" class="text-redis" />
             {{ t("slowlog.trendChart") }}
           </h3>
           <div v-if="trendEntries.length > 0" ref="trendContainerRef" class="w-full">
-            <canvas ref="trendCanvasRef" class="w-full" style="height: 160px;" />
+            <canvas ref="trendCanvasRef" class="w-full" style="height: 190px;" />
           </div>
           <div v-else class="text-xs text-text-muted text-center py-4">
             {{ t("slowlog.noEntries") }}

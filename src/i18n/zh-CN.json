@@ -359,7 +359,16 @@
     "totalTime": "总耗时",
     "avgTime": "平均",
     "exportSuccess": "已导出到 {path}",
-    "openLocation": "打开文件所在位置"
+    "openLocation": "打开文件所在位置",
+    "readWriteStats": "读写占比",
+    "readCmds": "读命令",
+    "writeCmds": "写命令",
+    "keyHotspot": "Key 热点分析",
+    "keyHotspotHint": "Top 20，按出现次数排序",
+    "clickToFilter": "点击筛选列表",
+    "fullCommand": "完整命令",
+    "activeFilters": "当前筛选",
+    "clearFilters": "清除全部"
   },
   "status": {
     "memory": "内存",
