@@ -10,7 +10,7 @@ import type { PubSubMessageItem } from "@/stores/pubsubStore";
 import { toast } from "@/utils/toast";
 import NumberedTextarea from "@/components/shared/NumberedTextarea.vue";
 import SmartPayloadInspector from "@/components/shared/SmartPayloadInspector.vue";
-import { Radio, Plus, Send, MessageSquare, RefreshCw, X, ArrowDown, History, Regex, BellPlus, Bell } from "lucide-vue-next";
+import { Radio, Plus, Send, MessageSquare, RefreshCw, X, ArrowDown, History, Regex, BellPlus, Bell, TriangleAlert } from "lucide-vue-next";
 
 const { t } = useI18n();
 const connStore = useConnectionStore();
@@ -329,6 +329,12 @@ onMounted(async () => {
         <h2 class="text-xl font-semibold text-text-primary flex items-center gap-2">
           <Radio :size="20" class="text-redis" />
           {{ t("pubsub.title") }}
+          <span class="group/tip relative inline-flex items-center cursor-help">
+            <TriangleAlert :size="14" class="text-warning/80" />
+            <span class="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-max max-w-[300px] px-2.5 py-1.5 rounded-lg bg-bg-secondary border border-border shadow-lg text-[11px] font-normal text-text-secondary leading-relaxed opacity-0 invisible group-hover/tip:opacity-100 group-hover/tip:visible transition-all z-50">
+              {{ t("pubsub.allDbHint") }}
+            </span>
+          </span>
         </h2>
         <p class="text-sm text-text-muted mt-1">{{ t("pubsub.description") }}</p>
       </div>

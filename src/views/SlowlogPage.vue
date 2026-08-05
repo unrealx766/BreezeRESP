@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
-import { Activity, RefreshCw, Search, Copy, Database, Zap, Timer, List, BarChart3, Download, TrendingUp, KeyRound, BookOpen, PenLine, X } from "lucide-vue-next";
+import { Activity, RefreshCw, Search, Copy, Database, Zap, Timer, List, BarChart3, Download, TrendingUp, KeyRound, BookOpen, PenLine, X, TriangleAlert } from "lucide-vue-next";
 import { useSlowlogStore } from "@/stores/slowlogStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { toast } from "@/utils/toast";
@@ -545,6 +545,12 @@ function handleCountChange() {
         <h2 class="text-xl font-semibold text-text-primary flex items-center gap-2">
           <Activity :size="20" class="text-redis" />
           {{ t("slowlog.title") }}
+          <span class="group/tip relative inline-flex items-center cursor-help">
+            <TriangleAlert :size="14" class="text-warning/80" />
+            <span class="absolute left-1/2 -translate-x-1/2 top-full mt-2 w-max max-w-[300px] px-2.5 py-1.5 rounded-lg bg-bg-secondary border border-border shadow-lg text-[11px] font-normal text-text-secondary leading-relaxed opacity-0 invisible group-hover/tip:opacity-100 group-hover/tip:visible transition-all z-50">
+              {{ t("slowlog.allDbHint") }}
+            </span>
+          </span>
         </h2>
         <p v-if="filteredEntries.length > 0" class="text-sm text-text-muted mt-1">
           {{ t("slowlog.totalEntries", { count: filteredEntries.length }) }}

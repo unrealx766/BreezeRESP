@@ -260,6 +260,7 @@
   "pubsub": {
     "title": "Pub/Sub",
     "description": "Subscribe to channels for real-time messages, or publish to channels",
+    "allDbHint": "Pub/Sub is an instance-level feature; channels are shared across all databases",
     "subscribeChannel": "Subscribe to Channel",
     "inputChannelPlaceholder": "Enter channel name, supports * ? [] wildcards...",
     "subscribe": "Subscribe",
@@ -361,6 +362,7 @@
     "exportSuccess": "Exported to {path}",
     "openLocation": "Open File Location",
     "readWriteStats": "Read/Write Ratio",
+    "allDbHint": "Slow queries are recorded at instance level and include commands from all databases",
     "readCmds": "Read Commands",
     "writeCmds": "Write Commands",
     "keyHotspot": "Key Hotspot",

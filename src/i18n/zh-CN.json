@@ -260,6 +260,7 @@
   "pubsub": {
     "title": "发布/订阅",
     "description": "订阅频道以接收实时消息，或向频道发布消息",
+    "allDbHint": "发布/订阅为实例级功能，频道跨所有 DB 共享",
     "subscribeChannel": "订阅频道",
     "inputChannelPlaceholder": "输入频道名称，支持 * ? [] 通配符...",
     "subscribe": "订阅",
@@ -361,6 +362,7 @@
     "exportSuccess": "已导出到 {path}",
     "openLocation": "打开文件所在位置",
     "readWriteStats": "读写占比",
+    "allDbHint": "慢查询为实例级记录，包含所有 DB 的命令",
     "readCmds": "读命令",
     "writeCmds": "写命令",
     "keyHotspot": "Key 热点分析",
