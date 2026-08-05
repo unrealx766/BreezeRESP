@@ -108,6 +108,8 @@ pub fn run() {
             commands::pubsub::pubsub_num_subs,
             // Slowlog commands
             commands::slowlog::get_slowlog,
+            commands::slowlog::save_slowlog_export,
+            commands::slowlog::open_file_location,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

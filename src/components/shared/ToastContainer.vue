@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from "vue";
 import { CheckCircle, XCircle, AlertTriangle, Info, X } from "lucide-vue-next";
-import { toast } from "@/utils/toast";
+import { toast, type ToastAction } from "@/utils/toast";
 
 interface ToastItem {
   id: number;
   type: "success" | "error" | "warning" | "info";
   message: string;
+  action?: ToastAction;
 }
 
 const toasts = ref<ToastItem[]>([]);
@@ -29,11 +30,16 @@ function dismiss(id: number) {
   toasts.value = toasts.value.filter((t) => t.id !== id);
 }
 
+function runAction(item: ToastItem) {
+  item.action?.onClick();
+  dismiss(item.id);
+}
+
 let unsubscribe: (() => void) | undefined;
 
 onMounted(() => {
   unsubscribe = toast.on((event) => {
-    toasts.value.push({ id: event.id, type: event.type, message: event.message });
+    toasts.value.push({ id: event.id, type: event.type, message: event.message, action: event.action });
     if (event.duration > 0) {
       setTimeout(() => dismiss(event.id), event.duration);
     }
@@ -56,7 +62,16 @@ onUnmounted(() => {
           :class="colorMap[item.type]"
         >
           <component :is="iconMap[item.type]" :size="16" class="shrink-0 mt-0.5" />
-          <p class="flex-1 text-sm leading-relaxed break-all">{{ item.message }}</p>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm leading-relaxed break-all">{{ item.message }}</p>
+            <button
+              v-if="item.action"
+              @click="runAction(item)"
+              class="mt-1 text-xs font-semibold underline underline-offset-2 opacity-80 hover:opacity-100 transition-opacity"
+            >
+              {{ item.action.label }}
+            </button>
+          </div>
           <button
             @click="dismiss(item.id)"
             class="shrink-0 opacity-60 hover:opacity-100 transition-opacity mt-0.5"

@@ -206,6 +206,13 @@ const colorMap = {
               <component :is="iconMap[msg.type]" :size="13" :class="colorMap[msg.type]" class="shrink-0 mt-0.5" />
               <div class="flex-1 min-w-0">
                 <p class="text-xs text-text-primary break-all leading-relaxed">{{ msg.message }}</p>
+                <button
+                  v-if="msg.action"
+                  @click="msg.action.onClick()"
+                  class="mt-0.5 text-[10px] font-semibold text-redis underline underline-offset-2 hover:opacity-80 transition-opacity"
+                >
+                  {{ msg.action.label }}
+                </button>
                 <div class="flex items-center gap-2 mt-0.5">
                   <span class="text-[10px] font-medium truncate" :title="(msg.connectionName || t('notifications.noConnection')) + (msg.db !== undefined ? ` (DB ${msg.db})` : '')"
                     :class="msg.connectionName ? 'text-redis/60' : 'text-text-muted/60'">{{ msg.connectionName || t('notifications.noConnection') }}<template v-if="msg.db !== undefined">/{{ msg.db }}</template></span>

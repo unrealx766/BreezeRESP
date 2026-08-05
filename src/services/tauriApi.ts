@@ -283,6 +283,12 @@ export const tauriApi = {
   slowlog: {
     get: (connectionId: string, count?: number) =>
       withConn(connectionId, () => invoke<RustSlowlogInfo>("get_slowlog", { connectionId, count: count ?? null })),
+
+    saveExport: (content: string, filename: string) =>
+      invoke<string>("save_slowlog_export", { content, filename }),
+
+    openFileLocation: (path: string) =>
+      invoke<void>("open_file_location", { path }),
   },
 
   pubsub: {

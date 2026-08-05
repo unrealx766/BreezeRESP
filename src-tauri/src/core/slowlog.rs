@@ -92,11 +92,14 @@ fn parse_entry(raw: &redis::Value) -> Result<SlowlogEntry, String> {
     })
 }
 
-/// Reads the `slowlog-log-slower-than` config value from an INFO-style key-value string.
-fn parse_slower_than(config_resp: &str) -> i64 {
-    for line in config_resp.lines() {
-        if let Some(val) = line.strip_prefix("slowlog-log-slower-than:") {
-            return val.trim().parse().unwrap_or(10000);
+/// Parse `slowlog-log-slower-than` from a CONFIG GET response.
+/// CONFIG GET returns an array: ["slowlog-log-slower-than", "1000"].
+fn parse_config_get_value(raw: &redis::Value) -> i64 {
+    if let redis::Value::Array(items) = raw {
+        if items.len() >= 2 {
+            if let Ok(val) = redis::from_redis_value::<String>(&items[1]) {
+                return val.parse().unwrap_or(10000);
+            }
         }
     }
     10000 // default 10ms
@@ -131,14 +134,14 @@ impl SlowlogCollector {
             .await
             .map_err(|e| format!("SLOWLOG LEN error: {}", e))?;
 
-        // Fetch current threshold
-        let config: String = redis::cmd("CONFIG")
+        // Fetch current threshold (CONFIG GET returns array [key, value])
+        let config_raw: redis::Value = redis::cmd("CONFIG")
             .arg("GET")
             .arg("slowlog-log-slower-than")
             .query_async(conn)
             .await
-            .unwrap_or_else(|_| "slowlog-log-slower-than:10000".to_string());
-        let slower_than = parse_slower_than(&config);
+            .unwrap_or(redis::Value::Nil);
+        let slower_than = parse_config_get_value(&config_raw);
 
         // Parse entries
         let entries = match raw_entries {
@@ -191,10 +194,7 @@ impl SlowlogCollector {
             .unwrap_or_default();
             config_values
                 .first()
-                .and_then(|(_, v)| {
-                    let s: String = redis::from_redis_value(v).ok()?;
-                    Some(parse_slower_than(&s))
-                })
+                .map(|(_, v)| parse_config_get_value(v))
                 .unwrap_or(10000)
         };
 
