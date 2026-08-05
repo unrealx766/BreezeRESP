@@ -5,6 +5,12 @@ import { tauriApi } from "@/services/tauriApi";
 import { useConnectionStore } from "./connectionStore";
 import { useHistoryStore } from "./historyStore";
 
+/** Normalize backend TYPE command output to frontend RedisDataType */
+export function normalizeKeyType(raw: string): RedisDataType {
+  if (raw === "ReJSON-loads" || raw === "ReJSON") return "rejson";
+  return raw as RedisDataType;
+}
+
 export const useCascadeStore = defineStore("cascade", () => {
   const keys = ref<RedisKey[]>([]);
   const searchQuery = ref("");
@@ -91,7 +97,7 @@ export const useCascadeStore = defineStore("cascade", () => {
   const loadedCount = computed(() => keys.value.length);
 
   const typeDistribution = computed(() => {
-    const dist: Record<RedisDataType, number> = { string: 0, hash: 0, list: 0, set: 0, zset: 0 };
+    const dist: Record<RedisDataType, number> = { string: 0, hash: 0, list: 0, set: 0, zset: 0, stream: 0, rejson: 0 };
     for (const k of keys.value) {
       if (k.type in dist) dist[k.type]++;
     }
@@ -133,7 +139,7 @@ export const useCascadeStore = defineStore("cascade", () => {
       newKeys.push(
         ...rustKeys.map((rk: any) => ({
           key: rk.key,
-          type: (rk.keyType || rk.key_type || "string") as RedisDataType,
+          type: normalizeKeyType(rk.keyType || rk.key_type || "string"),
           ttl: rk.ttl ?? -1,
           size: rk.size ?? 0,
         }))

@@ -4,7 +4,7 @@ import type { KeyTreeNode, RedisDataType } from "@/types";
 import { useCascadeStore } from "@/stores/cascadeStore";
 import {
   ChevronRight, ChevronDown, FolderOpen, Folder,
-  Type, Hash, List, CircleDot, BarChart3,
+  Type, Hash, List, CircleDot, BarChart3, ListTree, FileJson2,
 } from "lucide-vue-next";
 
 const props = defineProps<{
@@ -24,6 +24,8 @@ const typeIcons: Record<RedisDataType, any> = {
   list: List,
   set: CircleDot,
   zset: BarChart3,
+  stream: ListTree,
+  rejson: FileJson2,
 };
 
 const isLeaf = computed(() => !!props.node.key);

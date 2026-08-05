@@ -1,8 +1,8 @@
 import { defineStore } from "pinia";
 import { ref, computed, watch } from "vue";
-import type { KeyDetail, KeyValue, RedisDataType } from "@/types";
+import type { KeyDetail, KeyValue, StreamEntry } from "@/types";
 import { tauriApi } from "@/services/tauriApi";
-import { useCascadeStore } from "./cascadeStore";
+import { useCascadeStore, normalizeKeyType } from "./cascadeStore";
 import { useConnectionStore } from "./connectionStore";
 import { useMetricsStore } from "./metricsStore";
 import { useHistoryStore } from "./historyStore";
@@ -59,7 +59,7 @@ export const useDetailStore = defineStore("detail", () => {
   /** Convert Rust KeyDetail response to frontend KeyDetail type */
   function mapKeyDetail(rust: any): KeyDetail {
     const rk = rust.key || {};
-    const keyType = (rk.keyType || rk.key_type || "string") as RedisDataType;
+    const keyType = normalizeKeyType(rk.keyType || rk.key_type || "string");
     // Defensive: if Tauri IPC returns value as a JSON string (possible with serde_json::Value), parse it
     let val = rust.value as unknown;
     if (typeof val === "string") {
@@ -125,6 +125,23 @@ export const useDetailStore = defineStore("detail", () => {
           contentEncoding: v.contentEncoding as string | undefined,
           totalCount: v.totalCount as number | undefined,
           truncated: v.truncated as boolean | undefined,
+        };
+        break;
+      case "stream":
+        keyValue = {
+          type: "stream",
+          length: (v.length as number) ?? 0,
+          lastGeneratedId: (v.lastGeneratedId as string) || "",
+          groups: (v.groups as number) ?? 0,
+          entries: (v.entries as StreamEntry[]) || [],
+          totalCount: v.totalCount as number | undefined,
+          truncated: v.truncated as boolean | undefined,
+        };
+        break;
+      case "rejson":
+        keyValue = {
+          type: "rejson",
+          json: (v.json as string) ?? "",
         };
         break;
       default:
@@ -521,6 +538,42 @@ export const useDetailStore = defineStore("detail", () => {
     }
   }
 
+  /** Save a ReJSON document at the given path (JSON.SET) */
+  async function saveReJson(path: string, value: string) {
+    const connStore = useConnectionStore();
+    const connId = connStore.activeConnectionId;
+    const key = currentDetail.value?.key.key;
+    if (!connId || !key) return false;
+    try {
+      await history.execAndRecord(`JSON.SET ${key} ${path} ${value}`, "browser", () =>
+        tauriApi.jsonsearch.jsonSet(connId, key, path, value)
+      );
+      await loadDetail(key, currentPage.value);
+      return true;
+    } catch (e) {
+      console.error("Failed to save JSON value:", e);
+      return false;
+    }
+  }
+
+  /** Delete a path inside a ReJSON document (JSON.DEL) */
+  async function deleteReJsonPath(path: string) {
+    const connStore = useConnectionStore();
+    const connId = connStore.activeConnectionId;
+    const key = currentDetail.value?.key.key;
+    if (!connId || !key) return false;
+    try {
+      await history.execAndRecord(`JSON.DEL ${key} ${path}`, "browser", () =>
+        tauriApi.jsonsearch.jsonDel(connId, key, path)
+      );
+      await loadDetail(key, currentPage.value);
+      return true;
+    } catch (e) {
+      console.error("Failed to delete JSON path:", e);
+      return false;
+    }
+  }
+
   function clearDetail() {
     currentDetail.value = null;
     currentPage.value = 0;
@@ -564,5 +617,7 @@ export const useDetailStore = defineStore("detail", () => {
     batchAddFields,
     renameKey,
     setTtl,
+    saveReJson,
+    deleteReJsonPath,
   };
 });

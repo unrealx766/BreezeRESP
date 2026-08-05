@@ -1,6 +1,17 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { SavedPipeline } from "@/types";
+import type {
+  SavedPipeline,
+  ServerCapability,
+  StreamEntry,
+  StreamInfo,
+  ConsumerGroup,
+  ConsumerInfo,
+  PendingEntry,
+  FtIndexInfo,
+  FtSearchResult,
+  FtCreateSpec,
+} from "@/types";
 
 // ---- Connection guard (registered at app startup to avoid circular deps) ----
 let _requireConnection: (() => void) | null = null;
@@ -310,5 +321,104 @@ export const tauriApi = {
     /** Listen for real-time messages. Returns an unlisten function. */
     onMessage: (handler: (msg: PubSubEvent) => void): Promise<UnlistenFn> =>
       listen<PubSubEvent>("pubsub-message", (event) => handler(event.payload)),
+  },
+
+  capability: {
+    get: (connectionId: string, force = false) =>
+      withConn(connectionId, () =>
+        invoke<ServerCapability>("get_server_capability", { connectionId, force })),
+  },
+
+  streams: {
+    list: (connectionId: string, pattern?: string, limit?: number) =>
+      withConn(connectionId, () =>
+        invoke<string[]>("list_streams", { connectionId, pattern: pattern ?? null, limit: limit ?? null })),
+
+    getInfo: (connectionId: string, key: string) =>
+      withConn(connectionId, () => invoke<StreamInfo>("get_stream_info", { connectionId, key })),
+
+    getEntries: (connectionId: string, key: string, start?: string, end?: string, count?: number) =>
+      withConn(connectionId, () =>
+        invoke<StreamEntry[]>("get_stream_entries", {
+          connectionId, key,
+          start: start ?? null, end: end ?? null, count: count ?? null,
+        })),
+
+    getGroups: (connectionId: string, key: string) =>
+      withConn(connectionId, () => invoke<ConsumerGroup[]>("get_stream_groups", { connectionId, key })),
+
+    getConsumers: (connectionId: string, key: string, group: string) =>
+      withConn(connectionId, () => invoke<ConsumerInfo[]>("get_stream_consumers", { connectionId, key, group })),
+
+    getPending: (connectionId: string, key: string, group: string, count?: number) =>
+      withConn(connectionId, () =>
+        invoke<PendingEntry[]>("get_pending_entries", { connectionId, key, group, count: count ?? null })),
+
+    addMessage: (connectionId: string, key: string, id: string | null, fields: Array<[string, string]>) =>
+      withConn(connectionId, () => invoke<string>("stream_add_message", { connectionId, key, id, fields })),
+
+    trim: (connectionId: string, key: string, maxLen: number, approximate = true) =>
+      withConn(connectionId, () => invoke<number>("stream_trim", { connectionId, key, maxLen, approximate })),
+
+    deleteEntries: (connectionId: string, key: string, ids: string[]) =>
+      withConn(connectionId, () => invoke<number>("stream_delete_entries", { connectionId, key, ids })),
+
+    ack: (connectionId: string, key: string, group: string, ids: string[]) =>
+      withConn(connectionId, () => invoke<number>("stream_ack", { connectionId, key, group, ids })),
+
+    deleteConsumer: (connectionId: string, key: string, group: string, consumer: string) =>
+      withConn(connectionId, () => invoke<number>("stream_delete_consumer", { connectionId, key, group, consumer })),
+
+    deleteGroup: (connectionId: string, key: string, group: string) =>
+      withConn(connectionId, () => invoke<boolean>("stream_delete_group", { connectionId, key, group })),
+
+    claim: (connectionId: string, key: string, group: string, consumer: string, minIdleMs: number, ids: string[]) =>
+      withConn(connectionId, () =>
+        invoke<StreamEntry[]>("stream_claim", { connectionId, key, group, consumer, minIdleMs, ids })),
+  },
+
+  jsonsearch: {
+    jsonGet: (connectionId: string, key: string, path?: string) =>
+      withConn(connectionId, () => invoke<string>("json_get", { connectionId, key, path: path ?? null })),
+
+    jsonSet: (connectionId: string, key: string, path: string, value: string) =>
+      withConn(connectionId, () => invoke<boolean>("json_set", { connectionId, key, path, value })),
+
+    jsonDel: (connectionId: string, key: string, path?: string) =>
+      withConn(connectionId, () => invoke<number>("json_del", { connectionId, key, path: path ?? null })),
+
+    jsonType: (connectionId: string, key: string, path?: string) =>
+      withConn(connectionId, () => invoke<string>("json_type", { connectionId, key, path: path ?? null })),
+
+    ftList: (connectionId: string) =>
+      withConn(connectionId, () => invoke<string[]>("ft_list", { connectionId })),
+
+    ftInfo: (connectionId: string, index: string) =>
+      withConn(connectionId, () => invoke<FtIndexInfo>("ft_info", { connectionId, index })),
+
+    ftSearch: (params: {
+      connectionId: string;
+      index: string;
+      query: string;
+      offset?: number;
+      limit?: number;
+      params?: Array<[string, string]>;
+      withScores?: boolean;
+    }) => withConn(params.connectionId, () =>
+      invoke<FtSearchResult>("ft_search", {
+        connectionId: params.connectionId,
+        index: params.index,
+        query: params.query,
+        offset: params.offset ?? null,
+        limit: params.limit ?? null,
+        params: params.params ?? null,
+        withScores: params.withScores ?? null,
+      })),
+
+    ftCreate: (connectionId: string, spec: FtCreateSpec) =>
+      withConn(connectionId, () => invoke<boolean>("ft_create", { connectionId, spec })),
+
+    ftDropIndex: (connectionId: string, index: string, deleteDocs = false) =>
+      withConn(connectionId, () => invoke<boolean>("ft_drop_index", { connectionId, index, deleteDocs })),
   },
 };

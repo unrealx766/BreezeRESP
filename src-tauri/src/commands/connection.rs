@@ -165,6 +165,9 @@ pub async fn disconnect(state: State<'_, AppState>, id: String) -> Result<(), St
     // Drop any in-flight cluster scan state
     state.cluster_scans.clear(&id);
 
+    // Drop cached server capability profile
+    crate::core::capability::clear_cached(&id);
+
     // Clear any pending sandbox state to prevent stale data leaking across connections
     let ss = state.shadow_store.lock().map_err(|e| e.to_string())?;
     let mut ss = ss;
@@ -388,6 +391,9 @@ pub async fn delete_connection(state: State<'_, AppState>, id: String) -> Result
 
     // Drop any in-flight cluster scan state
     state.cluster_scans.clear(&id);
+
+    // Drop cached server capability profile
+    crate::core::capability::clear_cached(&id);
 
     // Clear any pending sandbox state
     {

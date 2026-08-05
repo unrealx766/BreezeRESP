@@ -6,6 +6,8 @@ import SandboxPage from "@/views/SandboxPage.vue";
 import HistoryPage from "@/views/HistoryPage.vue";
 import PubSubPage from "@/views/PubSubPage.vue";
 import SlowlogPage from "@/views/SlowlogPage.vue";
+import StreamsPage from "@/views/StreamsPage.vue";
+import SearchPage from "@/views/SearchPage.vue";
 
 const routes: RouteRecordRaw[] = [
   {
@@ -42,6 +44,16 @@ const routes: RouteRecordRaw[] = [
     path: "/slowlog",
     name: "slowlog",
     component: SlowlogPage,
+  },
+  {
+    path: "/streams",
+    name: "streams",
+    component: StreamsPage,
+  },
+  {
+    path: "/search",
+    name: "search",
+    component: SearchPage,
   },
 ];
 

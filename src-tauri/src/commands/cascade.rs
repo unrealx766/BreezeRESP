@@ -516,6 +516,7 @@ pub async fn get_key_detail(
         "list" => redis::cmd("LLEN").arg(&key).query_async(&mut conn).await.unwrap_or(0),
         "set" => redis::cmd("SCARD").arg(&key).query_async(&mut conn).await.unwrap_or(0),
         "zset" => redis::cmd("ZCARD").arg(&key).query_async(&mut conn).await.unwrap_or(0),
+        "stream" => redis::cmd("XLEN").arg(&key).query_async(&mut conn).await.unwrap_or(0),
         _ => 0,
     };
 
@@ -762,6 +763,41 @@ pub async fn get_key_detail(
                 })
                 .collect();
             serde_json::json!({ "type": "zset", "members": members_json, "encoding": encoding, "contentEncoding": content_encoding, "totalCount": matched_count, "truncated": truncated })
+        }
+        "stream" => {
+            // Reuse the streams collector for metadata + a preview of the first entries
+            let collector = crate::core::streams::StreamsCollector::new();
+            let info = collector
+                .get_stream_info(&mut conn, &key, false)
+                .await
+                .map_err(|e| format!("XINFO STREAM error: {}", e))?;
+            let entries = collector
+                .get_entries(&mut conn, &key, "-", "+", 50)
+                .await
+                .unwrap_or_default();
+            let entries_json: Vec<serde_json::Value> = entries
+                .into_iter()
+                .map(|e| serde_json::json!({ "id": e.id, "fields": e.fields }))
+                .collect();
+            serde_json::json!({
+                "type": "stream",
+                "length": info.length,
+                "lastGeneratedId": info.last_generated_id,
+                "groups": info.groups,
+                "entries": entries_json,
+                "totalCount": info.length,
+                "truncated": info.length > entries_json.len() as u64,
+            })
+        }
+        "ReJSON-loads" => {
+            // RedisJSON module key: fetch the raw document (legacy root path)
+            let raw: Option<String> = redis::cmd("JSON.GET")
+                .arg(&key)
+                .arg(".")
+                .query_async(&mut conn)
+                .await
+                .map_err(|e| format!("JSON.GET error: {}", e))?;
+            serde_json::json!({ "type": "rejson", "json": raw.unwrap_or_default() })
         }
         _ => {
             return Err(format!("Unsupported type: {}", type_str));

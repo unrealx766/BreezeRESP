@@ -5,3 +5,6 @@ pub mod sandbox;
 pub mod metrics;
 pub mod pubsub;
 pub mod slowlog;
+pub mod capability;
+pub mod streams;
+pub mod jsonsearch;

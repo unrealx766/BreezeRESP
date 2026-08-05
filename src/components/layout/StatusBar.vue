@@ -1,13 +1,27 @@
 <script setup lang="ts">
+import { computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useMetricsStore } from "@/stores/metricsStore";
+import { useCapabilityStore } from "@/stores/capabilityStore";
 import { Activity, HardDrive, Clock, Cpu, Wifi } from "lucide-vue-next";
 
 const { t } = useI18n();
 const connStore = useConnectionStore();
 const metricsStore = useMetricsStore();
+const capStore = useCapabilityStore();
 const appVersion = __APP_VERSION__;
+
+const capability = computed(() => capStore.activeCapability);
+
+// Probe server capability once connected (cached per connection)
+watch(
+  () => [connStore.activeConnectionId, connStore.activeConnection?.status],
+  ([id, status]) => {
+    if (id && status === "connected") capStore.fetchCapability(id as string);
+  },
+  { immediate: true }
+);
 </script>
 
 <template>
@@ -26,6 +40,20 @@ const appVersion = __APP_VERSION__;
         <Cpu :size="11" class="shrink-0" />
         <span class="whitespace-nowrap">v{{ metricsStore.version }}</span>
       </div>
+
+      <!-- Module capability badges -->
+      <template v-if="capability">
+        <span
+          v-if="capability.jsonSupported"
+          class="badge bg-type-rejson/10 text-type-rejson shrink-0 hidden md:inline-flex"
+          :title="`RedisJSON v${capability.jsonVersion ?? ''}`"
+        >JSON</span>
+        <span
+          v-if="capability.searchSupported"
+          class="badge bg-purple-500/10 text-purple-400 shrink-0 hidden md:inline-flex"
+          :title="`RediSearch v${capability.searchVersion ?? ''}`"
+        >Search</span>
+      </template>
 
       <div class="w-px h-3.5 bg-border shrink-0" />
 

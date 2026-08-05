@@ -16,7 +16,7 @@ import { useSaveTip } from "@/utils/saveTip";
 import { toast } from "@/utils/toast";
 import {
   Search, RefreshCw, Trash2, Copy, Tag, Plus, Key,
-  Type, Hash, List, CircleDot, BarChart3,
+  Type, Hash, List, CircleDot, BarChart3, ListTree, FileJson2,
   AlertTriangle, X, Pencil, Save,
   ChevronLeft, ChevronRight, ChevronDown, Clock, Database, Code2, Check,
 } from "lucide-vue-next";
@@ -35,8 +35,17 @@ const isConnected = computed(() => connStore.activeConnection?.status === "conne
 const showTypeDropdown = ref(false);
 const typeDropdownEl = ref<HTMLElement | null>(null);
 const savedTypeScrollTop = ref(0);
-const typeOptions = ["all", "string", "hash", "list", "set", "zset"] as const;
+const typeOptions = ["all", "string", "hash", "list", "set", "zset", "stream", "rejson"] as const;
 type TypeOption = typeof typeOptions[number];
+
+// Display labels for type filter dropdown
+const typeLabels: Partial<Record<TypeOption, string>> = {
+  stream: "Stream",
+  rejson: "ReJSON",
+};
+function typeLabel(type: TypeOption): string {
+  return typeLabels[type] ?? capitalizeFirst(type);
+}
 
 function toggleTypeDropdown() {
   if (showTypeDropdown.value) {
@@ -162,14 +171,18 @@ const typeColors: Record<RedisDataType, string> = {
   list: "bg-type-list/10 text-type-list",
   set: "bg-type-set/10 text-type-set",
   zset: "bg-type-zset/10 text-type-zset",
+  stream: "bg-type-stream/10 text-type-stream",
+  rejson: "bg-type-rejson/10 text-type-rejson",
 };
 
 const typeIcons: Record<RedisDataType, any> = {
   string: Type, hash: Hash, list: List, set: CircleDot, zset: BarChart3,
+  stream: ListTree, rejson: FileJson2,
 };
 
 const typeBorderColors: Record<RedisDataType, string> = {
   string: '#8b5cf6', hash: '#0ea5e9', list: '#10b981', set: '#f59e0b', zset: '#ef4444',
+  stream: '#14b8a6', rejson: '#ec4899',
 };
 
 function formatTtl(ttl: number): string {
@@ -402,6 +415,54 @@ async function saveEditZSet(e: Event) {
   }
 }
 function cancelEditZSet() { editingZSetMember.value = null; }
+
+// ReJSON document view/edit
+const editingReJson = ref(false);
+const reJsonTemp = ref('');
+const reJsonViewMode = ref<'pretty' | 'raw'>('pretty');
+const reJsonPathInput = ref('$');
+
+const reJsonDisplay = computed(() => {
+  const v = detail.currentValue;
+  if (!v || v.type !== 'rejson') return '';
+  if (editingReJson.value) return reJsonTemp.value;
+  if (reJsonViewMode.value === 'pretty') {
+    try { return JSON.stringify(JSON.parse(v.json), null, 2); } catch { return v.json; }
+  }
+  return v.json;
+});
+
+function startEditReJson() {
+  const v = detail.currentValue;
+  if (!v || v.type !== 'rejson') return;
+  try { reJsonTemp.value = JSON.stringify(JSON.parse(v.json), null, 2); }
+  catch { reJsonTemp.value = v.json; }
+  editingReJson.value = true;
+}
+function cancelEditReJson() { editingReJson.value = false; }
+
+async function saveEditReJson() {
+  try { JSON.parse(reJsonTemp.value); }
+  catch { toast.error(t('detail.jsonInvalid')); return; }
+  const ok = await detail.saveReJson('$', reJsonTemp.value);
+  if (ok) { toast.success(t('detail.saveSuccess')); editingReJson.value = false; }
+  else toast.error(t('detail.saveFailed'));
+}
+
+async function deleteReJsonPath() {
+  const path = reJsonPathInput.value.trim() || '$';
+  const confirmed = await confirmDialog.value?.open({
+    title: t("common.confirmDeleteTitle"),
+    message: t("detail.jsonDeleteConfirm", { path }),
+    confirmLabel: t("common.delete"),
+    cancelLabel: t("common.cancel"),
+    danger: true,
+  });
+  if (!confirmed) return;
+  const ok = await detail.deleteReJsonPath(path);
+  if (ok) toast.success(t('detail.jsonPathDeleted'));
+  else toast.error(t('detail.saveFailed'));
+}
 
 // Delete a sub-element (hash field / list item / set member / zset member)
 async function deleteSubField(keyType: string, params: { field?: string; value?: string }) {
@@ -1021,7 +1082,7 @@ onBeforeUnmount(() => {
                 ? 'text-text-secondary bg-bg-primary' 
                 : `text-type-${cascade.typeFilter} bg-type-${cascade.typeFilter}/10 hover:bg-type-${cascade.typeFilter}/20`"
             >
-              <span>{{ cascade.typeFilter === 'all' ? t('browser.allTypes') : capitalizeFirst(cascade.typeFilter) }}</span>
+              <span>{{ cascade.typeFilter === 'all' ? t('browser.allTypes') : typeLabel(cascade.typeFilter) }}</span>
               <ChevronDown :size="11" class="shrink-0 text-redis/50 transition-transform" :class="showTypeDropdown ? 'rotate-180' : ''" />
             </button>
             <!-- Backdrop -->
@@ -1044,7 +1105,7 @@ onBeforeUnmount(() => {
                   ? 'text-redis font-semibold bg-redis/5'
                   : 'text-text-secondary font-medium hover:bg-bg-hover hover:text-text-primary'"
               >
-                <span>{{ type === 'all' ? t('browser.allTypes') : capitalizeFirst(type) }}</span>
+                <span>{{ type === 'all' ? t('browser.allTypes') : typeLabel(type) }}</span>
                 <Check v-if="cascade.typeFilter === type" :size="11" class="text-redis" />
               </button>
             </div>
@@ -1589,6 +1650,95 @@ onBeforeUnmount(() => {
               </table>
               </div>
             </div>
+          </div>
+
+          <!-- Stream -->
+          <div v-else-if="detail.currentValue?.type === 'stream'" class="flex flex-col min-h-0">
+            <div class="flex items-center justify-between mb-3 shrink-0 flex-wrap gap-2">
+              <label class="text-xs font-medium text-text-secondary">{{ t("detail.streamPreview") }}</label>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span class="badge bg-type-stream/10 text-type-stream">{{ t("detail.streamLength") }}: {{ (detail.currentValue as any).length }}</span>
+                <span class="badge bg-bg-hover text-text-secondary font-mono">{{ t("detail.streamLastId") }}: {{ (detail.currentValue as any).lastGeneratedId || "-" }}</span>
+                <span class="badge bg-bg-hover text-text-secondary">{{ t("detail.streamGroups") }}: {{ (detail.currentValue as any).groups }}</span>
+              </div>
+            </div>
+            <div class="border border-border rounded-lg flex-1 min-h-0">
+              <div class="h-full overflow-y-auto">
+              <table class="w-full text-sm table-fixed">
+                <thead class="sticky top-0 z-10"><tr class="bg-bg-primary">
+                  <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border" style="width:30%;max-width:240px">ID</th>
+                  <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border">{{ t("streams.colFields") }}</th>
+                </tr></thead>
+                <tbody>
+                  <tr v-for="(entry, i) in (detail.currentValue as any).entries" :key="entry.id" class="border-b border-border-light last:border-0 align-top" :class="i % 2 ? 'bg-bg-primary/50' : ''">
+                    <td class="px-3 py-2 font-mono text-xs text-type-stream font-medium break-all">{{ entry.id }}</td>
+                    <td class="px-3 py-2 font-mono text-xs text-text-secondary">
+                      <div v-for="[f, v] in entry.fields" :key="f" class="truncate" :title="`${f}=${v}`">
+                        <span class="text-redis/70">{{ f }}</span>=<span class="text-text-primary">{{ v }}</span>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              </div>
+            </div>
+            <p v-if="(detail.currentValue as any).truncated" class="text-[11px] text-text-muted mt-2 shrink-0">
+              {{ t("detail.streamTruncated", { count: (detail.currentValue as any).entries.length }) }}
+            </p>
+          </div>
+
+          <!-- ReJSON -->
+          <div v-else-if="detail.currentValue?.type === 'rejson'" class="flex flex-col min-h-0">
+            <div class="flex items-center justify-between mb-3 shrink-0 flex-wrap gap-2">
+              <label class="text-xs font-medium text-text-secondary">JSON</label>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <!-- Pretty / Raw toggle -->
+                <div class="flex items-center border border-border rounded-lg overflow-hidden">
+                  <button
+                    @click="reJsonViewMode = 'pretty'"
+                    class="px-2 py-0.5 text-[11px] transition-colors"
+                    :class="reJsonViewMode === 'pretty' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >{{ t("detail.jsonPretty") }}</button>
+                  <button
+                    @click="reJsonViewMode = 'raw'"
+                    class="px-2 py-0.5 text-[11px] transition-colors border-l border-border"
+                    :class="reJsonViewMode === 'raw' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >{{ t("detail.jsonRaw") }}</button>
+                </div>
+                <template v-if="editingReJson">
+                  <button @click="saveEditReJson" class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium bg-success/10 text-success rounded-lg hover:bg-success/20 transition-colors">
+                    <Save :size="11" /> {{ t("detail.save") }}
+                  </button>
+                  <button @click="cancelEditReJson" class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-text-muted rounded-lg hover:bg-bg-hover transition-colors">
+                    <X :size="11" /> {{ t("detail.cancel") }}
+                  </button>
+                </template>
+                <button v-else @click="startEditReJson" class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-text-secondary rounded-lg hover:bg-bg-hover transition-colors">
+                  <Pencil :size="11" /> {{ t("detail.edit") }}
+                </button>
+                <!-- Path delete -->
+                <input
+                  v-model="reJsonPathInput"
+                  type="text"
+                  :placeholder="t('detail.jsonPathPlaceholder')"
+                  class="w-28 px-2 py-1 text-xs font-mono border border-border rounded-lg bg-bg-primary focus:outline-none focus:ring-1 focus:ring-redis/30"
+                />
+                <button @click="deleteReJsonPath" class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-danger rounded-lg hover:bg-danger/10 transition-colors">
+                  <Trash2 :size="11" /> {{ t("detail.jsonDeletePath") }}
+                </button>
+              </div>
+            </div>
+            <textarea
+              :value="reJsonDisplay"
+              @input="editingReJson && (reJsonTemp = ($event.target as HTMLTextAreaElement).value)"
+              :readonly="!editingReJson"
+              :class="[
+                'flex-1 w-full px-4 py-3 text-sm font-mono border rounded-lg resize-none focus:outline-none min-h-[200px]',
+                editingReJson
+                  ? 'bg-bg-secondary border-redis focus:ring-1 focus:ring-redis/30'
+                  : 'bg-bg-primary border-border'
+              ]"
+            />
           </div>
         </div>
       </template>
