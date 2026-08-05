@@ -234,6 +234,7 @@ export const tauriApi = {
       ttl?: number;
       initialData?: any;
       fieldTtl?: number;
+      streamId?: string;
     }) => withConn(params.connectionId, () => invoke<boolean>("create_key", {
       connectionId: params.connectionId,
       key: params.key,
@@ -241,6 +242,7 @@ export const tauriApi = {
       ttl: params.ttl ?? null,
       initialData: params.initialData ?? null,
       fieldTtl: params.fieldTtl ?? null,
+      streamId: params.streamId ?? null,
     })),
 
     batchAddFields: (params: {

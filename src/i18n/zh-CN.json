@@ -116,6 +116,11 @@
     "batchHintList": "每行一个元素",
     "batchHintSet": "每行一个成员",
     "batchHintZset": "每行一个成员，格式：\"score\":\"member\"",
+    "batchHintStream": "每行一个字段，格式：\"field\":\"value\"，所有行将成为首条消息的字段",
+    "streamId": "消息 ID",
+    "streamIdPlaceholder": "留空自动生成（*）",
+    "streamIdHint": "手动格式为 毫秒-序号，如 1785921332386-0，需大于已有 ID",
+    "streamIdInvalid": "消息 ID 格式无效，应为数字或 毫秒-序号 形式（如 1785921332386-0）",
     "zsetScoreInvalid": "第 {line} 行的 score \"{value}\" 不是有效数字"
   },
   "detail": {

@@ -1235,6 +1235,8 @@ pub async fn set_value(
 ///   - list:   `["item1","item2",...]` (array of strings)
 ///   - set:    `["m1","m2",...]` (array of strings)
 ///   - zset:   `[["member",1.0],...]` (array of [member, score] pairs)
+///   - stream: `[["field","value"], ...]` (all pairs become fields of the first entry, XADD).
+///     `stream_id` selects the entry ID: `None`/empty/"*" = auto-generated.
 ///
 /// `field_ttl` is only used for hash type (Redis >= 7.4) to set per-field expiry
 /// right after creation. Value is in seconds.
@@ -1248,6 +1250,7 @@ pub async fn create_key(
     ttl: Option<i64>,
     initial_data: Option<serde_json::Value>,
     field_ttl: Option<i64>,
+    stream_id: Option<String>,
 ) -> Result<bool, String> {
     validate_connection_id(&connection_id)?;
     validate_key(&key)?;
@@ -1428,6 +1431,67 @@ pub async fn create_key(
                 }
             }
             let _: Vec<redis::Value> = pipe.query_async(&mut conn).await.map_err(|e| format!("ZADD error: {}", e))?;
+        }
+        "stream" => {
+            // Streams require Redis >= 5.0
+            let cap = crate::core::capability::get_or_probe(&pool, &connection_id, false)
+                .await
+                .map_err(|e| format!("Capability probe error: {}", e))?;
+            if !cap.streams_supported {
+                return Err(crate::core::capability::unsupported_err(
+                    "Streams",
+                    &cap.redis_version,
+                    "5.0 or later",
+                ));
+            }
+            // Accept [[field, value], ...] — all pairs become fields of the first entry
+            let pairs: Vec<(String, String)> = match initial_data {
+                Some(serde_json::Value::Array(arr)) => {
+                    let mut result = Vec::new();
+                    for item in arr {
+                        if let serde_json::Value::Array(pair) = item {
+                            if pair.len() >= 2 {
+                                let f = pair[0].as_str().unwrap_or("").to_string();
+                                let v = pair[1].as_str().unwrap_or("").to_string();
+                                if !f.is_empty() {
+                                    reject_null_bytes(&f, "field")?;
+                                    reject_null_bytes(&v, "value")?;
+                                    result.push((f, v));
+                                }
+                            }
+                        }
+                    }
+                    result
+                }
+                _ => Vec::new(),
+            };
+            if pairs.is_empty() {
+                return Err(
+                    "Stream creation requires at least one field-value pair (XADD)".to_string(),
+                );
+            }
+            // Entry ID: auto-generate unless a manual ID is supplied
+            let entry_id = match stream_id.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty() && *s != "*") {
+                Some(id) => {
+                    reject_null_bytes(id, "stream id")?;
+                    id.to_string()
+                }
+                None => "*".to_string(),
+            };
+            let mut pipe = redis::pipe();
+            {
+                let cmd = pipe.cmd("XADD");
+                cmd.arg(&key).arg(&entry_id);
+                for (f, v) in &pairs {
+                    cmd.arg(f).arg(v);
+                }
+            }
+            if let Some(t) = ttl {
+                if t > 0 {
+                    pipe.cmd("EXPIRE").arg(&key).arg(t);
+                }
+            }
+            let _: Vec<redis::Value> = pipe.query_async(&mut conn).await.map_err(|e| format!("XADD error: {}", e))?;
         }
         _ => return Err(format!("Unsupported key type: {}", key_type)),
     }

@@ -5,6 +5,7 @@ import { useCascadeStore } from "@/stores/cascadeStore";
 import { useDetailStore } from "@/stores/detailStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useMetricsStore } from "@/stores/metricsStore";
+import { useCapabilityStore } from "@/stores/capabilityStore";
 import type { RedisDataType, StringValue } from "@/types";
 import KeyTreeItem from "@/components/cascade/KeyTreeItem.vue";
 import TtlGauge from "@/components/charts/TtlGauge.vue";
@@ -26,6 +27,7 @@ const cascade = useCascadeStore();
 const detail = useDetailStore();
 const connStore = useConnectionStore();
 const metricsStore = useMetricsStore();
+const capStore = useCapabilityStore();
 
 const confirmDialog = ref<InstanceType<typeof ConfirmDialog>>();
 
@@ -505,6 +507,7 @@ const newKeyType = ref<RedisDataType>('string');
 const newKeyName = ref('');
 const newKeyTtl = ref('');
 const newKeyBatchData = ref('');
+const newKeyStreamId = ref('');
 const newKeyLoading = ref(false);
 
 function openNewKeyDialog() {
@@ -512,6 +515,7 @@ function openNewKeyDialog() {
   newKeyName.value = '';
   newKeyTtl.value = '';
   newKeyBatchData.value = '';
+  newKeyStreamId.value = '';
   showNewKeyDialog.value = true;
 }
 function closeNewKeyDialog() { showNewKeyDialog.value = false; }
@@ -532,6 +536,7 @@ function parseBatchData(type: RedisDataType, text: string): any {
     case 'string':
       return text; // raw string
     case 'hash':
+    case 'stream':
       return lines.map(line => {
         const idx = line.indexOf(':');
         if (idx <= 0) return [stripQuotes(line), ''];
@@ -566,6 +571,7 @@ const newKeyBatchHint = computed(() => {
     case 'list': return t('browser.batchHintList');
     case 'set': return t('browser.batchHintSet');
     case 'zset': return t('browser.batchHintZset');
+    case 'stream': return t('browser.batchHintStream');
     default: return '';
   }
 });
@@ -576,8 +582,16 @@ const newKeyBatchPlaceholder = computed(() => {
     case 'zset': return '"100":"player1"\n"200":"player2"\n"300":"player3"';
     case 'list': return 'item1\nitem2\nitem3';
     case 'set': return 'member1\nmember2\nmember3';
+    case 'stream': return '"user":"alice"\n"action":"login"';
     default: return '';
   }
+});
+
+// Key types available in the create dialog; stream requires Redis >= 5.0
+const newKeyTypeOptions = computed<RedisDataType[]>(() => {
+  const base: RedisDataType[] = ['string', 'hash', 'list', 'set', 'zset'];
+  if (capStore.activeCapability?.streamsSupported !== false) base.push('stream');
+  return base;
 });
 
 async function submitNewKey() {
@@ -586,6 +600,12 @@ async function submitNewKey() {
   const batchText = newKeyBatchData.value.trim();
   if (newKeyType.value !== 'string' && !batchText) {
     toast.error(t('browser.initialDataRequired'));
+    return;
+  }
+  // Stream entry ID: empty = auto-generate (*), otherwise must be ms[-seq]
+  const streamId = newKeyStreamId.value.trim();
+  if (newKeyType.value === 'stream' && streamId && !/^\d+(-\d+)?$/.test(streamId)) {
+    toast.error(t('browser.streamIdInvalid'));
     return;
   }
   newKeyLoading.value = true;
@@ -598,6 +618,7 @@ async function submitNewKey() {
       keyType: newKeyType.value,
       ttl: ttl && ttl > 0 ? ttl : undefined,
       initialData,
+      streamId: newKeyType.value === 'stream' && streamId ? streamId : undefined,
     });
     if (ok) {
       toast.success(t('detail.createKeySuccess', { key: name }));
@@ -1857,9 +1878,9 @@ onBeforeUnmount(() => {
             <!-- Key Type Selector -->
             <div>
               <label class="block text-xs font-medium text-text-secondary mb-2">{{ t('browser.keyType') }}</label>
-              <div class="flex gap-1.5">
-                <button v-for="tp in (['string','hash','list','set','zset'] as RedisDataType[])" :key="tp" @click="newKeyType = tp"
-                  class="group flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg border transition-all duration-200"
+              <div class="grid grid-cols-3 gap-1.5">
+                <button v-for="tp in newKeyTypeOptions" :key="tp" @click="newKeyType = tp"
+                  class="group flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg border transition-all duration-200 min-w-0"
                   :style="newKeyType === tp ? { borderColor: typeBorderColors[tp], backgroundColor: typeBorderColors[tp] + '14' } : undefined"
                   :class="newKeyType === tp ? '' : 'border-border bg-bg-primary hover:bg-bg-hover'">
                   <component :is="typeIcons[tp]" :size="14" :class="newKeyType === tp ? `text-type-${tp}` : 'text-text-muted group-hover:text-text-secondary'" class="transition-colors shrink-0" />
@@ -1874,6 +1895,15 @@ onBeforeUnmount(() => {
                 <Key :size="14" class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
                 <input v-model="newKeyName" placeholder="" class="w-full pl-9 pr-3 py-2 text-sm font-mono bg-bg-primary border border-border rounded-xl focus:outline-none focus:border-redis focus:ring-2 focus:ring-redis/20 transition-all" @keyup.enter="submitNewKey" />
               </div>
+            </div>
+            <!-- Stream Entry ID (auto or manual) -->
+            <div v-if="newKeyType === 'stream'">
+              <label class="block text-xs font-medium text-text-secondary mb-1.5">{{ t('browser.streamId') }}</label>
+              <div class="relative">
+                <ListTree :size="14" class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+                <input v-model="newKeyStreamId" :placeholder="t('browser.streamIdPlaceholder')" class="w-full pl-9 pr-3 py-2 text-sm font-mono bg-bg-primary border border-border rounded-xl focus:outline-none focus:border-redis focus:ring-2 focus:ring-redis/20 transition-all" />
+              </div>
+              <p class="text-[11px] text-text-muted mt-1">{{ t('browser.streamIdHint') }}</p>
             </div>
             <!-- TTL -->
             <div>

@@ -21,7 +21,7 @@ export const useDetailStore = defineStore("detail", () => {
   const history = useHistoryStore();
 
   /** Build a readable command string from structured initialData/items */
-  function buildCommandStr(cmd: string, keyName: string, keyType: string, data: any): string {
+  function buildCommandStr(cmd: string, keyName: string, keyType: string, data: any, streamId?: string): string {
     if (data == null) return `${cmd} ${keyName}`;
     switch (keyType) {
       case "string":
@@ -42,6 +42,14 @@ export const useDetailStore = defineStore("detail", () => {
           return `${cmd} ${keyName} ${pairs}`;
         }
         return `${cmd} ${keyName} ${JSON.stringify(data)}`;
+      case "stream": {
+        const id = streamId?.trim() || "*";
+        if (Array.isArray(data)) {
+          const pairs = data.map(([f, v]: [string, string]) => `${f} ${v}`).join(" ");
+          return `XADD ${keyName} ${id} ${pairs}`;
+        }
+        return `XADD ${keyName} ${id}`;
+      }
       default:
         return `${cmd} ${keyName}`;
     }
@@ -429,13 +437,14 @@ export const useDetailStore = defineStore("detail", () => {
     }
   }
 
-  /** Create a new key (string/hash/list/set/zset) with optional TTL and initial data */
+  /** Create a new key (string/hash/list/set/zset/stream) with optional TTL and initial data */
   async function createKey(params: {
     keyName: string;
     keyType: string;
     ttl?: number;
     initialData?: any;
     fieldTtl?: number;
+    streamId?: string;
   }) {
     const connStore = useConnectionStore();
     const connId = connStore.activeConnectionId;
@@ -449,14 +458,14 @@ export const useDetailStore = defineStore("detail", () => {
       const val = params.initialData != null ? ` ${params.initialData}` : "";
       cmdStr = `SET ${params.keyName}${val} EX ${params.ttl}`;
     } else {
-      const baseCmd = { hash: "HSET", list: "RPUSH", set: "SADD", zset: "ZADD" }[params.keyType] ?? "SET";
-      cmdStr = buildCommandStr(baseCmd, params.keyName, params.keyType, params.initialData);
+      const baseCmd = { hash: "HSET", list: "RPUSH", set: "SADD", zset: "ZADD", stream: "XADD" }[params.keyType] ?? "SET";
+      cmdStr = buildCommandStr(baseCmd, params.keyName, params.keyType, params.initialData, params.streamId);
       if (hasTtl) cmdStr += ` + EXPIRE ${params.keyName} ${params.ttl}`;
     }
 
     try {
       await history.execAndRecord(cmdStr, "browser", () =>
-        tauriApi.cascade.createKey({ connectionId: connId, key: params.keyName, keyType: params.keyType, ttl: params.ttl, initialData: params.initialData, fieldTtl: params.fieldTtl })
+        tauriApi.cascade.createKey({ connectionId: connId, key: params.keyName, keyType: params.keyType, ttl: params.ttl, initialData: params.initialData, fieldTtl: params.fieldTtl, streamId: params.streamId })
       );
       const cascadeStore = useCascadeStore();
       await cascadeStore.refreshKeys(true);

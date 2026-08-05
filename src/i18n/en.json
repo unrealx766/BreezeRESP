@@ -116,6 +116,11 @@
     "batchHintList": "One item per line",
     "batchHintSet": "One member per line",
     "batchHintZset": "One per line, format: \"score\":\"member\"",
+    "batchHintStream": "One field per line, format: \"field\":\"value\". All lines become fields of the first entry",
+    "streamId": "Entry ID",
+    "streamIdPlaceholder": "Leave empty to auto-generate (*)",
+    "streamIdHint": "Manual ID format is ms-seq, e.g. 1785921332386-0. Must be greater than existing IDs",
+    "streamIdInvalid": "Invalid entry ID. Expected digits or ms-seq form (e.g. 1785921332386-0)",
     "zsetScoreInvalid": "Line {line} score \"{value}\" is not a valid number"
   },
   "detail": {
