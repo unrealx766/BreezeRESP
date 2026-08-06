@@ -859,7 +859,7 @@ pub async fn set_hash_field_ttl(
 
     if ttl > 0 {
         // HEXPIRE key seconds FIELDS numfields field [field ...]
-        let result: i64 = redis::cmd("HEXPIRE")
+        let results: Vec<i64> = redis::cmd("HEXPIRE")
             .arg(&key)
             .arg(ttl)
             .arg("FIELDS")
@@ -868,11 +868,11 @@ pub async fn set_hash_field_ttl(
             .query_async(&mut conn)
             .await
             .map_err(|e| format!("HEXPIRE error: {}", e))?;
-        // HEXPIRE returns 1 on success, 0 if field doesn't exist
-        Ok(result > 0)
+        // HEXPIRE returns an array: 1 on success, 0 if field doesn't exist
+        Ok(results.first().copied().unwrap_or(0) > 0)
     } else if ttl == -1 {
         // HPERSIST key FIELDS numfields field [field ...]
-        let result: i64 = redis::cmd("HPERSIST")
+        let results: Vec<i64> = redis::cmd("HPERSIST")
             .arg(&key)
             .arg("FIELDS")
             .arg(1)
@@ -880,7 +880,7 @@ pub async fn set_hash_field_ttl(
             .query_async(&mut conn)
             .await
             .map_err(|e| format!("HPERSIST error: {}", e))?;
-        Ok(result > 0)
+        Ok(results.first().copied().unwrap_or(0) > 0)
     } else {
         Err("Invalid TTL value".to_string())
     }
@@ -1332,7 +1332,8 @@ pub async fn create_key(
             if let Some(fttl) = field_ttl {
                 if fttl > 0 && !pairs.is_empty() {
                     let fields: Vec<&str> = pairs.iter().map(|(f, _)| f.as_str()).collect();
-                    let _: i64 = redis::cmd("HEXPIRE")
+                    // HEXPIRE returns an array with one status per field
+                    let _: Vec<i64> = redis::cmd("HEXPIRE")
                         .arg(&key)
                         .arg(fttl)
                         .arg("FIELDS")
@@ -1564,7 +1565,8 @@ pub async fn batch_add_fields(
             if let Some(fttl) = field_ttl {
                 if fttl > 0 {
                     let fields: Vec<&str> = pairs.iter().map(|(f, _)| f.as_str()).collect();
-                    let _: i64 = redis::cmd("HEXPIRE")
+                    // HEXPIRE returns an array with one status per field
+                    let _: Vec<i64> = redis::cmd("HEXPIRE")
                         .arg(&key)
                         .arg(fttl)
                         .arg("FIELDS")

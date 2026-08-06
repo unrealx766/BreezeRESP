@@ -456,7 +456,7 @@
     "selectKeyHint": "Select a stream from the list on the left"
   },
   "search": {
-    "title": "RedisJSON & Vector Search",
+    "title": "Vector Search",
     "description": "Manage RediSearch indexes and run full-text / vector (KNN) queries",
     "moduleMissingTitle": "RediSearch Module Not Installed",
     "moduleMissingDesc": "The current Redis instance does not have the RediSearch module. Use Redis Stack or install the module to enable full-text and vector search.",
