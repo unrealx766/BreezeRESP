@@ -1357,9 +1357,10 @@ onBeforeUnmount(() => {
               <div class="h-full overflow-y-auto">
               <table class="w-full text-sm table-fixed">
                 <thead class="sticky top-0 z-10"><tr class="bg-bg-primary">
-                  <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border" style="width:35%;max-width:260px">{{ t("detail.field") }}</th>
-                  <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border" :style="(detail.currentValue as any)?.hasFieldTtl ? 'width:55%' : ''">{{ t("detail.value") }}</th>
-                  <th v-if="(detail.currentValue as any)?.hasFieldTtl" class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border" style="width:15%;min-width:100px">{{ t("detail.fieldTtl") }}</th>
+                  <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border" style="width:30%;max-width:260px">{{ t("detail.field") }}</th>
+                  <!-- Value column: no explicit width, auto-fills remaining space -->
+                  <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border">{{ t("detail.value") }}</th>
+                  <th v-if="(detail.currentValue as any)?.hasFieldTtl" class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border" style="width:8.5rem">{{ t("detail.fieldTtl") }}</th>
                 </tr></thead>
                 <tbody>
                   <tr v-for="(f, i) in (detail.currentValue as any).fields" :key="f.field" class="border-b border-border-light last:border-0" :class="i % 2 ? 'bg-bg-primary/50' : ''">
@@ -1407,7 +1408,7 @@ onBeforeUnmount(() => {
                       <div v-if="editingFieldTtl === f.field" class="flex items-center gap-1.5">
                         <input v-model="fieldTtlTemp" @keyup.enter="saveEditFieldTtl($event)" @keyup.escape="cancelEditFieldTtl"
                           type="number"
-                          class="flex-1 text-xs font-mono px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-bg-secondary w-16"
+                          class="flex-1 min-w-0 text-xs font-mono px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-bg-secondary"
                           :placeholder="t('detail.setTtlPlaceholder')" />
                         <button @click="saveEditFieldTtl($event)" class="shrink-0 text-success hover:text-success/80"><Save :size="11" /></button>
                         <button @click="cancelEditFieldTtl" class="shrink-0 text-text-muted hover:text-text-primary"><X :size="11" /></button>

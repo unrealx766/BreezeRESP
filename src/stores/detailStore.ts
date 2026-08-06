@@ -183,6 +183,9 @@ export const useDetailStore = defineStore("detail", () => {
         if (ttlRemaining.value <= 0 && ttlTotal.value > 0) {
           isExpired.value = true;
           stopTtlTimer();
+          // Countdown hit zero: verify against the server so we can recover
+          // (reload if still alive, clear + drop from tree if expired)
+          void verifyExpiredKey();
         }
       } else {
         stopTtlTimer();
@@ -191,6 +194,26 @@ export const useDetailStore = defineStore("detail", () => {
   }
   function stopTtlTimer() {
     if (ttlTimer) { clearInterval(ttlTimer); ttlTimer = null; }
+  }
+
+  /** Remove an expired key from the tree, clear its detail and selection */
+  function dropExpiredKey(key: string) {
+    isExpired.value = false;
+    clearDetail();
+    cascade.keys = cascade.keys.filter((k) => k.key !== key);
+    if (cascade.selectedKey === key) cascade.selectedKey = null;
+  }
+
+  /** Re-check the current key after the local countdown reached zero */
+  async function verifyExpiredKey() {
+    const key = currentDetail.value?.key.key ?? cascade.selectedKey;
+    if (!key) return;
+    // Brief grace period for Redis lazy expiration
+    await new Promise((r) => setTimeout(r, 800));
+    if (cascade.selectedKey !== key) return; // user already switched keys
+    await loadDetail(key, currentPage.value);
+    // loadDetail either reloaded a live key (timer restarted) or detected
+    // the key is gone (TYPE "none" / error) and already dropped it.
   }
 
   async function loadDetail(key: string, page = 0, filter?: string) {
@@ -218,6 +241,12 @@ export const useDetailStore = defineStore("detail", () => {
       if (typeof rustDetail === "string") {
         try { rustDetail = JSON.parse(rustDetail); } catch { /* use as-is */ }
       }
+      // TYPE "none" means the key no longer exists (expired or deleted)
+      const rawType = (rustDetail?.key?.keyType ?? "").toString().toLowerCase();
+      if (rawType === "none") {
+        dropExpiredKey(key);
+        return;
+      }
       currentDetail.value = mapKeyDetail(rustDetail);
 
       if (currentDetail.value.key.ttl > 0) {
@@ -240,6 +269,8 @@ export const useDetailStore = defineStore("detail", () => {
       // If key had a TTL and now fails to load, it likely expired
       if (ttlTotal.value > 0 || isExpired.value) {
         isExpired.value = true;
+        dropExpiredKey(key);
+        return;
       }
       currentDetail.value = null;
     } finally {
