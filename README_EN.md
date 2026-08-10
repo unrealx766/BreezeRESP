@@ -35,9 +35,13 @@
 |:---:|:---:|
 | ![Pipeline Builder](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/03-pipeline.png) | ![Command Sandbox](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/04-shadow-01.png) |
 
-| Slow Log | Pub/Sub |
+| Sandbox Rollback | Slow Log |
 |:---:|:---:|
-| ![Slow Log](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/05-slowlog-01.png) | ![Pub/Sub](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/06-pubsub.png) |
+| ![Sandbox Rollback](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/04-shadow-02.png) | ![Slow Log](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/05-slowlog-01.png) |
+
+| Slow Log Analytics | Pub/Sub |
+|:---:|:---:|
+| ![Slow Log Analytics](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/05-slowlog-02.png) | ![Pub/Sub](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/06-pubsub.png) |
 
 ## 🛠 Tech Stack
 

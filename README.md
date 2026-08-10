@@ -35,9 +35,13 @@
 |:---:|:---:|
 | ![Pipeline 构建器](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/03-pipeline.png) | ![命令沙盒](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/04-shadow-01.png) |
 
-| 慢查询日志 | 发布订阅 |
+| 沙盒回滚 | 慢查询日志 |
 |:---:|:---:|
-| ![慢查询日志](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/05-slowlog-01.png) | ![发布订阅](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/06-pubsub.png) |
+| ![沙盒回滚](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/04-shadow-02.png) | ![慢查询日志](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/05-slowlog-01.png) |
+
+| 慢查询分析 | 发布订阅 |
+|:---:|:---:|
+| ![慢查询分析](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/05-slowlog-02.png) | ![发布订阅](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/06-pubsub.png) |
 
 ## 🛠 技术栈
 
