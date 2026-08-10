@@ -13,7 +13,7 @@
     "pubsub": "Pub/Sub",
     "slowlog": "Slow Log",
     "streams": "Streams",
-    "search": "Search",
+    "search": "RediSearch",
     "streamsUnsupported": "Streams unavailable on Redis {version} (requires 5.0+)",
     "searchUnsupported": "RediSearch module not installed; search is unavailable",
     "collapse": "Collapse",
@@ -456,7 +456,7 @@
     "selectKeyHint": "Select a stream from the list on the left"
   },
   "search": {
-    "title": "Vector Search",
+    "title": "RediSearch",
     "description": "Manage RediSearch indexes and run full-text / vector (KNN) queries",
     "moduleMissingTitle": "RediSearch Module Not Installed",
     "moduleMissingDesc": "The current Redis instance does not have the RediSearch module. Use Redis Stack or install the module to enable full-text and vector search.",

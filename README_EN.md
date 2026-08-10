@@ -14,7 +14,7 @@
 - **Connection Config** — Card-based multi-instance configuration, SSL/TLS encryption, system Keychain secret storage (AES-GCM), connectivity testing, 16 DB switching, auto disconnect detection & status sync, cluster auto-diagnosis & timeout handling
 - **Data Browser** — `:`-delimited cascading tree directory with virtual scrolling, view & inline edit for String / Hash / List / Set / ZSet, Text / Hex / JSON / ASCII multi-view toggle, binary-safe (Bitmaps / HyperLogLog / Geospatial auto-adapted), per-field TTL for Hash (Redis ≥ 7.4), content encoding detection, TTL ring gauge, floating window for long values, debounced search, expired key auto-validation & cleanup
 - **Streams** — Full Redis Streams management: message browsing (XADD / XREAD / XDEL / XTRIM), consumer group management (XGROUP), PEL (Pending Entries List), auto / manual message ID generation, version compatibility detection
-- **Vector Search** — RediSearch full-text search & KNN vector search, index management, query builder, auto-prompt when module unavailable
+- **RediSearch** — Full-text search & KNN vector search, index management, query builder, auto-prompt when module unavailable
 - **Pub/Sub** — Channel / pattern subscription (SUBSCRIBE / PSUBSCRIBE), real-time message stream, Smart Payload Inspector (auto-detect JSON / XML / Hex with tree expand), channel suggestions dropdown, publish history reuse
 - **Slow Log** — Slow query log viewer with analytics view, duration filtering (10ms / 100ms / 1s), command classification stats, read/write trend chart, export support
 - **Command History** — Full write operation logging, filter by connection / DB, success / failure status badges, one-click command copy
@@ -67,7 +67,7 @@ BreezeRESP/
 │   ├── components/         # Cascade tree / charts / layout / shared components
 │   ├── i18n/               # Internationalization (zh-CN / en)
 │   ├── stores/             # Pinia state (connection / cascade / detail / capability / streams / search / slowlog / metrics / history / pubsub / sandbox / search)
-│   ├── views/              # Connection / Browser / PubSub / History / Pipeline / Sandbox / Slowlog / Streams / Vector Search
+│   ├── views/              # Connection / Browser / PubSub / History / Pipeline / Sandbox / Slowlog / Streams / RediSearch
 │   └── utils/              # Formatting / rollback inverse / command templates / dangerous command detection / update checker
 ├── src-tauri/              # Rust backend
 │   ├── src/commands/       # Tauri IPC commands (connection / cascade / pipeline / pubsub / sandbox / slowlog / streams / search / metrics / capability / updater)

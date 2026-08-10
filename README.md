@@ -14,7 +14,7 @@
 - **连接配置** — 卡片式多实例配置，SSL/TLS 加密，系统 Keychain 密钥存储（AES-GCM），连通性测试，16 个 DB 切换，集群模式自动诊断与超时处理
 - **数据浏览** — `:` 分隔的树形级联目录 + 虚拟滚动，String / Hash / List / Set / ZSet 五类型查看与内联编辑，Text / Hex / JSON / ASCII 多视图切换，TTL 环形进度条，长值浮窗查看，搜索防抖，过期 Key 自动验证与清理
 - **Streams** — 完整的 Redis Streams 管理：消息浏览（XADD / XREAD / XDEL / XTRIM），消费者组管理（XGROUP），PEL 待处理列表，消息 ID 自动生成 / 手动设置，版本兼容性检测
-- **向量检索** — RediSearch 全文搜索与 KNN 向量检索，索引管理，查询构建器，模块不可用时自动提示
+- **RediSearch** — 全文搜索与 KNN 向量检索，索引管理，查询构建器，模块不可用时自动提示
 - **发布订阅** — 频道 / 模式订阅（SUBSCRIBE / PSUBSCRIBE），实时消息流，智能 Payload 解析（JSON / XML / Hex 自动识别 + 树形展开），频道下拉建议，发布历史复用
 - **慢查询** — 慢日志查看与分析视图，耗时过滤（10ms / 100ms / 1s），命令分类统计，读写趋势图，导出功能
 - **命令历史** — 全量写操作记录，按连接 / DB 分组筛选，成功 / 失败状态标识，一键复制命令
@@ -66,7 +66,7 @@ BreezeRESP/
 │   ├── components/         # 级联树 / 图表 / 布局 / 共享组件
 │   ├── i18n/               # 国际化 (zh-CN / en)
 │   ├── stores/             # Pinia 状态 (连接 / 级联 / 详情 / 能力 / Streams / 检索 / 慢日志 / 指标 / 历史 / 发布订阅 / 沙箱 / 搜索)
-│   ├── views/              # 连接 / 浏览 / PubSub / 历史 / Pipeline / 沙箱 / 慢查询 / Streams / 向量检索
+│   ├── views/              # 连接 / 浏览 / PubSub / 历史 / Pipeline / 沙箱 / 慢查询 / Streams / RediSearch
 │   └── utils/              # 格式化 / 回滚逆运算 / 命令模板 / 危险命令检测 / 更新检查
 ├── src-tauri/              # Rust 后端
 │   ├── src/commands/       # Tauri IPC 命令 (连接 / 级联 / Pipeline / PubSub / 沙箱 / 慢日志 / Streams / 检索 / 指标 / 能力 / 更新)

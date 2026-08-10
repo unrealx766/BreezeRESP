@@ -13,9 +13,9 @@
     "pubsub": "发布/订阅",
     "slowlog": "慢查询",
     "streams": "Streams",
-    "search": "向量检索",
+    "search": "RediSearch",
     "streamsUnsupported": "当前 Redis {version} 不支持 Streams（需 5.0+）",
-    "searchUnsupported": "未安装 RediSearch 模块，向量检索不可用",
+    "searchUnsupported": "未安装 RediSearch 模块，检索功能不可用",
     "collapse": "收起面板",
     "expand": "展开面板"
   },
@@ -456,7 +456,7 @@
     "selectKeyHint": "请从左侧列表选择一个 stream"
   },
   "search": {
-    "title": "向量检索",
+    "title": "RediSearch",
     "description": "管理 RediSearch 索引，执行全文与向量（KNN）检索",
     "moduleMissingTitle": "未安装 RediSearch 模块",
     "moduleMissingDesc": "当前 Redis 实例未安装 RediSearch 模块。请使用 Redis Stack 或安装相应模块后重试，即可使用全文与向量检索功能。",
