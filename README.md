@@ -68,6 +68,7 @@ BreezeRESP/
 ├── src-tauri/              # Rust 后端
 │   ├── src/commands/       # Tauri IPC 命令 (连接 / 级联 / Pipeline / PubSub / 沙箱 / 慢日志 / Streams / 检索 / 指标 / 能力 / 更新)
 │   └── src/core/           # 连接池 / 加密存储 / Keychain / 指标 / Streams / 检索 / 能力检测 / 集群
+├── scripts/                # 版本同步脚本
 ├── package.json
 └── vite.config.ts
 ```

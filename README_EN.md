@@ -68,6 +68,7 @@ BreezeRESP/
 ├── src-tauri/              # Rust backend
 │   ├── src/commands/       # Tauri IPC commands (connection / cascade / pipeline / pubsub / sandbox / slowlog / streams / search / metrics / capability / updater)
 │   └── src/core/           # Connection pool / encrypted storage / Keychain / metrics / Streams / search / capability detection / cluster
+├── scripts/                # Version sync scripts
 ├── package.json
 └── vite.config.ts
 ```
