@@ -549,6 +549,9 @@
     "copy": "Copy",
     "copied": "Copied",
     "language": "Language",
-    "confirmDeleteTitle": "Confirm Delete"
+    "confirmDeleteTitle": "Confirm Delete",
+    "dangerousCommandTitle": "Dangerous Command Confirmation",
+    "dangerousCommandMessage": "Dangerous command detected: {commands}. Executing it may irreversibly delete or overwrite data. Proceed?",
+    "executeAnyway": "Execute Anyway"
   }
 }
