@@ -404,7 +404,9 @@ export const tauriApi = {
       query: string;
       offset?: number;
       limit?: number;
-      params?: Array<[string, string]>;
+      // Param values are raw byte arrays (number[]) so binary payloads
+      // (e.g. FLOAT32 KNN vectors) survive the JSON IPC bridge losslessly.
+      params?: Array<[string, number[]]>;
       withScores?: boolean;
     }) => withConn(params.connectionId, () =>
       invoke<FtSearchResult>("ft_search", {

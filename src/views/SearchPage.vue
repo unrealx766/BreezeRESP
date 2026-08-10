@@ -102,13 +102,12 @@ async function runSearch() {
         toast.error(t("search.knnVectorInvalid"));
         return;
       }
-      // Pack FLOAT32 vector into a binary-safe string
+      // Pack FLOAT32 vector into raw bytes; a number[] survives the JSON
+      // IPC bridge losslessly (JS strings would mangle bytes >= 0x80).
       const buf = new ArrayBuffer(nums.length * 4);
       const view = new DataView(buf);
       nums.forEach((n, i) => view.setFloat32(i * 4, n, true));
-      const blob = Array.from(new Uint8Array(buf))
-        .map((b) => String.fromCharCode(b))
-        .join("");
+      const blob = Array.from(new Uint8Array(buf));
       const query = `*=>[KNN ${knnK.value} @${field} $vec AS score]`;
       await searchStore.search(connId.value, searchStore.selectedIndex, query, {
         params: [["vec", blob]],

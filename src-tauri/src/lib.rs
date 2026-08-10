@@ -136,6 +136,8 @@ pub fn run() {
             commands::jsonsearch::ft_search,
             commands::jsonsearch::ft_create,
             commands::jsonsearch::ft_drop_index,
+            // Updater commands
+            commands::updater::get_latest_release,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

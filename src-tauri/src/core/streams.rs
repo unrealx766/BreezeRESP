@@ -346,18 +346,20 @@ impl StreamsCollector {
         Ok(keys)
     }
 
-    /// Fetch stream metadata. Uses `XINFO STREAM FULL` when supported
-    /// (6.0+), otherwise falls back to the basic form.
+    /// Fetch stream metadata. Uses `XINFO STREAM key FULL COUNT 10` when the
+    /// COUNT option is supported (7.0+); otherwise falls back to the basic
+    /// form. 6.x intentionally avoids FULL: without COUNT it returns every
+    /// entry and the complete PEL, which is expensive on busy streams.
     pub async fn get_stream_info(
         &self,
         conn: &mut impl AsyncCommands,
         key: &str,
-        full_supported: bool,
+        full_count_supported: bool,
     ) -> Result<StreamInfo, String> {
         let mut cmd = redis::cmd("XINFO");
         cmd.arg("STREAM").arg(key);
-        if full_supported {
-            cmd.arg("FULL");
+        if full_count_supported {
+            cmd.arg("FULL").arg("COUNT").arg(10);
         }
         let raw: redis::Value = cmd
             .query_async(conn)

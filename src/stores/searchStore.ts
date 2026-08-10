@@ -41,7 +41,7 @@ export const useSearchStore = defineStore("search", () => {
     connectionId: string,
     index: string,
     query: string,
-    options?: { offset?: number; limit?: number; params?: Array<[string, string]>; withScores?: boolean },
+    options?: { offset?: number; limit?: number; params?: Array<[string, number[]]>; withScores?: boolean },
   ) {
     searching.value = true;
     try {

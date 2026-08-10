@@ -7,6 +7,7 @@ import ToastContainer from "@/components/shared/ToastContainer.vue";
 import { useMetricsStore } from "@/stores/metricsStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { setConnectionNameGetter, setConnectionDbGetter } from "@/utils/toast";
+import { autoCheckForUpdates } from "@/utils/updater";
 import { emit } from "@tauri-apps/api/event";
 
 const metricsStore = useMetricsStore();
@@ -34,6 +35,9 @@ onMounted(async () => {
     splash.classList.add("splash-hidden");
     splash.addEventListener("transitionend", () => splash.remove());
   }
+
+  // Check for updates in the background (respects user toggle & throttle)
+  autoCheckForUpdates();
 });
 </script>
 

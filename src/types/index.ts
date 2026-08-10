@@ -233,6 +233,7 @@ export interface ServerCapability {
   redisMode: string;
   streamsSupported: boolean;
   streamFullSupported: boolean;
+  streamFullCountSupported: boolean;
   streamExtendedSupported: boolean;
   jsonSupported: boolean;
   jsonVersion: string | null;

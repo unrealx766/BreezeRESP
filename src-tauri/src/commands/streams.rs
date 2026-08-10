@@ -92,7 +92,7 @@ pub async fn list_streams(
         .await
 }
 
-/// Fetch stream metadata (XINFO STREAM, FULL form on Redis 6.0+).
+/// Fetch stream metadata (FULL COUNT 10 form on Redis 7.0+, basic otherwise).
 #[tauri::command]
 pub async fn get_stream_info(
     state: State<'_, AppState>,
@@ -107,7 +107,7 @@ pub async fn get_stream_info(
     let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
 
     StreamsCollector::new()
-        .get_stream_info(&mut conn, &key, cap.stream_full_supported)
+        .get_stream_info(&mut conn, &key, cap.stream_full_count_supported)
         .await
 }
 

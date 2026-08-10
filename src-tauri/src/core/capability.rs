@@ -46,6 +46,9 @@ pub struct ServerCapability {
     pub streams_supported: bool,
     /// XINFO STREAM FULL available (Redis >= 6.0).
     pub stream_full_supported: bool,
+    /// XINFO STREAM FULL COUNT option available (Redis >= 7.0). Without
+    /// COUNT the FULL form returns every entry and the complete PEL.
+    pub stream_full_count_supported: bool,
     /// Extended stream info: consumer-group lag, max-deleted-entry-id,
     /// XAUTOCLAIM, XINFO STREAM ENTRIES (Redis >= 6.2).
     pub stream_extended_supported: bool,
@@ -115,6 +118,7 @@ fn build_capability(info: &str, modules_raw: &redis::Value) -> ServerCapability 
     let version = parse_version(&redis_version);
     let streams_supported = version.map_or(false, |v| v.at_least(5, 0));
     let stream_full_supported = version.map_or(false, |v| v.at_least(6, 0));
+    let stream_full_count_supported = version.map_or(false, |v| v.at_least(7, 0));
     let stream_extended_supported = version.map_or(false, |v| v.at_least(6, 2));
 
     // Scan MODULE LIST for RedisJSON (module name "ReJSON"/"json") and
@@ -159,6 +163,7 @@ fn build_capability(info: &str, modules_raw: &redis::Value) -> ServerCapability 
         redis_mode,
         streams_supported,
         stream_full_supported,
+        stream_full_count_supported,
         stream_extended_supported,
         json_supported,
         json_version,

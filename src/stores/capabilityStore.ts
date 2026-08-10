@@ -6,8 +6,9 @@ import { useConnectionStore } from "./connectionStore";
 
 /**
  * Caches server capability profiles (Redis version + module support) per
- * connection. Profiles are probed lazily on first access and dropped when
- * the backend clears them on disconnect (a fresh probe happens on demand).
+ * connection. Profiles are probed lazily on first access; connectionStore
+ * invalidates them on connect/disconnect/delete so a reconnect always
+ * triggers a fresh probe (a server may change between sessions).
  */
 export const useCapabilityStore = defineStore("capability", () => {
   const profiles = ref<Record<string, ServerCapability>>({});

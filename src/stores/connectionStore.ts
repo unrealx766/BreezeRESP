@@ -11,6 +11,7 @@ import { usePubsubStore } from "@/stores/pubsubStore";
 import { usePipelineStore } from "@/stores/pipelineStore";
 import { useMetricsStore } from "@/stores/metricsStore";
 import { useSandboxStore } from "@/stores/sandboxStore";
+import { useCapabilityStore } from "@/stores/capabilityStore";
 
 export const useConnectionStore = defineStore("connection", () => {
   const connections = ref<RedisConnection[]>([]);
@@ -160,6 +161,8 @@ export const useConnectionStore = defineStore("connection", () => {
     connections.value = connections.value.filter((c) => c.id !== id);
     delete activeDbMap.value[id];
     if (activeConnectionId.value === id) activeConnectionId.value = null;
+    // Drop cached capability profile (backend cache is cleared on delete)
+    useCapabilityStore().invalidate(id);
     // Clean up orphaned history records for the removed connection
     const historyStore = useHistoryStore();
     historyStore.clearHistory(id);
@@ -208,6 +211,10 @@ export const useConnectionStore = defineStore("connection", () => {
       await _withCancel(`connect:${id}`, tauriApi.connection.connect(toRustConfig(conn)));
       setStatus(id, "connected");
       activeConnectionId.value = id;
+      // Drop any stale capability profile: the backend cache was cleared on
+      // the previous disconnect, and the server may have been upgraded or
+      // re-pointed since, so force a fresh probe on next access.
+      useCapabilityStore().invalidate(id);
       conn.lastUsed = Date.now();
       sessionConnectedIds.value = new Set([...sessionConnectedIds.value, id]);
       // Restore last active DB if it differs from the default (session persistence across reconnect).
@@ -242,8 +249,10 @@ export const useConnectionStore = defineStore("connection", () => {
       console.error("Disconnect failed:", e);
     }
     setStatus(id, "disconnected");
-    // Backend tears down the pubsub listener on disconnect; mirror locally.
+    // Backend tears down the pubsub listener and capability cache on
+    // disconnect; mirror both locally.
     usePubsubStore().clearConnection(id);
+    useCapabilityStore().invalidate(id);
     if (activeConnectionId.value === id) {
       activeConnectionId.value = null;
 

@@ -193,7 +193,7 @@ pub async fn ft_search(
     query: String,
     offset: Option<u64>,
     limit: Option<u64>,
-    params: Option<Vec<(String, String)>>,
+    params: Option<Vec<(String, Vec<u8>)>>,
     with_scores: Option<bool>,
 ) -> Result<FtSearchResult, String> {
     validate_connection_id(&connection_id)?;

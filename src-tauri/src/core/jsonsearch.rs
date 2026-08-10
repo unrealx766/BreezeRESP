@@ -301,6 +301,9 @@ impl JsonSearchCollector {
     }
 
     /// FT.SEARCH with optional LIMIT and PARAMS (for KNN vector queries).
+    /// Param values are raw byte vectors: binary payloads (e.g. FLOAT32
+    /// blobs) travel from the frontend as number arrays and must be sent
+    /// to the server as bytes, never reinterpreted as UTF-8 text.
     pub async fn ft_search(
         &self,
         conn: &mut impl AsyncCommands,
@@ -308,7 +311,7 @@ impl JsonSearchCollector {
         query: &str,
         offset: u64,
         limit: u64,
-        params: &[(String, String)],
+        params: &[(String, Vec<u8>)],
         with_scores: bool,
     ) -> Result<FtSearchResult, String> {
         let mut cmd = redis::cmd("FT.SEARCH");
@@ -319,7 +322,7 @@ impl JsonSearchCollector {
         if !params.is_empty() {
             cmd.arg("PARAMS").arg(params.len() * 2);
             for (k, v) in params {
-                cmd.arg(k).arg(v);
+                cmd.arg(k).arg(v.as_slice());
             }
         }
         let raw: redis::Value = cmd

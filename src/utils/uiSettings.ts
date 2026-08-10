@@ -12,6 +12,14 @@ export function toggleSidebar() {
   sidebarCollapsed.value = !sidebarCollapsed.value;
 }
 
+// ── Auto check for updates ──
+const AUTO_UPDATE_KEY = "breezeresp-auto-check-update";
+export const autoCheckUpdate = ref(localStorage.getItem(AUTO_UPDATE_KEY) !== "false");
+
+watch(autoCheckUpdate, (v) => {
+  localStorage.setItem(AUTO_UPDATE_KEY, String(v));
+});
+
 // ── Per-connection dot color ──
 const DOT_COLORS_KEY = "breezeresp-dot-colors";
 export const DEFAULT_DOT_COLOR = "#22c55e"; // Tailwind green-500 (same as bg-success)

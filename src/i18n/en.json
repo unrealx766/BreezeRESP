@@ -514,8 +514,18 @@
     "themeDesc": "Choose the appearance for the application",
     "themeLight": "Light",
     "themeDark": "Dark",
+    "autoCheckUpdate": "Check for updates automatically",
+    "autoCheckUpdateDesc": "Automatically check for new versions on startup (at most once every 24 hours)",
     "general": "General",
     "about": "About"
+  },
+  "updater": {
+    "checkUpdate": "Check for updates",
+    "checking": "Checking for updates…",
+    "upToDate": "You're on the latest version",
+    "updateAvailable": "New version v{version} available",
+    "download": "Download",
+    "checkFailed": "Failed to check for updates, please try again later"
   },
   "notifications": {
     "title": "Notifications",
