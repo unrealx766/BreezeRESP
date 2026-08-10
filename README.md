@@ -11,29 +11,33 @@
 
 ## ✨ 功能特性
 
-- **连接配置** — 卡片式多实例配置，SSL/TLS 加密，系统 Keychain 密钥存储（AES-GCM），连通性测试，16 个 DB 切换
-- **数据浏览** — `:` 分隔的树形级联目录 + 虚拟滚动，String / Hash / List / Set / ZSet 五类型查看与内联编辑，Text / Hex / JSON / ASCII 多视图切换，TTL 环形进度条，长值浮窗查看，搜索防抖
+- **连接配置** — 卡片式多实例配置，SSL/TLS 加密，系统 Keychain 密钥存储（AES-GCM），连通性测试，16 个 DB 切换，集群模式自动诊断与超时处理
+- **数据浏览** — `:` 分隔的树形级联目录 + 虚拟滚动，String / Hash / List / Set / ZSet 五类型查看与内联编辑，Text / Hex / JSON / ASCII 多视图切换，TTL 环形进度条，长值浮窗查看，搜索防抖，过期 Key 自动验证与清理
+- **Streams** — 完整的 Redis Streams 管理：消息浏览（XADD / XREAD / XDEL / XTRIM），消费者组管理（XGROUP），PEL 待处理列表，消息 ID 自动生成 / 手动设置，版本兼容性检测
+- **向量检索** — RediSearch 全文搜索与 KNN 向量检索，索引管理，查询构建器，模块不可用时自动提示
 - **发布订阅** — 频道 / 模式订阅（SUBSCRIBE / PSUBSCRIBE），实时消息流，智能 Payload 解析（JSON / XML / Hex 自动识别 + 树形展开），频道下拉建议，发布历史复用
+- **慢查询** — 慢日志查看与分析视图，耗时过滤（10ms / 100ms / 1s），命令分类统计，读写趋势图，导出功能
 - **命令历史** — 全量写操作记录，按连接 / DB 分组筛选，成功 / 失败状态标识，一键复制命令
 - **实时监控** — QPS 趋势图，内存 / 命中率 / CPU 等关键指标仪表盘
-- **流水线** — 可视化编排批量命令，拖拽排序，逐条结果与延迟统计（含 RTT 节省率），脚本加密保存 / 加载
-- **沙箱模式** — 执行前 Diff 预览，内置写命令模板，快照与一键回滚（自动生成逆操作），危险命令前端拦截
-- **设置中心** — 明暗主题切换，语言偏好持久化
+- **流水线** — 可视化编排批量命令，拖拽排序，逐条结果与延迟统计（含 RTT 节省率），脚本加密保存 / 加载，危险命令二次确认
+- **沙箱模式** — 执行前 Diff 预览，内置写命令模板，快照与一键回滚（自动生成逆操作），危险命令前端拦截与二次确认
+- **自动更新** — 启动时自动检查 GitHub Releases（每 24 小时节流），交互 Toast 一键跳转下载，设置中心手动触发检查
+- **设置中心** — 明暗主题切换，语言偏好持久化，自动更新开关
 - **跨平台** — 支持 Windows / macOS / Linux
 
 ## 📸 截图
 
-| 连接管理 | 暗黑模式 |
+| 连接管理 | 数据浏览器 |
 |:---:|:---:|
-| ![连接管理](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/Connection.png) | ![暗黑模式](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/dark_mode.png) |
+| ![连接管理](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/01-connection.png) | ![数据浏览器](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/02-data_browser.png.png) |
 
-| 数据浏览器 | Pipeline 构建器 |
+| Pipeline 构建器 | 命令沙盒 |
 |:---:|:---:|
-| ![数据浏览器](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/data_browser.png) | ![Pipeline 构建器](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/Pipeline.png) |
+| ![Pipeline 构建器](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/03-pipeline.png) | ![命令沙盒](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/04-shadow-01.png) |
 
-| 命令沙盒 |
-|:---:|
-| ![命令沙盒](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/shadow.png) |
+| 慢查询日志 | 发布订阅 |
+|:---:|:---:|
+| ![慢查询日志](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/05-slowlog-01.png) | ![发布订阅](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/06-pubsub.png) |
 
 ## 🛠 技术栈
 
@@ -58,13 +62,12 @@ BreezeRESP/
 ├── src/                    # Vue 3 前端
 │   ├── components/         # 级联树 / 图表 / 布局 / 共享组件
 │   ├── i18n/               # 国际化 (zh-CN / en)
-│   ├── stores/             # Pinia 状态
-│   ├── views/              # 连接 / 浏览 / PubSub / 历史 / Pipeline / 沙箱
-│   └── utils/              # 格式化 / 回滚逆运算 / 命令模板
+│   ├── stores/             # Pinia 状态 (连接 / 级联 / 详情 / 能力 / Streams / 检索 / 慢日志 / 指标 / 历史 / 发布订阅 / 沙箱 / 搜索)
+│   ├── views/              # 连接 / 浏览 / PubSub / 历史 / Pipeline / 沙箱 / 慢查询 / Streams / 向量检索
+│   └── utils/              # 格式化 / 回滚逆运算 / 命令模板 / 危险命令检测 / 更新检查
 ├── src-tauri/              # Rust 后端
-│   ├── src/commands/       # Tauri IPC 命令
-│   └── src/core/           # 连接池 / 加密存储 / Keychain / 指标
-├── scripts/                # 版本同步脚本
+│   ├── src/commands/       # Tauri IPC 命令 (连接 / 级联 / Pipeline / PubSub / 沙箱 / 慢日志 / Streams / 检索 / 指标 / 能力 / 更新)
+│   └── src/core/           # 连接池 / 加密存储 / Keychain / 指标 / Streams / 检索 / 能力检测 / 集群
 ├── package.json
 └── vite.config.ts
 ```

@@ -11,29 +11,33 @@
 
 ## ✨ Features
 
-- **Connection Config** — Card-based multi-instance configuration, SSL/TLS encryption, system Keychain secret storage (AES-GCM), connectivity testing, 16 DB switching, auto disconnect detection & status sync
-- **Data Browser** — `:`-delimited cascading tree directory with virtual scrolling, view & inline edit for String / Hash / List / Set / ZSet, Text / Hex / JSON / ASCII multi-view toggle, binary-safe (Bitmaps / HyperLogLog / Geospatial auto-adapted), per-field TTL for Hash (Redis ≥ 7.4), content encoding detection, TTL ring gauge, floating window for long values, debounced search
+- **Connection Config** — Card-based multi-instance configuration, SSL/TLS encryption, system Keychain secret storage (AES-GCM), connectivity testing, 16 DB switching, auto disconnect detection & status sync, cluster auto-diagnosis & timeout handling
+- **Data Browser** — `:`-delimited cascading tree directory with virtual scrolling, view & inline edit for String / Hash / List / Set / ZSet, Text / Hex / JSON / ASCII multi-view toggle, binary-safe (Bitmaps / HyperLogLog / Geospatial auto-adapted), per-field TTL for Hash (Redis ≥ 7.4), content encoding detection, TTL ring gauge, floating window for long values, debounced search, expired key auto-validation & cleanup
+- **Streams** — Full Redis Streams management: message browsing (XADD / XREAD / XDEL / XTRIM), consumer group management (XGROUP), PEL (Pending Entries List), auto / manual message ID generation, version compatibility detection
+- **Vector Search** — RediSearch full-text search & KNN vector search, index management, query builder, auto-prompt when module unavailable
 - **Pub/Sub** — Channel / pattern subscription (SUBSCRIBE / PSUBSCRIBE), real-time message stream, Smart Payload Inspector (auto-detect JSON / XML / Hex with tree expand), channel suggestions dropdown, publish history reuse
+- **Slow Log** — Slow query log viewer with analytics view, duration filtering (10ms / 100ms / 1s), command classification stats, read/write trend chart, export support
 - **Command History** — Full write operation logging, filter by connection / DB, success / failure status badges, one-click command copy
 - **Real-time Monitoring** — QPS trend chart, dashboard for memory / hit rate / CPU and other key metrics
-- **Pipeline** — Visual batch command orchestration, drag-and-drop sorting, per-command result & latency stats (with RTT savings), encrypted script save / load
-- **Sandbox Mode** — Pre-execution diff preview, built-in write command templates, snapshot & one-click rollback (auto-generated inverse operations), dangerous command frontend interception
-- **Settings Center** — Dark / light theme toggle, persistent language preference
+- **Pipeline** — Visual batch command orchestration, drag-and-drop sorting, per-command result & latency stats (with RTT savings), encrypted script save / load, dangerous command second confirmation
+- **Sandbox Mode** — Pre-execution diff preview, built-in write command templates, snapshot & one-click rollback (auto-generated inverse operations), dangerous command frontend interception & second confirmation
+- **Auto Update** — Automatic GitHub Releases check on startup (24h throttle), interactive toast with one-click download, manual trigger in settings center
+- **Settings Center** — Dark / light theme toggle, persistent language preference, auto-update toggle
 - **Cross-Platform** — Supports Windows / macOS / Linux
 
 ## 📸 Screenshots
 
-| Connection Management | Dark Mode |
+| Connection Management | Data Browser |
 |:---:|:---:|
-| ![Connection Management](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/Connection.png) | ![Dark Mode](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/dark_mode.png) |
+| ![Connection Management](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/01-connection.png) | ![Data Browser](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/02-data_browser.png.png) |
 
-| Data Browser | Pipeline Builder |
+| Pipeline Builder | Command Sandbox |
 |:---:|:---:|
-| ![Data Browser](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/data_browser.png) | ![Pipeline Builder](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/Pipeline.png) |
+| ![Pipeline Builder](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/03-pipeline.png) | ![Command Sandbox](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/04-shadow-01.png) |
 
-| Command Sandbox |
-|:---:|
-| ![Command Sandbox](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/shadow.png) |
+| Slow Log | Pub/Sub |
+|:---:|:---:|
+| ![Slow Log](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/05-slowlog-01.png) | ![Pub/Sub](https://raw.githubusercontent.com/unrealx766/BreezeRESP/screenshots/06-pubsub.png) |
 
 ## 🛠 Tech Stack
 
@@ -58,13 +62,12 @@ BreezeRESP/
 ├── src/                    # Vue 3 frontend
 │   ├── components/         # Cascade tree / charts / layout / shared components
 │   ├── i18n/               # Internationalization (zh-CN / en)
-│   ├── stores/             # Pinia state management
-│   ├── views/              # Connection / Browser / PubSub / History / Pipeline / Sandbox
-│   └── utils/              # Formatting / rollback inverse / command templates
+│   ├── stores/             # Pinia state (connection / cascade / detail / capability / streams / search / slowlog / metrics / history / pubsub / sandbox / search)
+│   ├── views/              # Connection / Browser / PubSub / History / Pipeline / Sandbox / Slowlog / Streams / Vector Search
+│   └── utils/              # Formatting / rollback inverse / command templates / dangerous command detection / update checker
 ├── src-tauri/              # Rust backend
-│   ├── src/commands/       # Tauri IPC commands
-│   └── src/core/           # Connection pool / encrypted storage / Keychain / metrics
-├── scripts/                # Version sync scripts
+│   ├── src/commands/       # Tauri IPC commands (connection / cascade / pipeline / pubsub / sandbox / slowlog / streams / search / metrics / capability / updater)
+│   └── src/core/           # Connection pool / encrypted storage / Keychain / metrics / Streams / search / capability detection / cluster
 ├── package.json
 └── vite.config.ts
 ```
