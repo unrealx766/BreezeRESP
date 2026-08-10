@@ -108,8 +108,8 @@ function toggleExpand(id: number) {
   expandedId.value = expandedId.value === id ? null : id;
 }
 
-// ---- Analytics: Key hotspot ----
-interface HotKey {
+// ---- Analytics: Slow query key distribution ----
+interface SlowQueryKey {
   key: string;
   count: number;
   totalDurationUs: number;
@@ -131,7 +131,7 @@ function extractKeys(cmd: string): string[] {
   return parts.length > 1 ? [parts[1]] : [];
 }
 
-const hotKeys = computed<HotKey[]>(() => {
+const slowQueryKeys = computed<SlowQueryKey[]>(() => {
   const map = new Map<string, { count: number; total: number }>();
   for (const entry of filteredEntries.value) {
     for (const key of extractKeys(entry.command)) {
@@ -910,16 +910,16 @@ function handleCountChange() {
           </div>
         </div>
 
-        <!-- Key Hotspot -->
+        <!-- Slow Query Key Distribution -->
         <div class="rounded-lg border border-border p-4">
           <h3 class="text-sm font-semibold text-text-primary flex items-center gap-2 mb-3">
             <KeyRound :size="15" class="text-redis" />
-            {{ t("slowlog.keyHotspot") }}
-            <span class="text-[10px] font-normal text-text-muted">{{ t("slowlog.keyHotspotHint") }}</span>
+            {{ t("slowlog.slowQueryKeyDistribution") }}
+            <span class="text-[10px] font-normal text-text-muted">{{ t("slowlog.slowQueryKeyDistributionHint") }}</span>
           </h3>
-          <div v-if="hotKeys.length > 0" class="space-y-1.5 max-h-72 overflow-y-auto overflow-x-hidden pr-1">
+          <div v-if="slowQueryKeys.length > 0" class="space-y-1.5 max-h-72 overflow-y-auto overflow-x-hidden pr-1">
             <div
-              v-for="hk in hotKeys"
+              v-for="hk in slowQueryKeys"
               :key="hk.key"
               @click="applyKeyFilter(hk.key)"
               class="flex items-center gap-3 px-2 py-1.5 rounded-lg cursor-pointer transition-colors"
@@ -930,7 +930,7 @@ function handleCountChange() {
               <div class="w-24 shrink-0 h-4 bg-bg-secondary rounded overflow-hidden">
                 <div
                   class="h-full bg-redis/25 rounded transition-all duration-300"
-                  :style="{ width: `${(hk.count / (hotKeys[0]?.count || 1)) * 100}%` }"
+                  :style="{ width: `${(hk.count / (slowQueryKeys[0]?.count || 1)) * 100}%` }"
                 ></div>
               </div>
               <span class="text-[11px] font-mono text-text-secondary w-10 shrink-0 text-right">{{ hk.count }}</span>
