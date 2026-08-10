@@ -1,8 +1,8 @@
 import { defineStore } from "pinia";
 import { ref, computed, watch } from "vue";
-import type { KeyDetail, KeyValue, RedisDataType } from "@/types";
+import type { KeyDetail, KeyValue, StreamEntry } from "@/types";
 import { tauriApi } from "@/services/tauriApi";
-import { useCascadeStore } from "./cascadeStore";
+import { useCascadeStore, normalizeKeyType } from "./cascadeStore";
 import { useConnectionStore } from "./connectionStore";
 import { useMetricsStore } from "./metricsStore";
 import { useHistoryStore } from "./historyStore";
@@ -21,7 +21,7 @@ export const useDetailStore = defineStore("detail", () => {
   const history = useHistoryStore();
 
   /** Build a readable command string from structured initialData/items */
-  function buildCommandStr(cmd: string, keyName: string, keyType: string, data: any): string {
+  function buildCommandStr(cmd: string, keyName: string, keyType: string, data: any, streamId?: string): string {
     if (data == null) return `${cmd} ${keyName}`;
     switch (keyType) {
       case "string":
@@ -42,6 +42,14 @@ export const useDetailStore = defineStore("detail", () => {
           return `${cmd} ${keyName} ${pairs}`;
         }
         return `${cmd} ${keyName} ${JSON.stringify(data)}`;
+      case "stream": {
+        const id = streamId?.trim() || "*";
+        if (Array.isArray(data)) {
+          const pairs = data.map(([f, v]: [string, string]) => `${f} ${v}`).join(" ");
+          return `XADD ${keyName} ${id} ${pairs}`;
+        }
+        return `XADD ${keyName} ${id}`;
+      }
       default:
         return `${cmd} ${keyName}`;
     }
@@ -59,7 +67,7 @@ export const useDetailStore = defineStore("detail", () => {
   /** Convert Rust KeyDetail response to frontend KeyDetail type */
   function mapKeyDetail(rust: any): KeyDetail {
     const rk = rust.key || {};
-    const keyType = (rk.keyType || rk.key_type || "string") as RedisDataType;
+    const keyType = normalizeKeyType(rk.keyType || rk.key_type || "string");
     // Defensive: if Tauri IPC returns value as a JSON string (possible with serde_json::Value), parse it
     let val = rust.value as unknown;
     if (typeof val === "string") {
@@ -127,6 +135,23 @@ export const useDetailStore = defineStore("detail", () => {
           truncated: v.truncated as boolean | undefined,
         };
         break;
+      case "stream":
+        keyValue = {
+          type: "stream",
+          length: (v.length as number) ?? 0,
+          lastGeneratedId: (v.lastGeneratedId as string) || "",
+          groups: (v.groups as number) ?? 0,
+          entries: (v.entries as StreamEntry[]) || [],
+          totalCount: v.totalCount as number | undefined,
+          truncated: v.truncated as boolean | undefined,
+        };
+        break;
+      case "rejson":
+        keyValue = {
+          type: "rejson",
+          json: (v.json as string) ?? "",
+        };
+        break;
       default:
         keyValue = {
           type: "string",
@@ -158,6 +183,9 @@ export const useDetailStore = defineStore("detail", () => {
         if (ttlRemaining.value <= 0 && ttlTotal.value > 0) {
           isExpired.value = true;
           stopTtlTimer();
+          // Countdown hit zero: verify against the server so we can recover
+          // (reload if still alive, clear + drop from tree if expired)
+          void verifyExpiredKey();
         }
       } else {
         stopTtlTimer();
@@ -166,6 +194,26 @@ export const useDetailStore = defineStore("detail", () => {
   }
   function stopTtlTimer() {
     if (ttlTimer) { clearInterval(ttlTimer); ttlTimer = null; }
+  }
+
+  /** Remove an expired key from the tree, clear its detail and selection */
+  function dropExpiredKey(key: string) {
+    isExpired.value = false;
+    clearDetail();
+    cascade.keys = cascade.keys.filter((k) => k.key !== key);
+    if (cascade.selectedKey === key) cascade.selectedKey = null;
+  }
+
+  /** Re-check the current key after the local countdown reached zero */
+  async function verifyExpiredKey() {
+    const key = currentDetail.value?.key.key ?? cascade.selectedKey;
+    if (!key) return;
+    // Brief grace period for Redis lazy expiration
+    await new Promise((r) => setTimeout(r, 800));
+    if (cascade.selectedKey !== key) return; // user already switched keys
+    await loadDetail(key, currentPage.value);
+    // loadDetail either reloaded a live key (timer restarted) or detected
+    // the key is gone (TYPE "none" / error) and already dropped it.
   }
 
   async function loadDetail(key: string, page = 0, filter?: string) {
@@ -193,6 +241,12 @@ export const useDetailStore = defineStore("detail", () => {
       if (typeof rustDetail === "string") {
         try { rustDetail = JSON.parse(rustDetail); } catch { /* use as-is */ }
       }
+      // TYPE "none" means the key no longer exists (expired or deleted)
+      const rawType = (rustDetail?.key?.keyType ?? "").toString().toLowerCase();
+      if (rawType === "none") {
+        dropExpiredKey(key);
+        return;
+      }
       currentDetail.value = mapKeyDetail(rustDetail);
 
       if (currentDetail.value.key.ttl > 0) {
@@ -215,6 +269,8 @@ export const useDetailStore = defineStore("detail", () => {
       // If key had a TTL and now fails to load, it likely expired
       if (ttlTotal.value > 0 || isExpired.value) {
         isExpired.value = true;
+        dropExpiredKey(key);
+        return;
       }
       currentDetail.value = null;
     } finally {
@@ -412,13 +468,14 @@ export const useDetailStore = defineStore("detail", () => {
     }
   }
 
-  /** Create a new key (string/hash/list/set/zset) with optional TTL and initial data */
+  /** Create a new key (string/hash/list/set/zset/stream) with optional TTL and initial data */
   async function createKey(params: {
     keyName: string;
     keyType: string;
     ttl?: number;
     initialData?: any;
     fieldTtl?: number;
+    streamId?: string;
   }) {
     const connStore = useConnectionStore();
     const connId = connStore.activeConnectionId;
@@ -432,14 +489,14 @@ export const useDetailStore = defineStore("detail", () => {
       const val = params.initialData != null ? ` ${params.initialData}` : "";
       cmdStr = `SET ${params.keyName}${val} EX ${params.ttl}`;
     } else {
-      const baseCmd = { hash: "HSET", list: "RPUSH", set: "SADD", zset: "ZADD" }[params.keyType] ?? "SET";
-      cmdStr = buildCommandStr(baseCmd, params.keyName, params.keyType, params.initialData);
+      const baseCmd = { hash: "HSET", list: "RPUSH", set: "SADD", zset: "ZADD", stream: "XADD" }[params.keyType] ?? "SET";
+      cmdStr = buildCommandStr(baseCmd, params.keyName, params.keyType, params.initialData, params.streamId);
       if (hasTtl) cmdStr += ` + EXPIRE ${params.keyName} ${params.ttl}`;
     }
 
     try {
       await history.execAndRecord(cmdStr, "browser", () =>
-        tauriApi.cascade.createKey({ connectionId: connId, key: params.keyName, keyType: params.keyType, ttl: params.ttl, initialData: params.initialData, fieldTtl: params.fieldTtl })
+        tauriApi.cascade.createKey({ connectionId: connId, key: params.keyName, keyType: params.keyType, ttl: params.ttl, initialData: params.initialData, fieldTtl: params.fieldTtl, streamId: params.streamId })
       );
       const cascadeStore = useCascadeStore();
       await cascadeStore.refreshKeys(true);
@@ -521,6 +578,42 @@ export const useDetailStore = defineStore("detail", () => {
     }
   }
 
+  /** Save a ReJSON document at the given path (JSON.SET) */
+  async function saveReJson(path: string, value: string) {
+    const connStore = useConnectionStore();
+    const connId = connStore.activeConnectionId;
+    const key = currentDetail.value?.key.key;
+    if (!connId || !key) return false;
+    try {
+      await history.execAndRecord(`JSON.SET ${key} ${path} ${value}`, "browser", () =>
+        tauriApi.jsonsearch.jsonSet(connId, key, path, value)
+      );
+      await loadDetail(key, currentPage.value);
+      return true;
+    } catch (e) {
+      console.error("Failed to save JSON value:", e);
+      return false;
+    }
+  }
+
+  /** Delete a path inside a ReJSON document (JSON.DEL) */
+  async function deleteReJsonPath(path: string) {
+    const connStore = useConnectionStore();
+    const connId = connStore.activeConnectionId;
+    const key = currentDetail.value?.key.key;
+    if (!connId || !key) return false;
+    try {
+      await history.execAndRecord(`JSON.DEL ${key} ${path}`, "browser", () =>
+        tauriApi.jsonsearch.jsonDel(connId, key, path)
+      );
+      await loadDetail(key, currentPage.value);
+      return true;
+    } catch (e) {
+      console.error("Failed to delete JSON path:", e);
+      return false;
+    }
+  }
+
   function clearDetail() {
     currentDetail.value = null;
     currentPage.value = 0;
@@ -564,5 +657,7 @@ export const useDetailStore = defineStore("detail", () => {
     batchAddFields,
     renameKey,
     setTtl,
+    saveReJson,
+    deleteReJsonPath,
   };
 });

@@ -110,6 +110,34 @@ pub fn run() {
             commands::slowlog::get_slowlog,
             commands::slowlog::save_slowlog_export,
             commands::slowlog::open_file_location,
+            // Capability commands
+            commands::capability::get_server_capability,
+            // Streams commands
+            commands::streams::list_streams,
+            commands::streams::get_stream_info,
+            commands::streams::get_stream_entries,
+            commands::streams::get_stream_groups,
+            commands::streams::get_stream_consumers,
+            commands::streams::get_pending_entries,
+            commands::streams::stream_add_message,
+            commands::streams::stream_trim,
+            commands::streams::stream_delete_entries,
+            commands::streams::stream_ack,
+            commands::streams::stream_delete_consumer,
+            commands::streams::stream_delete_group,
+            commands::streams::stream_claim,
+            // RedisJSON & RediSearch commands
+            commands::jsonsearch::json_get,
+            commands::jsonsearch::json_set,
+            commands::jsonsearch::json_del,
+            commands::jsonsearch::json_type,
+            commands::jsonsearch::ft_list,
+            commands::jsonsearch::ft_info,
+            commands::jsonsearch::ft_search,
+            commands::jsonsearch::ft_create,
+            commands::jsonsearch::ft_drop_index,
+            // Updater commands
+            commands::updater::get_latest_release,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

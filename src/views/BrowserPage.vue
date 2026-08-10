@@ -5,6 +5,7 @@ import { useCascadeStore } from "@/stores/cascadeStore";
 import { useDetailStore } from "@/stores/detailStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useMetricsStore } from "@/stores/metricsStore";
+import { useCapabilityStore } from "@/stores/capabilityStore";
 import type { RedisDataType, StringValue } from "@/types";
 import KeyTreeItem from "@/components/cascade/KeyTreeItem.vue";
 import TtlGauge from "@/components/charts/TtlGauge.vue";
@@ -16,7 +17,7 @@ import { useSaveTip } from "@/utils/saveTip";
 import { toast } from "@/utils/toast";
 import {
   Search, RefreshCw, Trash2, Copy, Tag, Plus, Key,
-  Type, Hash, List, CircleDot, BarChart3,
+  Type, Hash, List, CircleDot, BarChart3, ListTree, FileJson2,
   AlertTriangle, X, Pencil, Save,
   ChevronLeft, ChevronRight, ChevronDown, Clock, Database, Code2, Check,
 } from "lucide-vue-next";
@@ -26,6 +27,7 @@ const cascade = useCascadeStore();
 const detail = useDetailStore();
 const connStore = useConnectionStore();
 const metricsStore = useMetricsStore();
+const capStore = useCapabilityStore();
 
 const confirmDialog = ref<InstanceType<typeof ConfirmDialog>>();
 
@@ -35,8 +37,17 @@ const isConnected = computed(() => connStore.activeConnection?.status === "conne
 const showTypeDropdown = ref(false);
 const typeDropdownEl = ref<HTMLElement | null>(null);
 const savedTypeScrollTop = ref(0);
-const typeOptions = ["all", "string", "hash", "list", "set", "zset"] as const;
+const typeOptions = ["all", "string", "hash", "list", "set", "zset", "stream", "rejson"] as const;
 type TypeOption = typeof typeOptions[number];
+
+// Display labels for type filter dropdown
+const typeLabels: Partial<Record<TypeOption, string>> = {
+  stream: "Stream",
+  rejson: "ReJSON",
+};
+function typeLabel(type: TypeOption): string {
+  return typeLabels[type] ?? capitalizeFirst(type);
+}
 
 function toggleTypeDropdown() {
   if (showTypeDropdown.value) {
@@ -162,14 +173,18 @@ const typeColors: Record<RedisDataType, string> = {
   list: "bg-type-list/10 text-type-list",
   set: "bg-type-set/10 text-type-set",
   zset: "bg-type-zset/10 text-type-zset",
+  stream: "bg-type-stream/10 text-type-stream",
+  rejson: "bg-type-rejson/10 text-type-rejson",
 };
 
 const typeIcons: Record<RedisDataType, any> = {
   string: Type, hash: Hash, list: List, set: CircleDot, zset: BarChart3,
+  stream: ListTree, rejson: FileJson2,
 };
 
 const typeBorderColors: Record<RedisDataType, string> = {
   string: '#8b5cf6', hash: '#0ea5e9', list: '#10b981', set: '#f59e0b', zset: '#ef4444',
+  stream: '#14b8a6', rejson: '#ec4899',
 };
 
 function formatTtl(ttl: number): string {
@@ -403,6 +418,54 @@ async function saveEditZSet(e: Event) {
 }
 function cancelEditZSet() { editingZSetMember.value = null; }
 
+// ReJSON document view/edit
+const editingReJson = ref(false);
+const reJsonTemp = ref('');
+const reJsonViewMode = ref<'pretty' | 'raw'>('pretty');
+const reJsonPathInput = ref('$');
+
+const reJsonDisplay = computed(() => {
+  const v = detail.currentValue;
+  if (!v || v.type !== 'rejson') return '';
+  if (editingReJson.value) return reJsonTemp.value;
+  if (reJsonViewMode.value === 'pretty') {
+    try { return JSON.stringify(JSON.parse(v.json), null, 2); } catch { return v.json; }
+  }
+  return v.json;
+});
+
+function startEditReJson() {
+  const v = detail.currentValue;
+  if (!v || v.type !== 'rejson') return;
+  try { reJsonTemp.value = JSON.stringify(JSON.parse(v.json), null, 2); }
+  catch { reJsonTemp.value = v.json; }
+  editingReJson.value = true;
+}
+function cancelEditReJson() { editingReJson.value = false; }
+
+async function saveEditReJson() {
+  try { JSON.parse(reJsonTemp.value); }
+  catch { toast.error(t('detail.jsonInvalid')); return; }
+  const ok = await detail.saveReJson('$', reJsonTemp.value);
+  if (ok) { toast.success(t('detail.saveSuccess')); editingReJson.value = false; }
+  else toast.error(t('detail.saveFailed'));
+}
+
+async function deleteReJsonPath() {
+  const path = reJsonPathInput.value.trim() || '$';
+  const confirmed = await confirmDialog.value?.open({
+    title: t("common.confirmDeleteTitle"),
+    message: t("detail.jsonDeleteConfirm", { path }),
+    confirmLabel: t("common.delete"),
+    cancelLabel: t("common.cancel"),
+    danger: true,
+  });
+  if (!confirmed) return;
+  const ok = await detail.deleteReJsonPath(path);
+  if (ok) toast.success(t('detail.jsonPathDeleted'));
+  else toast.error(t('detail.saveFailed'));
+}
+
 // Delete a sub-element (hash field / list item / set member / zset member)
 async function deleteSubField(keyType: string, params: { field?: string; value?: string }) {
   const confirmed = await confirmDialog.value?.open({
@@ -444,6 +507,7 @@ const newKeyType = ref<RedisDataType>('string');
 const newKeyName = ref('');
 const newKeyTtl = ref('');
 const newKeyBatchData = ref('');
+const newKeyStreamId = ref('');
 const newKeyLoading = ref(false);
 
 function openNewKeyDialog() {
@@ -451,6 +515,7 @@ function openNewKeyDialog() {
   newKeyName.value = '';
   newKeyTtl.value = '';
   newKeyBatchData.value = '';
+  newKeyStreamId.value = '';
   showNewKeyDialog.value = true;
 }
 function closeNewKeyDialog() { showNewKeyDialog.value = false; }
@@ -471,6 +536,7 @@ function parseBatchData(type: RedisDataType, text: string): any {
     case 'string':
       return text; // raw string
     case 'hash':
+    case 'stream':
       return lines.map(line => {
         const idx = line.indexOf(':');
         if (idx <= 0) return [stripQuotes(line), ''];
@@ -505,6 +571,7 @@ const newKeyBatchHint = computed(() => {
     case 'list': return t('browser.batchHintList');
     case 'set': return t('browser.batchHintSet');
     case 'zset': return t('browser.batchHintZset');
+    case 'stream': return t('browser.batchHintStream');
     default: return '';
   }
 });
@@ -515,9 +582,26 @@ const newKeyBatchPlaceholder = computed(() => {
     case 'zset': return '"100":"player1"\n"200":"player2"\n"300":"player3"';
     case 'list': return 'item1\nitem2\nitem3';
     case 'set': return 'member1\nmember2\nmember3';
+    case 'stream': return '"user":"alice"\n"action":"login"';
     default: return '';
   }
 });
+
+// Key types available in the create dialog; stream is shown but disabled when
+// the server does not support it (Redis < 5.0)
+const newKeyTypeOptions: RedisDataType[] = ['string', 'hash', 'list', 'set', 'zset', 'stream'];
+const streamUnsupported = computed(() => capStore.activeCapability?.streamsSupported === false);
+
+function typeButtonDisabled(tp: RedisDataType): boolean {
+  return tp === 'stream' && streamUnsupported.value;
+}
+
+function typeButtonTitle(tp: RedisDataType): string | undefined {
+  if (tp === 'stream' && streamUnsupported.value) {
+    return t('browser.streamTypeUnsupported', { version: capStore.activeCapability?.redisVersion ?? '-' });
+  }
+  return undefined;
+}
 
 async function submitNewKey() {
   const name = newKeyName.value.trim();
@@ -525,6 +609,12 @@ async function submitNewKey() {
   const batchText = newKeyBatchData.value.trim();
   if (newKeyType.value !== 'string' && !batchText) {
     toast.error(t('browser.initialDataRequired'));
+    return;
+  }
+  // Stream entry ID: empty = auto-generate (*), otherwise must be ms[-seq]
+  const streamId = newKeyStreamId.value.trim();
+  if (newKeyType.value === 'stream' && streamId && !/^\d+(-\d+)?$/.test(streamId)) {
+    toast.error(t('browser.streamIdInvalid'));
     return;
   }
   newKeyLoading.value = true;
@@ -537,6 +627,7 @@ async function submitNewKey() {
       keyType: newKeyType.value,
       ttl: ttl && ttl > 0 ? ttl : undefined,
       initialData,
+      streamId: newKeyType.value === 'stream' && streamId ? streamId : undefined,
     });
     if (ok) {
       toast.success(t('detail.createKeySuccess', { key: name }));
@@ -1021,7 +1112,7 @@ onBeforeUnmount(() => {
                 ? 'text-text-secondary bg-bg-primary' 
                 : `text-type-${cascade.typeFilter} bg-type-${cascade.typeFilter}/10 hover:bg-type-${cascade.typeFilter}/20`"
             >
-              <span>{{ cascade.typeFilter === 'all' ? t('browser.allTypes') : capitalizeFirst(cascade.typeFilter) }}</span>
+              <span>{{ cascade.typeFilter === 'all' ? t('browser.allTypes') : typeLabel(cascade.typeFilter) }}</span>
               <ChevronDown :size="11" class="shrink-0 text-redis/50 transition-transform" :class="showTypeDropdown ? 'rotate-180' : ''" />
             </button>
             <!-- Backdrop -->
@@ -1044,7 +1135,7 @@ onBeforeUnmount(() => {
                   ? 'text-redis font-semibold bg-redis/5'
                   : 'text-text-secondary font-medium hover:bg-bg-hover hover:text-text-primary'"
               >
-                <span>{{ type === 'all' ? t('browser.allTypes') : capitalizeFirst(type) }}</span>
+                <span>{{ type === 'all' ? t('browser.allTypes') : typeLabel(type) }}</span>
                 <Check v-if="cascade.typeFilter === type" :size="11" class="text-redis" />
               </button>
             </div>
@@ -1266,9 +1357,10 @@ onBeforeUnmount(() => {
               <div class="h-full overflow-y-auto">
               <table class="w-full text-sm table-fixed">
                 <thead class="sticky top-0 z-10"><tr class="bg-bg-primary">
-                  <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border" style="width:35%;max-width:260px">{{ t("detail.field") }}</th>
-                  <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border" :style="(detail.currentValue as any)?.hasFieldTtl ? 'width:55%' : ''">{{ t("detail.value") }}</th>
-                  <th v-if="(detail.currentValue as any)?.hasFieldTtl" class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border" style="width:15%;min-width:100px">{{ t("detail.fieldTtl") }}</th>
+                  <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border" style="width:30%;max-width:260px">{{ t("detail.field") }}</th>
+                  <!-- Value column: no explicit width, auto-fills remaining space -->
+                  <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border">{{ t("detail.value") }}</th>
+                  <th v-if="(detail.currentValue as any)?.hasFieldTtl" class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border" style="width:8.5rem">{{ t("detail.fieldTtl") }}</th>
                 </tr></thead>
                 <tbody>
                   <tr v-for="(f, i) in (detail.currentValue as any).fields" :key="f.field" class="border-b border-border-light last:border-0" :class="i % 2 ? 'bg-bg-primary/50' : ''">
@@ -1316,7 +1408,7 @@ onBeforeUnmount(() => {
                       <div v-if="editingFieldTtl === f.field" class="flex items-center gap-1.5">
                         <input v-model="fieldTtlTemp" @keyup.enter="saveEditFieldTtl($event)" @keyup.escape="cancelEditFieldTtl"
                           type="number"
-                          class="flex-1 text-xs font-mono px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-bg-secondary w-16"
+                          class="flex-1 min-w-0 text-xs font-mono px-2 py-0.5 border border-redis rounded focus:outline-none focus:ring-1 focus:ring-redis/30 bg-bg-secondary"
                           :placeholder="t('detail.setTtlPlaceholder')" />
                         <button @click="saveEditFieldTtl($event)" class="shrink-0 text-success hover:text-success/80"><Save :size="11" /></button>
                         <button @click="cancelEditFieldTtl" class="shrink-0 text-text-muted hover:text-text-primary"><X :size="11" /></button>
@@ -1590,6 +1682,95 @@ onBeforeUnmount(() => {
               </div>
             </div>
           </div>
+
+          <!-- Stream -->
+          <div v-else-if="detail.currentValue?.type === 'stream'" class="flex flex-col min-h-0">
+            <div class="flex items-center justify-between mb-3 shrink-0 flex-wrap gap-2">
+              <label class="text-xs font-medium text-text-secondary">{{ t("detail.streamPreview") }}</label>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span class="badge bg-type-stream/10 text-type-stream">{{ t("detail.streamLength") }}: {{ (detail.currentValue as any).length }}</span>
+                <span class="badge bg-bg-hover text-text-secondary font-mono">{{ t("detail.streamLastId") }}: {{ (detail.currentValue as any).lastGeneratedId || "-" }}</span>
+                <span class="badge bg-bg-hover text-text-secondary">{{ t("detail.streamGroups") }}: {{ (detail.currentValue as any).groups }}</span>
+              </div>
+            </div>
+            <div class="border border-border rounded-lg flex-1 min-h-0">
+              <div class="h-full overflow-y-auto">
+              <table class="w-full text-sm table-fixed">
+                <thead class="sticky top-0 z-10"><tr class="bg-bg-primary">
+                  <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border" style="width:30%;max-width:240px">ID</th>
+                  <th class="text-left px-3 py-2 text-xs font-semibold text-text-secondary border-b border-border">{{ t("streams.colFields") }}</th>
+                </tr></thead>
+                <tbody>
+                  <tr v-for="(entry, i) in (detail.currentValue as any).entries" :key="entry.id" class="border-b border-border-light last:border-0 align-top" :class="i % 2 ? 'bg-bg-primary/50' : ''">
+                    <td class="px-3 py-2 font-mono text-xs text-type-stream font-medium break-all">{{ entry.id }}</td>
+                    <td class="px-3 py-2 font-mono text-xs text-text-secondary">
+                      <div v-for="[f, v] in entry.fields" :key="f" class="truncate" :title="`${f}=${v}`">
+                        <span class="text-redis/70">{{ f }}</span>=<span class="text-text-primary">{{ v }}</span>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              </div>
+            </div>
+            <p v-if="(detail.currentValue as any).truncated" class="text-[11px] text-text-muted mt-2 shrink-0">
+              {{ t("detail.streamTruncated", { count: (detail.currentValue as any).entries.length }) }}
+            </p>
+          </div>
+
+          <!-- ReJSON -->
+          <div v-else-if="detail.currentValue?.type === 'rejson'" class="flex flex-col min-h-0">
+            <div class="flex items-center justify-between mb-3 shrink-0 flex-wrap gap-2">
+              <label class="text-xs font-medium text-text-secondary">JSON</label>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <!-- Pretty / Raw toggle -->
+                <div class="flex items-center border border-border rounded-lg overflow-hidden">
+                  <button
+                    @click="reJsonViewMode = 'pretty'"
+                    class="px-2 py-0.5 text-[11px] transition-colors"
+                    :class="reJsonViewMode === 'pretty' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >{{ t("detail.jsonPretty") }}</button>
+                  <button
+                    @click="reJsonViewMode = 'raw'"
+                    class="px-2 py-0.5 text-[11px] transition-colors border-l border-border"
+                    :class="reJsonViewMode === 'raw' ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
+                  >{{ t("detail.jsonRaw") }}</button>
+                </div>
+                <template v-if="editingReJson">
+                  <button @click="saveEditReJson" class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium bg-success/10 text-success rounded-lg hover:bg-success/20 transition-colors">
+                    <Save :size="11" /> {{ t("detail.save") }}
+                  </button>
+                  <button @click="cancelEditReJson" class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-text-muted rounded-lg hover:bg-bg-hover transition-colors">
+                    <X :size="11" /> {{ t("detail.cancel") }}
+                  </button>
+                </template>
+                <button v-else @click="startEditReJson" class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-text-secondary rounded-lg hover:bg-bg-hover transition-colors">
+                  <Pencil :size="11" /> {{ t("detail.edit") }}
+                </button>
+                <!-- Path delete -->
+                <input
+                  v-model="reJsonPathInput"
+                  type="text"
+                  :placeholder="t('detail.jsonPathPlaceholder')"
+                  class="w-28 px-2 py-1 text-xs font-mono border border-border rounded-lg bg-bg-primary focus:outline-none focus:ring-1 focus:ring-redis/30"
+                />
+                <button @click="deleteReJsonPath" class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-danger rounded-lg hover:bg-danger/10 transition-colors">
+                  <Trash2 :size="11" /> {{ t("detail.jsonDeletePath") }}
+                </button>
+              </div>
+            </div>
+            <textarea
+              :value="reJsonDisplay"
+              @input="editingReJson && (reJsonTemp = ($event.target as HTMLTextAreaElement).value)"
+              :readonly="!editingReJson"
+              :class="[
+                'flex-1 w-full px-4 py-3 text-sm font-mono border rounded-lg resize-none focus:outline-none min-h-[200px]',
+                editingReJson
+                  ? 'bg-bg-secondary border-redis focus:ring-1 focus:ring-redis/30'
+                  : 'bg-bg-primary border-border'
+              ]"
+            />
+          </div>
         </div>
       </template>
 
@@ -1707,9 +1888,11 @@ onBeforeUnmount(() => {
             <!-- Key Type Selector -->
             <div>
               <label class="block text-xs font-medium text-text-secondary mb-2">{{ t('browser.keyType') }}</label>
-              <div class="flex gap-1.5">
-                <button v-for="tp in (['string','hash','list','set','zset'] as RedisDataType[])" :key="tp" @click="newKeyType = tp"
-                  class="group flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg border transition-all duration-200"
+              <div class="grid grid-cols-3 gap-1.5">
+                <button v-for="tp in newKeyTypeOptions" :key="tp" @click="!typeButtonDisabled(tp) && (newKeyType = tp)"
+                  :disabled="typeButtonDisabled(tp)"
+                  :title="typeButtonTitle(tp)"
+                  class="group flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg border transition-all duration-200 min-w-0 disabled:opacity-40 disabled:cursor-not-allowed"
                   :style="newKeyType === tp ? { borderColor: typeBorderColors[tp], backgroundColor: typeBorderColors[tp] + '14' } : undefined"
                   :class="newKeyType === tp ? '' : 'border-border bg-bg-primary hover:bg-bg-hover'">
                   <component :is="typeIcons[tp]" :size="14" :class="newKeyType === tp ? `text-type-${tp}` : 'text-text-muted group-hover:text-text-secondary'" class="transition-colors shrink-0" />
@@ -1724,6 +1907,15 @@ onBeforeUnmount(() => {
                 <Key :size="14" class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
                 <input v-model="newKeyName" placeholder="" class="w-full pl-9 pr-3 py-2 text-sm font-mono bg-bg-primary border border-border rounded-xl focus:outline-none focus:border-redis focus:ring-2 focus:ring-redis/20 transition-all" @keyup.enter="submitNewKey" />
               </div>
+            </div>
+            <!-- Stream Entry ID (auto or manual) -->
+            <div v-if="newKeyType === 'stream'">
+              <label class="block text-xs font-medium text-text-secondary mb-1.5">{{ t('browser.streamId') }}</label>
+              <div class="relative">
+                <ListTree :size="14" class="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+                <input v-model="newKeyStreamId" :placeholder="t('browser.streamIdPlaceholder')" class="w-full pl-9 pr-3 py-2 text-sm font-mono bg-bg-primary border border-border rounded-xl focus:outline-none focus:border-redis focus:ring-2 focus:ring-redis/20 transition-all" />
+              </div>
+              <p class="text-[11px] text-text-muted mt-1">{{ t('browser.streamIdHint') }}</p>
             </div>
             <!-- TTL -->
             <div>

@@ -403,6 +403,7 @@ export const useSandboxStore = defineStore("sandbox", () => {
     history,  // computed: history for active connection
     historyMap,  // exported for potential debugging/inspection
     showPreview,
+    currentCommand,  // exposed for dangerous-command confirmation before apply
     hasDiff,
     addedCount,
     modifiedCount,

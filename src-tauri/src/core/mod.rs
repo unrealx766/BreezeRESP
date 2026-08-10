@@ -10,3 +10,6 @@ pub mod validate;
 pub mod keystore;
 pub mod pubsub_manager;
 pub mod slowlog;
+pub mod capability;
+pub mod streams;
+pub mod jsonsearch;

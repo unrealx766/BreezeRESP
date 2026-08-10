@@ -7,6 +7,49 @@ use zeroize::Zeroize;
 
 const CONN_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// Format a pool creation error, appending per-seed-node diagnostics when a
+/// cluster connection fails to establish its initial connections. redis-rs
+/// hides the underlying per-node errors behind a generic "Failed to create
+/// initial connections" IoError, so we probe each seed node standalone to
+/// expose the real cause (DNS resolution failure, unreachable node, auth
+/// error, TLS failure, ...).
+async fn cluster_diag_error(config: &ConnectionConfig, pw: Option<&str>, err: &impl ToString) -> String {
+    let msg = format!("Pool get error: {}", err.to_string());
+    if config.cluster && msg.contains("initial connections") {
+        let diag = crate::core::pool::diagnose_cluster_seeds(
+            &config.host,
+            config.port,
+            pw,
+            config.ssl,
+            &config.nodes,
+        )
+        .await;
+        format!("{} | {}", msg, diag)
+    } else {
+        msg
+    }
+}
+
+/// Format a verification PING timeout. For cluster connections this usually
+/// means the topology advertises nodes the client cannot reach: after
+/// topology discovery redis-rs only talks to the advertised nodes, and when
+/// none of them are usable the request queues forever instead of failing.
+async fn cluster_ping_timeout_error(config: &ConnectionConfig, pw: Option<&str>) -> String {
+    if config.cluster {
+        let diag = crate::core::pool::diagnose_cluster_seeds(
+            &config.host,
+            config.port,
+            pw,
+            config.ssl,
+            &config.nodes,
+        )
+        .await;
+        format!("PING timed out | {}", diag)
+    } else {
+        "PING timed out".to_string()
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionConfig {
@@ -102,13 +145,13 @@ pub async fn connect(
     }
 
     // Create or get pool
+    let pw = if resolved_password.is_empty() {
+        None
+    } else {
+        Some(resolved_password.as_str())
+    };
     let pool = {
         let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
-        let pw = if resolved_password.is_empty() {
-            None
-        } else {
-            Some(resolved_password.as_str())
-        };
         pm.get_or_create(
             &config.id,
             &config.host,
@@ -121,20 +164,28 @@ pub async fn connect(
         )?
     };
 
-    // Capture has_password before clearing, then zeroize
+    // Capture has_password before the password is cleared
     let has_password = !resolved_password.is_empty();
+
+    // Get a connection from the pool (with timeout to prevent TLS hang)
+    let mut conn = match tokio::time::timeout(CONN_TIMEOUT, pool.get()).await {
+        Err(_) => {
+            return Err("Connection timed out. If using SSL/TLS, ensure the server supports TLS.".to_string())
+        }
+        Ok(Ok(conn)) => conn,
+        Ok(Err(e)) => return Err(cluster_diag_error(&config, pw, &e).await),
+    };
+
+    // Verify the connection with PING (with timeout to prevent TLS hang)
+    let _: String = match tokio::time::timeout(CONN_TIMEOUT, redis::cmd("PING").query_async(&mut conn)).await {
+        Err(_) => return Err(cluster_ping_timeout_error(&config, pw).await),
+        Ok(Err(e)) => return Err(format!("PING failed: {}", e)),
+        Ok(Ok(v)) => v,
+    };
+
+    // Zeroize password from memory once it is no longer needed
     let mut resolved_password = resolved_password;
     resolved_password.zeroize();
-
-    // Verify connection with PING (with timeout to prevent TLS hang)
-    let mut conn = tokio::time::timeout(CONN_TIMEOUT, pool.get())
-        .await
-        .map_err(|_| "Connection timed out. If using SSL/TLS, ensure the server supports TLS.".to_string())?
-        .map_err(|e| format!("Pool get error: {}", e))?;
-    let _: String = tokio::time::timeout(CONN_TIMEOUT, redis::cmd("PING").query_async(&mut conn))
-        .await
-        .map_err(|_| "PING timed out".to_string())?
-        .map_err(|e| format!("PING failed: {}", e))?;
 
     Ok(ConnectionInfo {
         id: config.id,
@@ -164,6 +215,9 @@ pub async fn disconnect(state: State<'_, AppState>, id: String) -> Result<(), St
 
     // Drop any in-flight cluster scan state
     state.cluster_scans.clear(&id);
+
+    // Drop cached server capability profile
+    crate::core::capability::clear_cached(&id);
 
     // Clear any pending sandbox state to prevent stale data leaking across connections
     let ss = state.shadow_store.lock().map_err(|e| e.to_string())?;
@@ -219,23 +273,27 @@ pub async fn test_connection(
         )?
     };
 
-    // Clear password from memory after pool creation
-    let mut resolved_password = resolved_password;
-    resolved_password.zeroize();
-
     // Test with PING (with timeout to prevent TLS hang)
     let result = async {
-        let mut conn = tokio::time::timeout(CONN_TIMEOUT, pool.get())
-            .await
-            .map_err(|_| "Connection timed out. If using SSL/TLS, ensure the server supports TLS.".to_string())?
-            .map_err(|e| format!("Pool get error: {}", e))?;
-        let _: String = tokio::time::timeout(CONN_TIMEOUT, redis::cmd("PING").query_async(&mut conn))
-            .await
-            .map_err(|_| "PING timed out".to_string())?
-            .map_err(|e| format!("PING failed: {}", e))?;
+        let mut conn = match tokio::time::timeout(CONN_TIMEOUT, pool.get()).await {
+            Err(_) => {
+                return Err("Connection timed out. If using SSL/TLS, ensure the server supports TLS.".to_string())
+            }
+            Ok(Ok(conn)) => conn,
+            Ok(Err(e)) => return Err(cluster_diag_error(&config, pw, &e).await),
+        };
+        let _: String = match tokio::time::timeout(CONN_TIMEOUT, redis::cmd("PING").query_async(&mut conn)).await {
+            Err(_) => return Err(cluster_ping_timeout_error(&config, pw).await),
+            Ok(Err(e)) => return Err(format!("PING failed: {}", e)),
+            Ok(Ok(v)) => v,
+        };
         Ok::<bool, String>(true)
     }
     .await;
+
+    // Clear password from memory after the test
+    let mut resolved_password = resolved_password;
+    resolved_password.zeroize();
 
     // Remove temp pool
     {
@@ -388,6 +446,9 @@ pub async fn delete_connection(state: State<'_, AppState>, id: String) -> Result
 
     // Drop any in-flight cluster scan state
     state.cluster_scans.clear(&id);
+
+    // Drop cached server capability profile
+    crate::core::capability::clear_cached(&id);
 
     // Clear any pending sandbox state
     {

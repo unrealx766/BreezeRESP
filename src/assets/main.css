@@ -29,6 +29,8 @@
   --color-type-list: #10b981;
   --color-type-set: #f59e0b;
   --color-type-zset: #ef4444;
+  --color-type-stream: #14b8a6;
+  --color-type-rejson: #ec4899;
 
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
@@ -64,6 +66,8 @@
   --color-type-list: #34d399;
   --color-type-set: #fbbf24;
   --color-type-zset: #f87171;
+  --color-type-stream: #2dd4bf;
+  --color-type-rejson: #f472b6;
 
   color-scheme: dark;
 }

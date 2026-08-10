@@ -5,6 +5,8 @@ import { useSandboxStore } from "@/stores/sandboxStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { writeCommandTemplates } from "@/utils/commandTemplates";
 import { truncateValue } from "@/utils/format";
+import { isDangerousCommand } from "@/utils/dangerousCommand";
+import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
 import {
   FlaskConical, Play, Check, History,
   Plus, Minus, Edit3, Terminal, AlertTriangle, Hash,
@@ -15,6 +17,23 @@ const { t } = useI18n();
 const sandbox = useSandboxStore();
 const connStore = useConnectionStore();
 const isConnected = computed(() => connStore.activeConnection?.status === "connected");
+
+const confirmDialog = vueRef<InstanceType<typeof ConfirmDialog>>();
+
+/** Apply a previewed change with a second confirmation for dangerous commands */
+async function handleApply() {
+  if (isDangerousCommand(sandbox.currentCommand)) {
+    const confirmed = await confirmDialog.value?.open({
+      title: t("common.dangerousCommandTitle"),
+      message: t("common.dangerousCommandMessage", { commands: sandbox.currentCommand }),
+      confirmLabel: t("common.executeAnyway"),
+      cancelLabel: t("common.cancel"),
+      danger: true,
+    });
+    if (!confirmed) return;
+  }
+  await sandbox.applyChange();
+}
 
 /** Track which history items have their rollback commands expanded */
 const expandedRollback = vueRef<Set<string>>(new Set());
@@ -153,7 +172,7 @@ watch(() => connStore.activeConnectionId, () => {
         </div>
         <div class="flex items-center gap-2">
           <button v-if="!sandbox.isReadOnly"
-            @click="sandbox.applyChange()"
+            @click="handleApply"
             :disabled="sandbox.applying || !isConnected"
             class="inline-flex items-center justify-center gap-1.5 w-28 h-8 text-xs font-medium text-white bg-success rounded-lg hover:bg-success/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
             <Check :size="13" />
@@ -289,5 +308,6 @@ watch(() => connStore.activeConnectionId, () => {
       </div>
     </div>
     </div><!-- end shared space wrapper -->
+    <ConfirmDialog ref="confirmDialog" />
   </div>
 </template>

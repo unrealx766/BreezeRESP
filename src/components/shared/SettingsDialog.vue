@@ -2,8 +2,10 @@
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { availableLocales } from "@/i18n";
-import { Globe, Check, Settings, X, Info, SlidersHorizontal, Github, Sun, Moon } from "lucide-vue-next";
+import { Globe, Check, Settings, X, Info, SlidersHorizontal, Github, Sun, Moon, RefreshCw, Loader2, CheckCircle, Sparkles, AlertCircle } from "lucide-vue-next";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { autoCheckUpdate } from "@/utils/uiSettings";
+import { checkForUpdates } from "@/utils/updater";
 
 const GITHUB_URL = "https://github.com/unrealx766/BreezeRESP";
 
@@ -41,6 +43,31 @@ function setLocale(code: string) {
 
 const appVersion = __APP_VERSION__;
 
+// ── Manual update check ──
+const checking = ref(false);
+const updateStatus = ref<"" | "latest" | "available" | "failed">("");
+const latestVersion = ref("");
+const releaseUrl = ref("");
+
+async function manualCheck() {
+  if (checking.value) return;
+  checking.value = true;
+  updateStatus.value = "";
+  const result = await checkForUpdates();
+  checking.value = false;
+  if (!result) {
+    updateStatus.value = "failed";
+    return;
+  }
+  if (result.hasUpdate) {
+    updateStatus.value = "available";
+    latestVersion.value = result.latestVersion;
+    releaseUrl.value = result.releaseUrl;
+  } else {
+    updateStatus.value = "latest";
+  }
+}
+
 defineExpose({ open });
 </script>
 
@@ -52,7 +79,7 @@ defineExpose({ open });
         <div class="absolute inset-0 bg-black/40" @click="close" />
 
         <!-- Dialog -->
-        <div class="relative bg-bg-secondary rounded-xl shadow-2xl border border-border w-[520px] h-[380px] max-w-[90vw] animate-in overflow-hidden flex flex-col">
+        <div class="relative bg-bg-secondary rounded-xl shadow-2xl border border-border w-[520px] h-[400px] max-w-[90vw] animate-in overflow-hidden flex flex-col">
           <!-- Header -->
           <div class="flex items-center justify-between px-5 py-3.5 border-b border-border-light">
             <div class="flex items-center gap-2.5">
@@ -96,9 +123,9 @@ defineExpose({ open });
             </div>
 
             <!-- Content -->
-            <div class="flex-1 px-5 py-4 min-w-0 overflow-y-auto">
+            <div class="tab-content flex-1 px-5 py-4 min-w-0 overflow-y-auto">
               <!-- General Tab -->
-              <div v-if="activeTab === 'general'" class="space-y-5">
+              <div v-show="activeTab === 'general'" class="space-y-5">
                 <!-- Theme Setting -->
                 <div>
                   <div class="flex items-center gap-2 mb-2.5">
@@ -158,10 +185,33 @@ defineExpose({ open });
                     </button>
                   </div>
                 </div>
+
+                <!-- Auto Update Check Setting -->
+                <div>
+                  <div class="flex items-center gap-2 mb-2.5">
+                    <RefreshCw :size="13" class="text-text-muted" />
+                    <span class="text-xs font-medium text-text-primary">{{ t("settings.autoCheckUpdate") }}</span>
+                  </div>
+                  <p class="text-[11px] text-text-muted mb-3 pl-[21px]">{{ t("settings.autoCheckUpdateDesc") }}</p>
+                  <div class="pl-[21px]">
+                    <button
+                      role="switch"
+                      :aria-checked="autoCheckUpdate"
+                      @click="autoCheckUpdate = !autoCheckUpdate"
+                      class="relative w-9 h-5 rounded-full transition-colors"
+                      :class="autoCheckUpdate ? 'bg-redis' : 'bg-border-hover'"
+                    >
+                      <span
+                        class="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform"
+                        :class="autoCheckUpdate ? 'translate-x-4' : 'translate-x-0'"
+                      />
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <!-- About Tab -->
-              <div v-if="activeTab === 'about'" class="space-y-4">
+              <div v-show="activeTab === 'about'" class="space-y-4">
                 <div class="flex flex-col items-center py-4 gap-3">
                   <img src="/breezeresp.svg" alt="BreezeRESP" class="w-14 h-14 rounded-2xl shadow-sm" />
                   <div class="text-center">
@@ -169,6 +219,31 @@ defineExpose({ open });
                     <p class="text-xs text-text-muted mt-0.5">{{ t("app.subtitle") }}</p>
                   </div>
                   <span class="text-[11px] font-mono text-text-muted bg-bg-primary px-2.5 py-1 rounded-md">{{ appVersion }}</span>
+                  <!-- Manual update check -->
+                  <div class="flex flex-col items-center gap-1.5">
+                    <button
+                      @click="manualCheck"
+                      :disabled="checking"
+                      class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border border-border text-text-secondary hover:border-redis/40 hover:text-redis hover:bg-redis/5 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <Loader2 v-if="checking" :size="13" class="animate-spin" />
+                      <RefreshCw v-else :size="13" />
+                      <span>{{ checking ? t("updater.checking") : t("updater.checkUpdate") }}</span>
+                    </button>
+                    <p v-if="updateStatus === 'latest'" class="flex items-center gap-1 text-[11px] text-success">
+                      <CheckCircle :size="12" />
+                      {{ t("updater.upToDate") }}
+                    </p>
+                    <p v-else-if="updateStatus === 'available'" class="flex items-center gap-1 text-[11px] text-redis">
+                      <Sparkles :size="12" />
+                      {{ t("updater.updateAvailable", { version: latestVersion }) }}
+                      <a class="underline cursor-pointer hover:text-redis-dark" @click="openUrl(releaseUrl)">{{ t("updater.download") }}</a>
+                    </p>
+                    <p v-else-if="updateStatus === 'failed'" class="flex items-center gap-1 text-[11px] text-error">
+                      <AlertCircle :size="12" />
+                      {{ t("updater.checkFailed") }}
+                    </p>
+                  </div>
                   <button
                     @click="openUrl(GITHUB_URL)"
                     class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors"
@@ -188,6 +263,10 @@ defineExpose({ open });
 </template>
 
 <style scoped>
+/* Reserve scrollbar space so tab switches never shift the layout */
+.tab-content {
+  scrollbar-gutter: stable;
+}
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.15s ease;

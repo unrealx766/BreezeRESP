@@ -2,6 +2,7 @@ use deadpool_redis::cluster::{
     Config as ClusterConfig, Connection as ClusterPoolConnection, Pool as ClusterPool,
 };
 use deadpool_redis::{Config, Connection as SinglePoolConnection, Pool, Runtime, Timeouts};
+use futures::stream::{self, StreamExt};
 use redis::aio::ConnectionLike;
 use redis::cluster_async::ClusterConnection;
 use std::collections::HashMap;
@@ -213,4 +214,132 @@ pub fn parse_node_addr(addr: &str) -> Option<(String, u16)> {
     }
     let port: u16 = port.parse().ok()?;
     Some((host.to_string(), port))
+}
+
+const SEED_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Maximum number of topology-advertised nodes to probe.
+const MAX_TOPOLOGY_PROBES: usize = 32;
+
+/// Probe one node with a standalone connection attempt (TCP + AUTH + PING)
+/// and return a human-readable result.
+async fn probe_node(host: &str, port: u16, password: Option<&str>, ssl: bool) -> String {
+    let url = build_url(host, port, password, None, ssl);
+    let probe = async {
+        let client = redis::Client::open(url).map_err(|e| e.to_string())?;
+        let mut conn: redis::aio::MultiplexedConnection = client
+            .get_multiplexed_async_connection()
+            .await
+            .map_err(|e| e.to_string())?;
+        let _: String = redis::cmd("PING")
+            .query_async(&mut conn)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok::<(), String>(())
+    };
+    match tokio::time::timeout(SEED_PROBE_TIMEOUT, probe).await {
+        Ok(Ok(())) => "ok".to_string(),
+        Ok(Err(err)) => err.lines().next().unwrap_or("unknown error").to_string(),
+        Err(_) => format!("timeout after {}s", SEED_PROBE_TIMEOUT.as_secs()),
+    }
+}
+
+/// Fetch the node addresses the cluster advertises via `CLUSTER NODES`
+/// (lines look like `<id> <ip:port@cport> <flags> ...`). Returns `None`
+/// when the seed cannot be queried.
+async fn fetch_advertised_nodes(
+    host: &str,
+    port: u16,
+    password: Option<&str>,
+    ssl: bool,
+) -> Option<Vec<String>> {
+    let url = build_url(host, port, password, None, ssl);
+    let query = async {
+        let client = redis::Client::open(url).ok()?;
+        let mut conn: redis::aio::MultiplexedConnection = client
+            .get_multiplexed_async_connection()
+            .await
+            .ok()?;
+        let raw: String = redis::cmd("CLUSTER")
+            .arg("NODES")
+            .query_async(&mut conn)
+            .await
+            .ok()?;
+        Some(raw)
+    };
+    let raw = tokio::time::timeout(SEED_PROBE_TIMEOUT, query)
+        .await
+        .ok()
+        .flatten()?;
+    Some(
+        raw.lines()
+            .filter_map(|line| line.split_whitespace().nth(1))
+            .map(|field| field.split('@').next().unwrap_or(field).to_string())
+            .collect(),
+    )
+}
+
+/// Diagnose cluster connection failures by probing each seed node and every
+/// node address advertised by the cluster topology, returning a
+/// human-readable summary. redis-rs swallows the per-node errors behind a
+/// generic "Failed to create initial connections" IoError, and silently
+/// drops unreachable topology nodes (making later commands hang), so this
+/// surfaces the real cause (DNS failure, unreachable node, auth error,
+/// TLS failure, ...).
+pub async fn diagnose_cluster_seeds(
+    host: &str,
+    port: u16,
+    password: Option<&str>,
+    ssl: bool,
+    nodes: &[String],
+) -> String {
+    let mut seeds = vec![(host.to_string(), port)];
+    for node in nodes {
+        if let Some(parsed) = parse_node_addr(node) {
+            seeds.push(parsed);
+        }
+    }
+
+    let mut parts = Vec::with_capacity(seeds.len());
+    for (seed_host, seed_port) in &seeds {
+        let label = format!("{}:{}", seed_host, seed_port);
+        let detail = probe_node(seed_host, *seed_port, password, ssl).await;
+        parts.push(format!("{} => {}", label, detail));
+    }
+
+    // The cluster client drops the seed connection map once topology is
+    // discovered and only talks to the advertised nodes; if those are
+    // unreachable from the client, commands hang. Query CLUSTER NODES from
+    // the first reachable seed and probe every advertised address too.
+    let mut topo_parts: Vec<String> = Vec::new();
+    for (seed_host, seed_port) in &seeds {
+        let Some(advertised) = fetch_advertised_nodes(seed_host, *seed_port, password, ssl).await
+        else {
+            continue;
+        };
+        let mut addrs: Vec<(String, u16)> =
+            advertised.iter().filter_map(|a| parse_node_addr(a)).collect();
+        addrs.sort();
+        addrs.dedup();
+        topo_parts = stream::iter(addrs.into_iter().take(MAX_TOPOLOGY_PROBES))
+            .map(|(addr_host, addr_port)| async move {
+                let detail = probe_node(&addr_host, addr_port, password, ssl).await;
+                format!("{}:{} => {}", addr_host, addr_port, detail)
+            })
+            .buffer_unordered(8)
+            .collect()
+            .await;
+        topo_parts.sort();
+        break;
+    }
+
+    if topo_parts.is_empty() {
+        format!("seed node check: {}", parts.join("; "))
+    } else {
+        format!(
+            "seed node check: {} | advertised nodes: {}",
+            parts.join("; "),
+            topo_parts.join("; ")
+        )
+    }
 }

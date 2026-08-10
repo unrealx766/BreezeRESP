@@ -9,6 +9,7 @@ import QpsChart from "@/components/charts/QpsChart.vue";
 import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
 import { toast } from "@/utils/toast";
 import { truncateValue } from "@/utils/format";
+import { isDangerousCommand } from "@/utils/dangerousCommand";
 import {
   Plus, Play, Trash2, Eraser, GripVertical, CheckCircle, XCircle,
   Clock, Zap, Layers, ArrowUpDown, X,
@@ -90,6 +91,24 @@ async function doDelete(id: string) {
   } catch (e) {
     console.error("Delete pipeline failed:", e);
   }
+}
+
+/** Execute pipeline with a second confirmation when dangerous commands are present */
+async function handleExecute() {
+  const dangerous = pipeline.commands
+    .map((c) => `${c.command.trim()} ${c.args.join(" ")}`.trim())
+    .filter((full) => isDangerousCommand(full));
+  if (dangerous.length > 0) {
+    const confirmed = await confirmDialog.value?.open({
+      title: t("common.dangerousCommandTitle"),
+      message: t("common.dangerousCommandMessage", { commands: dangerous.join(", ") }),
+      confirmLabel: t("common.executeAnyway"),
+      cancelLabel: t("common.cancel"),
+      danger: true,
+    });
+    if (!confirmed) return;
+  }
+  await pipeline.executeAll();
 }
 
 function formatTimestamp(ts: number): string {
@@ -209,7 +228,7 @@ function resetDrag() {
           class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-danger bg-danger/5 border border-danger/20 rounded-lg hover:bg-danger/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
           <Trash2 :size="13" /> {{ t("pipeline.clearAll") }}
         </button>
-        <button @click="pipeline.executeAll()" :disabled="pipeline.commandCount === 0 || pipeline.executing || !isConnected"
+        <button @click="handleExecute" :disabled="pipeline.commandCount === 0 || pipeline.executing || !isConnected"
           class="inline-flex items-center justify-center gap-1.5 w-36 h-9 text-sm font-medium text-white bg-redis rounded-lg hover:bg-redis-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
           :title="!isConnected ? t('status.noConnection') : ''">
           <Play :size="14" />

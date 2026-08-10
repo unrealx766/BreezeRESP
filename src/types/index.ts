@@ -1,5 +1,5 @@
 // Redis data types
-export type RedisDataType = "string" | "hash" | "list" | "set" | "zset";
+export type RedisDataType = "string" | "hash" | "list" | "set" | "zset" | "stream" | "rejson";
 
 export type ConnectionStatus = "disconnected" | "connecting" | "connected" | "error";
 
@@ -79,7 +79,24 @@ export interface ZSetValue {
   truncated?: boolean;
 }
 
-export type KeyValue = StringValue | HashValue | ListValue | SetValue | ZSetValue;
+export interface StreamValue {
+  type: "stream";
+  length: number;
+  lastGeneratedId: string;
+  groups: number;
+  /** Preview of the first entries */
+  entries: StreamEntry[];
+  totalCount?: number;
+  truncated?: boolean;
+}
+
+export interface ReJSONValue {
+  type: "rejson";
+  /** Raw JSON document (JSON.GET $) */
+  json: string;
+}
+
+export type KeyValue = StringValue | HashValue | ListValue | SetValue | ZSetValue | StreamValue | ReJSONValue;
 
 export interface KeyDetail {
   key: RedisKey;
@@ -208,4 +225,109 @@ export interface SlowlogInfo {
   entries: SlowlogEntry[];
   totalLen: number;
   slowlogLogSlowerThan: number;
+}
+
+// Server capability (Redis version + module support)
+export interface ServerCapability {
+  redisVersion: string;
+  redisMode: string;
+  streamsSupported: boolean;
+  streamFullSupported: boolean;
+  streamFullCountSupported: boolean;
+  streamExtendedSupported: boolean;
+  jsonSupported: boolean;
+  jsonVersion: string | null;
+  searchSupported: boolean;
+  searchVersion: string | null;
+  vectorSearchSupported: boolean;
+}
+
+// Streams
+export interface StreamEntry {
+  id: string;
+  fields: Array<[string, string]>;
+}
+
+export interface StreamInfo {
+  key: string;
+  length: number;
+  lastGeneratedId: string;
+  groups: number;
+  firstEntry: StreamEntry | null;
+  lastEntry: StreamEntry | null;
+  maxDeletedEntryId: string | null;
+  entriesAdded: number | null;
+  radixTreeKeys: number | null;
+  radixTreeNodes: number | null;
+}
+
+export interface ConsumerGroup {
+  name: string;
+  consumers: number;
+  pending: number;
+  lastDeliveredId: string;
+  lag: number | null;
+  entriesRead: number | null;
+}
+
+export interface ConsumerInfo {
+  name: string;
+  pending: number;
+  idleMs: number;
+  inactiveMs: number | null;
+}
+
+export interface PendingEntry {
+  id: string;
+  consumer: string;
+  idleMs: number;
+  deliveredCount: number;
+}
+
+// RedisJSON & RediSearch
+export interface FtField {
+  identifier: string;
+  attribute: string;
+  fieldType: string;
+  vectorAlgorithm: string | null;
+  vectorDim: number | null;
+  vectorDistanceMetric: string | null;
+  vectorDataType: string | null;
+}
+
+export interface FtIndexInfo {
+  name: string;
+  numDocs: number;
+  fields: FtField[];
+  prefixes: string[];
+}
+
+export interface FtDocument {
+  id: string;
+  score: number | null;
+  fields: Array<[string, string]>;
+}
+
+export interface FtSearchResult {
+  total: number;
+  docs: FtDocument[];
+  elapsedMs: number | null;
+}
+
+export interface FtFieldSpec {
+  identifier: string;
+  attribute?: string | null;
+  fieldType: string;
+  separator?: string | null;
+  vectorAlgorithm?: string | null;
+  vectorDim?: number | null;
+  vectorDistanceMetric?: string | null;
+  vectorDataType?: string | null;
+}
+
+export interface FtCreateSpec {
+  name: string;
+  onType?: string | null;
+  prefixes: string[];
+  fields: FtFieldSpec[];
 }

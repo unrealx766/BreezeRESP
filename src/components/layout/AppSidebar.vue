@@ -3,7 +3,8 @@ import { computed, reactive } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useConnectionStore } from "@/stores/connectionStore";
-import { Database, Server, Layers, FlaskConical, History, Plus, Unplug, X, Pin, PanelLeftClose, PanelLeftOpen, Radio, Activity } from "lucide-vue-next";
+import { useCapabilityStore } from "@/stores/capabilityStore";
+import { Database, Server, Layers, FlaskConical, History, Plus, Unplug, X, Pin, PanelLeftClose, PanelLeftOpen, Radio, Activity, ListTree, Radar, TriangleAlert } from "lucide-vue-next";
 import type { RedisConnection } from "@/types";
 import { toast } from "@/utils/toast";
 import { sidebarCollapsed, toggleSidebar, getDotColor } from "@/utils/uiSettings";
@@ -12,6 +13,7 @@ const router = useRouter();
 const route = useRoute();
 const { t } = useI18n();
 const connStore = useConnectionStore();
+const capStore = useCapabilityStore();
 
 const navItems = computed(() => [
   { name: "connections", icon: Server, label: t("nav.connections"), path: "/" },
@@ -20,11 +22,31 @@ const navItems = computed(() => [
   { name: "sandbox", icon: FlaskConical, label: t("nav.sandbox"), path: "/sandbox" },
   { name: "slowlog", icon: Activity, label: t("nav.slowlog"), path: "/slowlog" },
   { name: "pubsub", icon: Radio, label: t("nav.pubsub"), path: "/pubsub" },
+  { name: "streams", icon: ListTree, label: t("nav.streams"), path: "/streams" },
+  { name: "search", icon: Radar, label: t("nav.search"), path: "/search" },
   { name: "history", icon: History, label: t("nav.history"), path: "/history" },
 ]);
 
 function isActive(path: string) {
   return route.path === path;
+}
+
+/** Warning hint for nav features the current server does not support. */
+function unsupportedHint(name: string): string {
+  const cap = capStore.activeCapability;
+  if (connStore.activeConnection?.status !== "connected" || !cap) return "";
+  if (name === "streams" && cap.streamsSupported === false) {
+    return t("nav.streamsUnsupported", { version: cap.redisVersion });
+  }
+  if (name === "search" && cap.searchSupported === false) {
+    return t("nav.searchUnsupported");
+  }
+  return "";
+}
+
+function navTitle(item: { name: string; label: string }): string {
+  const hint = unsupportedHint(item.name);
+  return hint ? `${item.label} · ${hint}` : item.label;
 }
 
 function navigate(path: string) {
@@ -95,7 +117,7 @@ async function handleSidebarDisconnect(id: string) {
             ? 'bg-bg-secondary text-redis shadow-sm border-border-light'
             : 'text-text-secondary border-transparent hover:bg-bg-hover hover:text-text-primary'
         ]"
-        :title="sidebarCollapsed ? item.label : undefined"
+        :title="sidebarCollapsed ? navTitle(item) : undefined"
       >
         <component :is="item.icon" :size="16" :stroke-width="2" class="shrink-0" />
         <span
@@ -103,6 +125,14 @@ async function handleSidebarDisconnect(id: string) {
           :class="sidebarCollapsed ? 'w-0 opacity-0 ml-0' : 'w-auto opacity-100 ml-2.5'"
           style="transition: all 0.2s ease"
         >{{ item.label }}</span>
+        <TriangleAlert
+          v-if="unsupportedHint(item.name)"
+          :size="12"
+          class="text-warning shrink-0 ml-auto"
+          :class="sidebarCollapsed ? 'w-0 opacity-0' : 'opacity-100'"
+          style="transition: opacity 0.2s ease"
+          :title="unsupportedHint(item.name)"
+        />
       </button>
     </nav>
 

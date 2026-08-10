@@ -148,7 +148,7 @@ const hotKeys = computed<HotKey[]>(() => {
 });
 
 // ---- Analytics: Read/Write classification ----
-const WRITE_CMDS = new Set(["DEL", "UNLINK", "SET", "SETNX", "SETEX", "PSETEX", "MSET", "MSETNX", "APPEND", "INCR", "INCRBY", "INCRBYFLOAT", "DECR", "DECRBY", "SETRANGE", "EXPIRE", "EXPIREAT", "PEXPIRE", "PEXPIREAT", "PERSIST", "RENAME", "RENAMENX", "RESTORE", "HSET", "HSETNX", "HMSET", "HDEL", "HINCRBY", "HINCRBYFLOAT", "LPUSH", "LPUSHX", "RPUSH", "RPUSHX", "LPOP", "RPOP", "LSET", "LREM", "LTRIM", "LINSERT", "LMOVE", "RPOPLPUSH", "SADD", "SREM", "SPOP", "SMOVE", "SINTERSTORE", "SUNIONSTORE", "SDIFFSTORE", "ZADD", "ZREM", "ZINCRBY", "ZPOPMIN", "ZPOPMAX", "ZRANGESTORE", "ZUNIONSTORE", "ZINTERSTORE", "XADD", "XDEL", "XTRIM", "PFADD", "PFMERGE", "GEOADD", "PUBLISH", "COPY", "FLUSHDB", "FLUSHALL", "EVAL", "EVALSHA", "SCRIPT", "TOUCH", "SORT"]);
+const WRITE_CMDS = new Set(["DEL", "UNLINK", "SET", "SETNX", "SETEX", "PSETEX", "MSET", "MSETNX", "APPEND", "INCR", "INCRBY", "INCRBYFLOAT", "DECR", "DECRBY", "SETRANGE", "GETDEL", "GETEX", "EXPIRE", "EXPIREAT", "PEXPIRE", "PEXPIREAT", "PERSIST", "RENAME", "RENAMENX", "RESTORE", "HSET", "HSETNX", "HMSET", "HDEL", "HINCRBY", "HINCRBYFLOAT", "HSETEX", "HEXPIRE", "HPEXPIRE", "HEXPIREAT", "HPEXPIREAT", "HPERSIST", "LPUSH", "LPUSHX", "RPUSH", "RPUSHX", "LPOP", "RPOP", "LSET", "LREM", "LTRIM", "LINSERT", "LMOVE", "LMPOP", "BLMPOP", "RPOPLPUSH", "SADD", "SREM", "SPOP", "SMOVE", "SINTERSTORE", "SUNIONSTORE", "SDIFFSTORE", "ZADD", "ZREM", "ZINCRBY", "ZPOPMIN", "ZPOPMAX", "ZMPOP", "BZMPOP", "ZRANGESTORE", "ZUNIONSTORE", "ZINTERSTORE", "ZDIFFSTORE", "XADD", "XDEL", "XTRIM", "XSETID", "XGROUP", "XACK", "XCLAIM", "XAUTOCLAIM", "PFADD", "PFMERGE", "GEOADD", "PUBLISH", "COPY", "FLUSHDB", "FLUSHALL", "EVAL", "EVALSHA", "SCRIPT", "TOUCH", "SORT"]);
 
 const readWriteStats = computed(() => {
   let readCount = 0, readTotal = 0, writeCount = 0, writeTotal = 0;
@@ -699,37 +699,39 @@ function handleCountChange() {
       <p class="text-sm">{{ t("common.loading") }}</p>
     </div>
 
-    <!-- List View -->
-    <template v-else-if="viewMode === 'list'">
+    <template v-else>
+      <!-- Active chart-linked filters (shared by list & analytics views) -->
+      <div v-if="hasChartFilters" class="flex items-center gap-2 flex-wrap px-3 py-2 mb-2 shrink-0 rounded-lg border border-border bg-bg-secondary/40">
+        <span class="text-[11px] text-text-muted">{{ t("slowlog.activeFilters") }}:</span>
+        <span
+          v-if="bucketFilterIdx !== null"
+          class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-redis/10 text-redis text-[11px]"
+        >
+          {{ BUCKET_DEFS[bucketFilterIdx]?.label }}
+          <button @click="bucketFilterIdx = null" class="hover:opacity-70"><X :size="10" /></button>
+        </span>
+        <span
+          v-if="cmdFilter"
+          class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-redis/10 text-redis text-[11px]"
+        >
+          {{ cmdFilter }}
+          <button @click="cmdFilter = null" class="hover:opacity-70"><X :size="10" /></button>
+        </span>
+        <span
+          v-if="keyFilter"
+          class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-redis/10 text-redis text-[11px] max-w-[240px]"
+        >
+          <span class="truncate font-mono">{{ keyFilter }}</span>
+          <button @click="keyFilter = null" class="hover:opacity-70 shrink-0"><X :size="10" /></button>
+        </span>
+        <button @click="clearChartFilters" class="text-[11px] text-text-muted underline hover:text-text-primary transition-colors">
+          {{ t("slowlog.clearFilters") }}
+        </button>
+      </div>
+
+      <!-- List View -->
+      <template v-if="viewMode === 'list'">
       <div class="flex-1 overflow-y-auto">
-        <!-- Active chart-linked filters -->
-        <div v-if="hasChartFilters" class="flex items-center gap-2 flex-wrap px-3 py-2 border-b border-border bg-bg-secondary/40">
-          <span class="text-[11px] text-text-muted">{{ t("slowlog.activeFilters") }}:</span>
-          <span
-            v-if="bucketFilterIdx !== null"
-            class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-redis/10 text-redis text-[11px]"
-          >
-            {{ BUCKET_DEFS[bucketFilterIdx]?.label }}
-            <button @click="bucketFilterIdx = null" class="hover:opacity-70"><X :size="10" /></button>
-          </span>
-          <span
-            v-if="cmdFilter"
-            class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-redis/10 text-redis text-[11px]"
-          >
-            {{ cmdFilter }}
-            <button @click="cmdFilter = null" class="hover:opacity-70"><X :size="10" /></button>
-          </span>
-          <span
-            v-if="keyFilter"
-            class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-redis/10 text-redis text-[11px] max-w-[240px]"
-          >
-            <span class="truncate font-mono">{{ keyFilter }}</span>
-            <button @click="keyFilter = null" class="hover:opacity-70 shrink-0"><X :size="10" /></button>
-          </span>
-          <button @click="clearChartFilters" class="text-[11px] text-text-muted underline hover:text-text-primary transition-colors">
-            {{ t("slowlog.clearFilters") }}
-          </button>
-        </div>
         <div class="sticky top-0 z-10 grid grid-cols-[60px_140px_100px_1fr_120px_40px] gap-2 px-3 py-2 text-[11px] font-semibold text-text-muted uppercase tracking-wider bg-bg-primary border-b border-border">
           <span>{{ t("slowlog.colId") }}</span>
           <span>{{ t("slowlog.colTime") }}</span>
@@ -931,7 +933,7 @@ function handleCountChange() {
                   :style="{ width: `${(hk.count / (hotKeys[0]?.count || 1)) * 100}%` }"
                 ></div>
               </div>
-              <span class="text-[11px] font-mono text-text-secondary w-10 shrink-0 text-right">{{ hk.count }}×</span>
+              <span class="text-[11px] font-mono text-text-secondary w-10 shrink-0 text-right">{{ hk.count }}</span>
               <span class="text-[11px] font-mono text-text-muted w-16 shrink-0 text-right">{{ formatDuration(hk.avgDurationUs) }}</span>
             </div>
           </div>
@@ -954,6 +956,7 @@ function handleCountChange() {
           </div>
         </div>
       </div>
+      </template>
     </template>
   </div>
 </template>

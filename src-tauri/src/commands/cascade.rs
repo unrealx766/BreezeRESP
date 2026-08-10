@@ -516,6 +516,7 @@ pub async fn get_key_detail(
         "list" => redis::cmd("LLEN").arg(&key).query_async(&mut conn).await.unwrap_or(0),
         "set" => redis::cmd("SCARD").arg(&key).query_async(&mut conn).await.unwrap_or(0),
         "zset" => redis::cmd("ZCARD").arg(&key).query_async(&mut conn).await.unwrap_or(0),
+        "stream" => redis::cmd("XLEN").arg(&key).query_async(&mut conn).await.unwrap_or(0),
         _ => 0,
     };
 
@@ -763,6 +764,41 @@ pub async fn get_key_detail(
                 .collect();
             serde_json::json!({ "type": "zset", "members": members_json, "encoding": encoding, "contentEncoding": content_encoding, "totalCount": matched_count, "truncated": truncated })
         }
+        "stream" => {
+            // Reuse the streams collector for metadata + a preview of the first entries
+            let collector = crate::core::streams::StreamsCollector::new();
+            let info = collector
+                .get_stream_info(&mut conn, &key, false)
+                .await
+                .map_err(|e| format!("XINFO STREAM error: {}", e))?;
+            let entries = collector
+                .get_entries(&mut conn, &key, "-", "+", 50)
+                .await
+                .unwrap_or_default();
+            let entries_json: Vec<serde_json::Value> = entries
+                .into_iter()
+                .map(|e| serde_json::json!({ "id": e.id, "fields": e.fields }))
+                .collect();
+            serde_json::json!({
+                "type": "stream",
+                "length": info.length,
+                "lastGeneratedId": info.last_generated_id,
+                "groups": info.groups,
+                "entries": entries_json,
+                "totalCount": info.length,
+                "truncated": info.length > entries_json.len() as u64,
+            })
+        }
+        "ReJSON-loads" => {
+            // RedisJSON module key: fetch the raw document (legacy root path)
+            let raw: Option<String> = redis::cmd("JSON.GET")
+                .arg(&key)
+                .arg(".")
+                .query_async(&mut conn)
+                .await
+                .map_err(|e| format!("JSON.GET error: {}", e))?;
+            serde_json::json!({ "type": "rejson", "json": raw.unwrap_or_default() })
+        }
         _ => {
             return Err(format!("Unsupported type: {}", type_str));
         }
@@ -823,7 +859,7 @@ pub async fn set_hash_field_ttl(
 
     if ttl > 0 {
         // HEXPIRE key seconds FIELDS numfields field [field ...]
-        let result: i64 = redis::cmd("HEXPIRE")
+        let results: Vec<i64> = redis::cmd("HEXPIRE")
             .arg(&key)
             .arg(ttl)
             .arg("FIELDS")
@@ -832,11 +868,11 @@ pub async fn set_hash_field_ttl(
             .query_async(&mut conn)
             .await
             .map_err(|e| format!("HEXPIRE error: {}", e))?;
-        // HEXPIRE returns 1 on success, 0 if field doesn't exist
-        Ok(result > 0)
+        // HEXPIRE returns an array: 1 on success, 0 if field doesn't exist
+        Ok(results.first().copied().unwrap_or(0) > 0)
     } else if ttl == -1 {
         // HPERSIST key FIELDS numfields field [field ...]
-        let result: i64 = redis::cmd("HPERSIST")
+        let results: Vec<i64> = redis::cmd("HPERSIST")
             .arg(&key)
             .arg("FIELDS")
             .arg(1)
@@ -844,7 +880,7 @@ pub async fn set_hash_field_ttl(
             .query_async(&mut conn)
             .await
             .map_err(|e| format!("HPERSIST error: {}", e))?;
-        Ok(result > 0)
+        Ok(results.first().copied().unwrap_or(0) > 0)
     } else {
         Err("Invalid TTL value".to_string())
     }
@@ -1199,6 +1235,8 @@ pub async fn set_value(
 ///   - list:   `["item1","item2",...]` (array of strings)
 ///   - set:    `["m1","m2",...]` (array of strings)
 ///   - zset:   `[["member",1.0],...]` (array of [member, score] pairs)
+///   - stream: `[["field","value"], ...]` (all pairs become fields of the first entry, XADD).
+///     `stream_id` selects the entry ID: `None`/empty/"*" = auto-generated.
 ///
 /// `field_ttl` is only used for hash type (Redis >= 7.4) to set per-field expiry
 /// right after creation. Value is in seconds.
@@ -1212,6 +1250,7 @@ pub async fn create_key(
     ttl: Option<i64>,
     initial_data: Option<serde_json::Value>,
     field_ttl: Option<i64>,
+    stream_id: Option<String>,
 ) -> Result<bool, String> {
     validate_connection_id(&connection_id)?;
     validate_key(&key)?;
@@ -1293,7 +1332,8 @@ pub async fn create_key(
             if let Some(fttl) = field_ttl {
                 if fttl > 0 && !pairs.is_empty() {
                     let fields: Vec<&str> = pairs.iter().map(|(f, _)| f.as_str()).collect();
-                    let _: i64 = redis::cmd("HEXPIRE")
+                    // HEXPIRE returns an array with one status per field
+                    let _: Vec<i64> = redis::cmd("HEXPIRE")
                         .arg(&key)
                         .arg(fttl)
                         .arg("FIELDS")
@@ -1393,6 +1433,67 @@ pub async fn create_key(
             }
             let _: Vec<redis::Value> = pipe.query_async(&mut conn).await.map_err(|e| format!("ZADD error: {}", e))?;
         }
+        "stream" => {
+            // Streams require Redis >= 5.0
+            let cap = crate::core::capability::get_or_probe(&pool, &connection_id, false)
+                .await
+                .map_err(|e| format!("Capability probe error: {}", e))?;
+            if !cap.streams_supported {
+                return Err(crate::core::capability::unsupported_err(
+                    "Streams",
+                    &cap.redis_version,
+                    "5.0 or later",
+                ));
+            }
+            // Accept [[field, value], ...] — all pairs become fields of the first entry
+            let pairs: Vec<(String, String)> = match initial_data {
+                Some(serde_json::Value::Array(arr)) => {
+                    let mut result = Vec::new();
+                    for item in arr {
+                        if let serde_json::Value::Array(pair) = item {
+                            if pair.len() >= 2 {
+                                let f = pair[0].as_str().unwrap_or("").to_string();
+                                let v = pair[1].as_str().unwrap_or("").to_string();
+                                if !f.is_empty() {
+                                    reject_null_bytes(&f, "field")?;
+                                    reject_null_bytes(&v, "value")?;
+                                    result.push((f, v));
+                                }
+                            }
+                        }
+                    }
+                    result
+                }
+                _ => Vec::new(),
+            };
+            if pairs.is_empty() {
+                return Err(
+                    "Stream creation requires at least one field-value pair (XADD)".to_string(),
+                );
+            }
+            // Entry ID: auto-generate unless a manual ID is supplied
+            let entry_id = match stream_id.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty() && *s != "*") {
+                Some(id) => {
+                    reject_null_bytes(id, "stream id")?;
+                    id.to_string()
+                }
+                None => "*".to_string(),
+            };
+            let mut pipe = redis::pipe();
+            {
+                let cmd = pipe.cmd("XADD");
+                cmd.arg(&key).arg(&entry_id);
+                for (f, v) in &pairs {
+                    cmd.arg(f).arg(v);
+                }
+            }
+            if let Some(t) = ttl {
+                if t > 0 {
+                    pipe.cmd("EXPIRE").arg(&key).arg(t);
+                }
+            }
+            let _: Vec<redis::Value> = pipe.query_async(&mut conn).await.map_err(|e| format!("XADD error: {}", e))?;
+        }
         _ => return Err(format!("Unsupported key type: {}", key_type)),
     }
 
@@ -1464,7 +1565,8 @@ pub async fn batch_add_fields(
             if let Some(fttl) = field_ttl {
                 if fttl > 0 {
                     let fields: Vec<&str> = pairs.iter().map(|(f, _)| f.as_str()).collect();
-                    let _: i64 = redis::cmd("HEXPIRE")
+                    // HEXPIRE returns an array with one status per field
+                    let _: Vec<i64> = redis::cmd("HEXPIRE")
                         .arg(&key)
                         .arg(fttl)
                         .arg("FIELDS")
