@@ -150,6 +150,7 @@ pub fn run() {
             commands::server_admin::client_kill,
             commands::server_admin::object_freq,
             commands::server_admin::get_cluster_topology,
+            commands::server_admin::get_command_stats,
             // Key export / import commands
             commands::keytransfer::export_keys,
             commands::keytransfer::export_keys_by_pattern,

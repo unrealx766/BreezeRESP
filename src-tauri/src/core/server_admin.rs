@@ -338,6 +338,106 @@ pub async fn object_freq(conn: &mut AnyConn, keys: &[String]) -> Result<Vec<KeyF
 }
 
 // ---------------------------------------------------------------------------
+// Command statistics (INFO commandstats)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CmdStat {
+    /// Command name without the "cmdstat_" prefix, e.g. "get".
+    pub cmd: String,
+    pub calls: u64,
+    /// Cumulative execution time in microseconds.
+    pub total_usec: u64,
+    /// Rejected calls (Redis 6.2+; 0 on older servers).
+    pub rejected_calls: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CmdStatNode {
+    /// Node address; "server" for standalone connections.
+    pub addr: String,
+    pub stats: Vec<CmdStat>,
+}
+
+/// Parse one INFO commandstats payload. Handles both the classic microsecond
+/// fields (usec / usec_per_call, ≤ Redis 7) and the millisecond fields Redis
+/// 8 introduced (msec / msec_per_call).
+fn parse_commandstats(info: &str) -> Vec<CmdStat> {
+    let mut stats = Vec::new();
+    for line in info.lines() {
+        let Some(rest) = line.strip_prefix("cmdstat_") else {
+            continue;
+        };
+        let Some((cmd, fields)) = rest.split_once(':') else {
+            continue;
+        };
+        let mut stat = CmdStat {
+            cmd: cmd.to_string(),
+            calls: 0,
+            total_usec: 0,
+            rejected_calls: 0,
+        };
+        for part in fields.split(',') {
+            if let Some((k, v)) = part.split_once('=') {
+                match k {
+                    "calls" => stat.calls = v.parse().unwrap_or(0),
+                    "rejected_calls" => stat.rejected_calls = v.parse().unwrap_or(0),
+                    "usec" => stat.total_usec = v.parse().unwrap_or(0),
+                    // Redis 8 reports milliseconds; normalize to microseconds.
+                    "msec" => stat.total_usec = v.parse::<u64>().unwrap_or(0).saturating_mul(1000),
+                    _ => {}
+                }
+            }
+        }
+        stats.push(stat);
+    }
+    stats.sort_by(|a, b| b.total_usec.cmp(&a.total_usec));
+    stats
+}
+
+/// Per-node command statistics. Cluster connections merge every node into a
+/// single aggregated entry labeled "cluster"; standalone returns "server".
+pub async fn command_stats(conn: &mut AnyConn) -> Result<Vec<CmdStatNode>, String> {
+    let mut cmd = redis::cmd("INFO");
+    cmd.arg("commandstats");
+
+    if let Some(cluster) = conn.as_cluster() {
+        let values = per_node_values(cluster, &cmd).await?;
+        let mut merged: Vec<CmdStat> = Vec::new();
+        for (_addr, value) in values {
+            let Ok(info) = redis::from_redis_value::<String>(&value) else {
+                continue;
+            };
+            for stat in parse_commandstats(&info) {
+                if let Some(existing) = merged.iter_mut().find(|s| s.cmd == stat.cmd) {
+                    existing.calls += stat.calls;
+                    existing.total_usec += stat.total_usec;
+                    existing.rejected_calls += stat.rejected_calls;
+                } else {
+                    merged.push(stat);
+                }
+            }
+        }
+        merged.sort_by(|a, b| b.total_usec.cmp(&a.total_usec));
+        return Ok(vec![CmdStatNode {
+            addr: "cluster".to_string(),
+            stats: merged,
+        }]);
+    }
+
+    let info: String = cmd
+        .query_async(conn)
+        .await
+        .map_err(|e| format!("INFO commandstats error: {}", e))?;
+    Ok(vec![CmdStatNode {
+        addr: "server".to_string(),
+        stats: parse_commandstats(&info),
+    }])
+}
+
+// ---------------------------------------------------------------------------
 // Cluster topology
 // ---------------------------------------------------------------------------
 

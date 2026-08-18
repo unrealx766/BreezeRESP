@@ -1,23 +1,25 @@
 <script setup lang="ts">
 // Unified monitoring center: overview / slow queries / big keys /
-// server administration / cluster topology, switchable via top tabs.
+// command statistics / server administration / cluster topology,
+// switchable via top tabs.
 import { ref, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { Activity, Gauge, MemoryStick, Network, Server } from "lucide-vue-next";
+import { Activity, Gauge, MemoryStick, Network, Server, Terminal } from "lucide-vue-next";
 import { useConnectionStore } from "@/stores/connectionStore";
 import OverviewPanel from "@/components/monitor/OverviewPanel.vue";
 import SlowlogPanel from "@/components/monitor/SlowlogPanel.vue";
 import BigKeyPanel from "@/components/monitor/BigKeyPanel.vue";
+import CmdStatsPanel from "@/components/monitor/CmdStatsPanel.vue";
 import ServerAdminPanel from "@/components/monitor/ServerAdminPanel.vue";
 import ClusterTopologyPanel from "@/components/monitor/ClusterTopologyPanel.vue";
 
-type MonitorTab = "overview" | "slowlog" | "bigkey" | "server" | "cluster";
+type MonitorTab = "overview" | "slowlog" | "bigkey" | "cmdstats" | "server" | "cluster";
 
 const { t } = useI18n();
 const connStore = useConnectionStore();
 
 const TAB_KEY = "breezeresp-monitor-tab";
-const VALID_TABS: MonitorTab[] = ["overview", "slowlog", "bigkey", "server", "cluster"];
+const VALID_TABS: MonitorTab[] = ["overview", "slowlog", "bigkey", "cmdstats", "server", "cluster"];
 const stored = localStorage.getItem(TAB_KEY) as MonitorTab | null;
 const activeTab = ref<MonitorTab>(stored && VALID_TABS.includes(stored) ? stored : "overview");
 
@@ -27,6 +29,7 @@ const tabs = computed(() => [
   { key: "overview" as MonitorTab, icon: Gauge, label: t("monitor.tabOverview") },
   { key: "slowlog" as MonitorTab, icon: Activity, label: t("monitor.tabSlowlog") },
   { key: "bigkey" as MonitorTab, icon: MemoryStick, label: t("monitor.tabBigKey") },
+  { key: "cmdstats" as MonitorTab, icon: Terminal, label: t("monitor.tabCmdStats") },
   { key: "server" as MonitorTab, icon: Server, label: t("monitor.tabServer") },
   { key: "cluster" as MonitorTab, icon: Network, label: t("monitor.tabCluster") },
 ]);
@@ -35,6 +38,7 @@ const panelComponent = computed(() => {
   switch (activeTab.value) {
     case "slowlog": return SlowlogPanel;
     case "bigkey": return BigKeyPanel;
+    case "cmdstats": return CmdStatsPanel;
     case "server": return ServerAdminPanel;
     case "cluster": return ClusterTopologyPanel;
     default: return OverviewPanel;

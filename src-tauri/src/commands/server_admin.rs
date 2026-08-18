@@ -1,7 +1,8 @@
 use crate::core::server_admin::{
     client_kill as core_client_kill, client_list as core_client_list, cluster_topology,
-    config_get as core_config_get, config_set as core_config_set, fetch_info,
-    object_freq as core_object_freq, ClientInfo, ClusterTopology, InfoNode, KeyFreq,
+    command_stats as core_command_stats, config_get as core_config_get,
+    config_set as core_config_set, fetch_info, object_freq as core_object_freq, ClientInfo,
+    ClusterTopology, CmdStatNode, InfoNode, KeyFreq,
 };
 use crate::core::validate::{
     reject_null_bytes, validate_connection_id, validate_key, validate_non_empty, validate_pattern,
@@ -150,4 +151,21 @@ pub async fn get_cluster_topology(
     };
     let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
     cluster_topology(&mut conn).await
+}
+
+/// Per-command statistics parsed from INFO commandstats.
+/// Cluster connections are aggregated into a single "cluster" entry.
+#[tauri::command]
+pub async fn get_command_stats(
+    state: State<'_, AppState>,
+    connection_id: String,
+) -> Result<Vec<CmdStatNode>, String> {
+    validate_connection_id(&connection_id)?;
+
+    let pool = {
+        let pm = state.pool_manager.lock().map_err(|e| e.to_string())?;
+        pm.get_pool(&connection_id)?
+    };
+    let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
+    core_command_stats(&mut conn).await
 }

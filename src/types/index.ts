@@ -399,6 +399,19 @@ export interface ClusterTopology {
   nodes: ClusterNodeInfo[];
 }
 
+// Command statistics (INFO commandstats)
+export interface CmdStat {
+  cmd: string;
+  calls: number;
+  totalUsec: number;
+  rejectedCalls: number;
+}
+
+export interface CmdStatNode {
+  addr: string;
+  stats: CmdStat[];
+}
+
 // Key export / import
 export type KeyExportFormat = "json" | "dump";
 export type ImportPolicy = "skip" | "replace";

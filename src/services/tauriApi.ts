@@ -17,6 +17,7 @@ import type {
   ClientInfo,
   KeyFreq,
   ClusterTopology,
+  CmdStatNode,
   ExportResult,
   ImportResult,
   KeyExportFormat,
@@ -468,6 +469,9 @@ export const tauriApi = {
 
     getClusterTopology: (connectionId: string) =>
       withConn(connectionId, () => invoke<ClusterTopology>("get_cluster_topology", { connectionId })),
+
+    getCommandStats: (connectionId: string) =>
+      withConn(connectionId, () => invoke<CmdStatNode[]>("get_command_stats", { connectionId })),
   },
 
   keyTransfer: {
