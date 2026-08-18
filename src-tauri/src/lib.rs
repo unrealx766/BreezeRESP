@@ -142,6 +142,14 @@ pub fn run() {
             commands::bigkey::scan_big_keys,
             commands::bigkey::memory_stats,
             commands::bigkey::memory_doctor,
+            // Server administration commands
+            commands::server_admin::get_info,
+            commands::server_admin::config_get,
+            commands::server_admin::config_set,
+            commands::server_admin::client_list,
+            commands::server_admin::client_kill,
+            commands::server_admin::object_freq,
+            commands::server_admin::get_cluster_topology,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
