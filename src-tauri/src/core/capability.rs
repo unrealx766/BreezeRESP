@@ -75,32 +75,41 @@ fn parse_info(info: &str) -> HashMap<String, String> {
     map
 }
 
-/// Parse one MODULE LIST entry. Handles both the classic array form
-/// `[name, ver, path, args...]` and the RESP3 map form.
+/// Parse one MODULE LIST entry. RESP2 returns a flat key-value array
+/// `[name, <name>, ver, <ver>, path, <path>, args, [...]]`; RESP3 returns
+/// a map with the same fields.
 fn parse_module_entry(entry: &redis::Value) -> Option<(String, Option<u64>)> {
+    let mut name: Option<String> = None;
+    let mut ver: Option<u64> = None;
+
+    let mut read_pair = |k: &redis::Value, v: &redis::Value| {
+        let Ok(key) = redis::from_redis_value::<String>(k) else {
+            return;
+        };
+        match key.as_str() {
+            "name" => name = redis::from_redis_value(v).ok(),
+            "ver" => ver = redis::from_redis_value(v).ok(),
+            _ => {}
+        }
+    };
+
     match entry {
-        redis::Value::Array(items) => {
-            let name: String = redis::from_redis_value(items.first()?).ok()?;
-            let ver: Option<u64> = items
-                .get(1)
-                .and_then(|v| redis::from_redis_value::<u64>(v).ok());
-            Some((name, ver))
-        }
         redis::Value::Map(pairs) => {
-            let mut name = None;
-            let mut ver = None;
             for (k, v) in pairs {
-                let key: String = redis::from_redis_value(k).ok()?;
-                match key.as_str() {
-                    "name" => name = redis::from_redis_value(v).ok(),
-                    "ver" => ver = redis::from_redis_value(v).ok(),
-                    _ => {}
-                }
+                read_pair(k, v);
             }
-            name.map(|n| (n, ver))
         }
-        _ => None,
+        redis::Value::Array(items) => {
+            let mut i = 0;
+            while i + 1 < items.len() {
+                read_pair(&items[i], &items[i + 1]);
+                i += 2;
+            }
+        }
+        _ => {}
     }
+
+    name.map(|n| (n, ver))
 }
 
 /// Build the capability profile from raw INFO + MODULE LIST responses.
