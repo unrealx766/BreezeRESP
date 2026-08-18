@@ -11,6 +11,16 @@ import type {
   FtIndexInfo,
   FtSearchResult,
   FtCreateSpec,
+  BigKeyBatch,
+  MemoryStatItem,
+  InfoNode,
+  ClientInfo,
+  KeyFreq,
+  ClusterTopology,
+  ExportResult,
+  ImportResult,
+  KeyExportFormat,
+  ImportPolicy,
 } from "@/types";
 
 // ---- Connection guard (registered at app startup to avoid circular deps) ----
@@ -424,5 +434,55 @@ export const tauriApi = {
 
     ftDropIndex: (connectionId: string, index: string, deleteDocs = false) =>
       withConn(connectionId, () => invoke<boolean>("ft_drop_index", { connectionId, index, deleteDocs })),
+  },
+
+  bigkey: {
+    scanBigKeys: (connectionId: string, pattern: string, cursor: number, count: number) =>
+      withConn(connectionId, () => invoke<BigKeyBatch>("scan_big_keys", { connectionId, pattern, cursor, count })),
+
+    memoryStats: (connectionId: string) =>
+      withConn(connectionId, () => invoke<MemoryStatItem[]>("memory_stats", { connectionId })),
+
+    memoryDoctor: (connectionId: string) =>
+      withConn(connectionId, () => invoke<string>("memory_doctor", { connectionId })),
+  },
+
+  serverAdmin: {
+    getInfo: (connectionId: string, section?: string) =>
+      withConn(connectionId, () => invoke<InfoNode[]>("get_info", { connectionId, section: section ?? null })),
+
+    configGet: (connectionId: string, pattern: string) =>
+      withConn(connectionId, () => invoke<Array<[string, string]>>("config_get", { connectionId, pattern })),
+
+    configSet: (connectionId: string, param: string, value: string) =>
+      withConn(connectionId, () => invoke<void>("config_set", { connectionId, param, value })),
+
+    clientList: (connectionId: string) =>
+      withConn(connectionId, () => invoke<ClientInfo[]>("client_list", { connectionId })),
+
+    clientKill: (connectionId: string, clientId: number) =>
+      withConn(connectionId, () => invoke<boolean>("client_kill", { connectionId, clientId })),
+
+    objectFreq: (connectionId: string, keys: string[]) =>
+      withConn(connectionId, () => invoke<KeyFreq[]>("object_freq", { connectionId, keys })),
+
+    getClusterTopology: (connectionId: string) =>
+      withConn(connectionId, () => invoke<ClusterTopology>("get_cluster_topology", { connectionId })),
+  },
+
+  keyTransfer: {
+    exportKeys: (connectionId: string, keys: string[], format: KeyExportFormat) =>
+      withConn(connectionId, () => invoke<ExportResult>("export_keys", { connectionId, keys, format })),
+
+    exportKeysByPattern: (connectionId: string, pattern: string, format: KeyExportFormat, limit?: number) =>
+      withConn(connectionId, () =>
+        invoke<ExportResult>("export_keys_by_pattern", { connectionId, pattern, format, limit: limit ?? null })),
+
+    /** Preview an export file: returns [detectedFormat, entryCount]. No connection needed. */
+    inspectImportFile: (filePath: string) =>
+      invoke<[string, number]>("inspect_import_file", { filePath }),
+
+    importKeys: (connectionId: string, filePath: string, policy: ImportPolicy) =>
+      withConn(connectionId, () => invoke<ImportResult>("import_keys", { connectionId, filePath, policy })),
   },
 };

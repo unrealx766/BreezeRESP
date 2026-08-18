@@ -331,3 +331,97 @@ export interface FtCreateSpec {
   prefixes: string[];
   fields: FtFieldSpec[];
 }
+
+// Big key / memory analysis
+export interface BigKeyEntry {
+  key: string;
+  keyType: string;
+  ttl: number; // ms (PTTL), -1 = no expiry, -2 = missing
+  memoryBytes: number;
+  elementCount: number;
+}
+
+export interface BigKeyBatch {
+  nextCursor: number;
+  entries: BigKeyEntry[];
+}
+
+export interface MemoryStatItem {
+  name: string;
+  value: number;
+}
+
+// Server administration
+export interface InfoNode {
+  /** Node address; "server" for standalone connections */
+  addr: string;
+  info: string;
+}
+
+export interface ClientInfo {
+  id: number;
+  addr: string;
+  name: string;
+  age: number;
+  idle: number;
+  flags: string;
+  db: number;
+  cmd: string;
+  user: string;
+  /** Node address the client is connected to (cluster only) */
+  node: string;
+}
+
+export interface KeyFreq {
+  key: string;
+  /** null when OBJECT FREQ is unsupported (non-LFU policy / old version) */
+  freq: number | null;
+}
+
+// Cluster topology
+export interface ClusterNodeInfo {
+  id: string;
+  addr: string;
+  role: "master" | "replica";
+  masterId: string;
+  /** Normalized health flags: "connected" | "disconnected" | "fail" | "noaddr" */
+  flags: string;
+  /** Inclusive slot ranges owned by this node (masters only) */
+  slots: Array<[number, number]>;
+  usedMemory: number;
+  connectedClients: number;
+}
+
+export interface ClusterTopology {
+  clusterEnabled: boolean;
+  slotsAssigned: number;
+  totalSlots: number;
+  nodes: ClusterNodeInfo[];
+}
+
+// Key export / import
+export type KeyExportFormat = "json" | "dump";
+export type ImportPolicy = "skip" | "replace";
+
+export interface ExportWarning {
+  key: string;
+  error: string;
+}
+
+export interface ExportResult {
+  path: string;
+  exported: number;
+  warnings: ExportWarning[];
+}
+
+export interface ImportFailure {
+  key: string;
+  error: string;
+}
+
+export interface ImportResult {
+  total: number;
+  succeeded: number;
+  skipped: number;
+  failed: ImportFailure[];
+}

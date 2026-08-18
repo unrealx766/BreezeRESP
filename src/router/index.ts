@@ -5,7 +5,7 @@ import PipelinePage from "@/views/PipelinePage.vue";
 import SandboxPage from "@/views/SandboxPage.vue";
 import HistoryPage from "@/views/HistoryPage.vue";
 import PubSubPage from "@/views/PubSubPage.vue";
-import SlowlogPage from "@/views/SlowlogPage.vue";
+import MonitorPage from "@/views/MonitorPage.vue";
 import StreamsPage from "@/views/StreamsPage.vue";
 import SearchPage from "@/views/SearchPage.vue";
 
@@ -41,9 +41,14 @@ const routes: RouteRecordRaw[] = [
     component: PubSubPage,
   },
   {
+    path: "/monitor",
+    name: "monitor",
+    component: MonitorPage,
+  },
+  {
+    // Legacy entry — slow queries now live inside the monitoring center
     path: "/slowlog",
-    name: "slowlog",
-    component: SlowlogPage,
+    redirect: "/monitor",
   },
   {
     path: "/streams",

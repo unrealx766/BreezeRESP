@@ -1,4 +1,7 @@
 <script setup lang="ts">
+// Slow query panel — migrated from the standalone SlowlogPage into the
+// unified monitoring center. Logic is kept as-is (list/analytics views,
+// chart-linked filtering, export).
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { useI18n } from "vue-i18n";
 import { Activity, RefreshCw, Search, Copy, Database, Zap, Timer, List, BarChart3, Download, TrendingUp, KeyRound, BookOpen, PenLine, X, TriangleAlert } from "lucide-vue-next";
@@ -538,12 +541,12 @@ function handleCountChange() {
 </script>
 
 <template>
-  <div class="h-full flex flex-col p-6 overflow-auto min-w-[600px]">
-    <!-- Header -->
+  <div class="h-full flex flex-col min-w-[600px]">
+    <!-- Toolbar -->
     <div class="flex items-start justify-between gap-3 mb-4 shrink-0 flex-wrap">
       <div>
-        <h2 class="text-xl font-semibold text-text-primary flex items-center gap-2">
-          <Activity :size="20" class="text-redis" />
+        <h3 class="text-sm font-semibold text-text-primary flex items-center gap-2">
+          <Activity :size="16" class="text-redis" />
           {{ t("slowlog.title") }}
           <span class="group/tip relative inline-flex items-center cursor-help">
             <TriangleAlert :size="14" class="text-warning/80" />
@@ -551,8 +554,8 @@ function handleCountChange() {
               {{ t("slowlog.allDbHint") }}
             </span>
           </span>
-        </h2>
-        <p v-if="filteredEntries.length > 0" class="text-sm text-text-muted mt-1">
+        </h3>
+        <p v-if="filteredEntries.length > 0" class="text-xs text-text-muted mt-1">
           {{ t("slowlog.totalEntries", { count: filteredEntries.length }) }}
         </p>
       </div>

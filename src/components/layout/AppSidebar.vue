@@ -4,7 +4,7 @@ import { useRouter, useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useCapabilityStore } from "@/stores/capabilityStore";
-import { Database, Server, Layers, FlaskConical, History, Plus, Unplug, X, Pin, PanelLeftClose, PanelLeftOpen, Radio, Activity, ListTree, Radar, TriangleAlert } from "lucide-vue-next";
+import { Database, Server, Layers, FlaskConical, History, Plus, Unplug, X, Pin, PanelLeftClose, PanelLeftOpen, Radio, Gauge, ListTree, Radar, TriangleAlert } from "lucide-vue-next";
 import type { RedisConnection } from "@/types";
 import { toast } from "@/utils/toast";
 import { sidebarCollapsed, toggleSidebar, getDotColor } from "@/utils/uiSettings";
@@ -20,7 +20,7 @@ const navItems = computed(() => [
   { name: "browser", icon: Database, label: t("nav.browser"), path: "/browser" },
   { name: "pipeline", icon: Layers, label: t("nav.pipeline"), path: "/pipeline" },
   { name: "sandbox", icon: FlaskConical, label: t("nav.sandbox"), path: "/sandbox" },
-  { name: "slowlog", icon: Activity, label: t("nav.slowlog"), path: "/slowlog" },
+  { name: "monitor", icon: Gauge, label: t("nav.monitor"), path: "/monitor" },
   { name: "pubsub", icon: Radio, label: t("nav.pubsub"), path: "/pubsub" },
   { name: "streams", icon: ListTree, label: t("nav.streams"), path: "/streams" },
   { name: "search", icon: Radar, label: t("nav.search"), path: "/search" },
