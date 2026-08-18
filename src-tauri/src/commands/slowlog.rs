@@ -57,7 +57,7 @@ pub async fn save_slowlog_export(
 }
 
 /// Get the user's download directory.
-fn dirs_download() -> Option<PathBuf> {
+pub(crate) fn dirs_download() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         let home = std::env::var("USERPROFILE").ok()?;

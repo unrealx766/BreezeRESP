@@ -150,6 +150,11 @@ pub fn run() {
             commands::server_admin::client_kill,
             commands::server_admin::object_freq,
             commands::server_admin::get_cluster_topology,
+            // Key export / import commands
+            commands::keytransfer::export_keys,
+            commands::keytransfer::export_keys_by_pattern,
+            commands::keytransfer::inspect_import_file,
+            commands::keytransfer::import_keys,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

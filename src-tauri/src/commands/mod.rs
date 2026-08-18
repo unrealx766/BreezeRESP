@@ -11,3 +11,4 @@ pub mod jsonsearch;
 pub mod updater;
 pub mod bigkey;
 pub mod server_admin;
+pub mod keytransfer;
