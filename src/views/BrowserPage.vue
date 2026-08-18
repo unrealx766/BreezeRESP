@@ -11,6 +11,7 @@ import KeyTreeItem from "@/components/cascade/KeyTreeItem.vue";
 import TtlGauge from "@/components/charts/TtlGauge.vue";
 import FloatingWindow from "@/components/shared/FloatingWindow.vue";
 import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
+import KeyTransferDialog from "@/components/shared/KeyTransferDialog.vue";
 import NumberedTextarea from "@/components/shared/NumberedTextarea.vue";
 import { useCopyTip } from "@/utils/copyTip";
 import { useSaveTip } from "@/utils/saveTip";
@@ -20,6 +21,7 @@ import {
   Type, Hash, List, CircleDot, BarChart3, ListTree, FileJson2,
   AlertTriangle, X, Pencil, Save,
   ChevronLeft, ChevronRight, ChevronDown, Clock, Database, Code2, Check,
+  Download, Upload,
 } from "lucide-vue-next";
 
 const { t } = useI18n();
@@ -30,6 +32,19 @@ const metricsStore = useMetricsStore();
 const capStore = useCapabilityStore();
 
 const confirmDialog = ref<InstanceType<typeof ConfirmDialog>>();
+const keyTransferDialog = ref<InstanceType<typeof KeyTransferDialog>>();
+
+/** Open the export dialog, prefilling the currently selected key if any */
+function openExportDialog() {
+  keyTransferDialog.value?.open({
+    tab: "export",
+    keys: cascade.selectedKey ? [cascade.selectedKey] : [],
+  });
+}
+
+function openImportDialog() {
+  keyTransferDialog.value?.open({ tab: "import" });
+}
 
 const isConnected = computed(() => connStore.activeConnection?.status === "connected");
 
@@ -1144,6 +1159,12 @@ onBeforeUnmount(() => {
             <button @click="cascade.refreshKeys()" :disabled="!isConnected" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-bg-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               <RefreshCw :size="14" :class="cascade.loading ? 'animate-spin' : ''" class="text-text-muted" />
             </button>
+            <button @click="openExportDialog" :disabled="!isConnected" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-bg-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed" :title="t('keyTransfer.exportTitle')">
+              <Download :size="14" class="text-text-muted" />
+            </button>
+            <button @click="openImportDialog" :disabled="!isConnected" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-bg-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed" :title="t('keyTransfer.importTitle')">
+              <Upload :size="14" class="text-text-muted" />
+            </button>
             <button @click="openNewKeyDialog" :disabled="!isConnected" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-redis/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" :title="t('browser.addKey')">
               <Plus :size="14" class="text-redis" />
             </button>
@@ -2001,5 +2022,6 @@ onBeforeUnmount(() => {
     </Teleport>
 
     <ConfirmDialog ref="confirmDialog" />
+    <KeyTransferDialog ref="keyTransferDialog" />
   </div>
 </template>
