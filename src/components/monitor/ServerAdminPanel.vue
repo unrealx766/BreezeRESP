@@ -195,9 +195,9 @@ async function killClient(client: ClientInfo) {
 /** CLIENT LIST flag letters → human description */
 function flagLabel(flags: string): string {
   const map: Record<string, string> = {
-    S: "slave", O: "slave(monitor)", M: "master", P: "pubsub",
-    x: "multi-exec", b: "blocked", d: "dirty-CAS", c: "closing",
-    u: "unblocked", B: "busy-loop", A: "close-ASAP", N: "no-flag",
+    S: t("serverAdmin.flagSlave"), O: t("serverAdmin.flagSlaveMonitor"), M: t("serverAdmin.flagMaster"), P: t("serverAdmin.flagPubsub"),
+    x: t("serverAdmin.flagMultiExec"), b: t("serverAdmin.flagBlocked"), d: t("serverAdmin.flagDirtyCas"), c: t("serverAdmin.flagClosing"),
+    u: t("serverAdmin.flagUnblocked"), B: t("serverAdmin.flagBusyLoop"), A: t("serverAdmin.flagCloseAsap"), N: t("serverAdmin.flagNoFlag"),
   };
   return flags.split("").map((f) => map[f] ?? f).join(",");
 }
@@ -239,7 +239,7 @@ function switchTab(tab: "info" | "config" | "clients") {
           :class="subTab === 'info' ? 'border-redis text-redis' : 'border-transparent text-text-secondary hover:text-text-primary'"
         >
           <Info :size="13" />
-          INFO
+          {{ t("serverAdmin.tabInfo") }}
         </button>
         <button
           @click="switchTab('config')"
@@ -247,7 +247,7 @@ function switchTab(tab: "info" | "config" | "clients") {
           :class="subTab === 'config' ? 'border-redis text-redis' : 'border-transparent text-text-secondary hover:text-text-primary'"
         >
           <Settings :size="13" />
-          CONFIG
+          {{ t("serverAdmin.tabConfig") }}
         </button>
         <button
           @click="switchTab('clients')"
@@ -255,7 +255,7 @@ function switchTab(tab: "info" | "config" | "clients") {
           :class="subTab === 'clients' ? 'border-redis text-redis' : 'border-transparent text-text-secondary hover:text-text-primary'"
         >
           <Users :size="13" />
-          CLIENT
+          {{ t("serverAdmin.tabClient") }}
         </button>
       </div>
 
@@ -306,9 +306,9 @@ function switchTab(tab: "info" | "config" | "clients") {
           <input
             v-model="configPattern"
             type="text"
-            placeholder="*"
+            :placeholder="t('serverAdmin.configPatternPlaceholder')"
             @keyup.enter="loadConfig"
-            class="w-40 h-7 px-2 text-xs rounded-lg border border-border bg-bg-secondary text-text-primary placeholder:text-text-muted focus:outline-none focus:border-redis/50 transition-colors"
+            class="w-52 h-7 px-2 text-xs rounded-lg border border-border bg-bg-secondary text-text-primary placeholder:text-text-muted focus:outline-none focus:border-redis/50 transition-colors"
           />
           <button
             @click="loadConfig"
@@ -316,7 +316,7 @@ function switchTab(tab: "info" | "config" | "clients") {
             class="h-7 px-2.5 text-xs rounded-lg border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors flex items-center gap-1"
           >
             <RefreshCw :size="13" :class="configLoading ? 'animate-spin' : ''" />
-            CONFIG GET
+            {{ t("serverAdmin.configGet") }}
           </button>
           <div class="relative flex-1 min-w-[160px] max-w-xs">
             <Search :size="13" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
@@ -353,7 +353,7 @@ function switchTab(tab: "info" | "config" | "clients") {
                   class="h-6 px-2 text-[11px] font-mono rounded border border-redis/50 bg-bg-primary text-text-primary focus:outline-none"
                 />
               </template>
-              <span v-else class="text-[11px] font-mono text-text-primary break-all">{{ value || '(empty)' }}</span>
+              <span v-else class="text-[11px] font-mono text-text-primary break-all">{{ value || t('serverAdmin.emptyValue') }}</span>
               <div class="flex items-center justify-end gap-1">
                 <template v-if="editParam === name">
                   <button
@@ -409,13 +409,13 @@ function switchTab(tab: "info" | "config" | "clients") {
         </div>
         <div v-else class="flex-1 min-h-0 overflow-y-auto rounded-lg border border-border">
           <div class="sticky top-0 z-10 grid grid-cols-[70px_140px_1fr_70px_70px_60px_90px_1fr_60px] gap-2 px-3 py-2 text-[11px] font-semibold text-text-muted uppercase tracking-wider bg-bg-primary border-b border-border">
-            <span>ID</span>
+            <span>{{ t("serverAdmin.colId") }}</span>
             <span>{{ t("serverAdmin.colAddr") }}</span>
             <span>{{ t("serverAdmin.colName") }}</span>
-            <span>AGE</span>
-            <span>IDLE</span>
-            <span>DB</span>
-            <span>CMD</span>
+            <span>{{ t("serverAdmin.colAge") }}</span>
+            <span>{{ t("serverAdmin.colIdle") }}</span>
+            <span>{{ t("serverAdmin.colDb") }}</span>
+            <span>{{ t("serverAdmin.colCmd") }}</span>
             <span>{{ t("serverAdmin.colFlags") }}</span>
             <span></span>
           </div>

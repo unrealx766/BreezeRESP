@@ -20,10 +20,10 @@ const navItems = computed(() => [
   { name: "browser", icon: Database, label: t("nav.browser"), path: "/browser" },
   { name: "pipeline", icon: Layers, label: t("nav.pipeline"), path: "/pipeline" },
   { name: "sandbox", icon: FlaskConical, label: t("nav.sandbox"), path: "/sandbox" },
-  { name: "monitor", icon: Gauge, label: t("nav.monitor"), path: "/monitor" },
   { name: "pubsub", icon: Radio, label: t("nav.pubsub"), path: "/pubsub" },
   { name: "streams", icon: ListTree, label: t("nav.streams"), path: "/streams" },
   { name: "search", icon: Radar, label: t("nav.search"), path: "/search" },
+  { name: "monitor", icon: Gauge, label: t("nav.monitor"), path: "/monitor" },
   { name: "history", icon: History, label: t("nav.history"), path: "/history" },
 ]);
 
