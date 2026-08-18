@@ -138,6 +138,10 @@ pub fn run() {
             commands::jsonsearch::ft_drop_index,
             // Updater commands
             commands::updater::get_latest_release,
+            // Big key / memory analysis commands
+            commands::bigkey::scan_big_keys,
+            commands::bigkey::memory_stats,
+            commands::bigkey::memory_doctor,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

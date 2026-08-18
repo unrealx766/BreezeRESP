@@ -13,3 +13,4 @@ pub mod slowlog;
 pub mod capability;
 pub mod streams;
 pub mod jsonsearch;
+pub mod bigkey;
