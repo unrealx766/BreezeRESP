@@ -4,8 +4,9 @@ import { ref, computed, nextTick } from "vue";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useCascadeStore } from "@/stores/cascadeStore";
 import { useDetailStore } from "@/stores/detailStore";
-import { messageHistory, clearMessageHistory } from "@/utils/toast";
+import { messageHistory, clearMessageHistory, toast } from "@/utils/toast";
 import { getDotColor } from "@/utils/uiSettings";
+import { tauriApi } from "@/services/tauriApi";
 import SettingsDialog from "@/components/shared/SettingsDialog.vue";
 import { Database, ChevronDown, Check, RefreshCw, Bell, BellDot, Trash2, CheckCircle, XCircle, AlertTriangle, Info, Settings } from "lucide-vue-next";
 
@@ -25,6 +26,50 @@ const switchingDb = ref(false);
 const showDbDropdown = ref(false);
 const dbDropdownEl = ref<HTMLElement | null>(null);
 const savedDbScrollTop = ref(0);
+const dbKeyCounts = ref<Record<number, number>>({});
+const dbCountsLoading = ref(false);
+
+/** Parse INFO keyspace text → { dbNumber: keyCount } */
+function parseKeyspace(infoText: string): Record<number, number> {
+  const result: Record<number, number> = {};
+  for (const line of infoText.split(/\r?\n/)) {
+    const m = line.match(/^db(\d+):keys=(\d+)/);
+    if (m) result[Number(m[1])] = Number(m[2]);
+  }
+  return result;
+}
+
+/** Compact number display: 0, 999, 1.2k, 3.5M */
+function formatKeyCount(n: number): string {
+  if (n === 0) return "0";
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) return (n / 1000).toFixed(n < 10_000 ? 1 : 0).replace(/\.0$/, "") + "k";
+  return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
+}
+
+async function loadDbKeyCounts() {
+  const connId = connStore.activeConnectionId;
+  if (!connId) return;
+  dbCountsLoading.value = true;
+  try {
+    const nodes = await tauriApi.serverAdmin.getInfo(connId, "keyspace");
+    // Initialize all 16 DBs with 0 so every row shows a count
+    const merged: Record<number, number> = {};
+    for (let i = 0; i < 16; i++) merged[i] = 0;
+    for (const node of nodes) {
+      const counts = parseKeyspace(node.info);
+      for (const [db, keys] of Object.entries(counts)) {
+        merged[Number(db)] = (merged[Number(db)] ?? 0) + keys;
+      }
+    }
+    dbKeyCounts.value = merged;
+  } catch (e) {
+    console.warn("[DB dropdown] Failed to load keyspace info:", e);
+    toast.error("Failed to load DB key counts");
+  } finally {
+    dbCountsLoading.value = false;
+  }
+}
 
 async function toggleDbDropdown() {
   if (showDbDropdown.value) {
@@ -38,6 +83,8 @@ async function toggleDbDropdown() {
     if (dbDropdownEl.value) {
       dbDropdownEl.value.scrollTop = savedDbScrollTop.value;
     }
+    // Fetch key counts for each DB
+    loadDbKeyCounts();
   }
 }
 
@@ -134,10 +181,11 @@ const colorMap = {
           <div
             v-if="showDbDropdown"
             ref="dbDropdownEl"
-            class="absolute top-full left-0 mt-1 w-28 bg-bg-secondary border border-border rounded-lg shadow-lg py-1 z-50 max-h-52 overflow-y-auto"
+            class="absolute top-full left-0 mt-1 w-44 bg-bg-secondary border border-border rounded-lg shadow-lg py-1 z-50 max-h-52 overflow-y-auto"
           >
-            <div class="px-2.5 py-1 border-b border-border-light mb-0.5">
+            <div class="px-2.5 py-1 border-b border-border-light mb-0.5 flex items-center justify-between">
               <span class="text-[9px] font-semibold text-text-muted uppercase tracking-wider">Database</span>
+              <RefreshCw v-if="dbCountsLoading" :size="9" class="animate-spin text-text-muted" />
             </div>
             <button
               v-for="n in 16"
@@ -149,7 +197,14 @@ const colorMap = {
                 : 'text-text-secondary font-medium hover:bg-bg-hover hover:text-text-primary'"
             >
               <span>DB{{ n - 1 }}</span>
-              <Check v-if="activeConnDb === n - 1" :size="11" class="text-redis" />
+              <span class="flex items-center gap-1.5">
+                <span
+                  v-if="dbKeyCounts[n - 1] !== undefined"
+                  class="text-[10px] font-sans tabular-nums"
+                  :class="dbKeyCounts[n - 1] > 0 ? 'text-text-muted' : 'text-text-muted/40'"
+                >{{ formatKeyCount(dbKeyCounts[n - 1]) }}</span>
+                <Check v-if="activeConnDb === n - 1" :size="11" class="text-redis" />
+              </span>
             </button>
           </div>
         </div>

@@ -21,6 +21,15 @@ export const useConnectionStore = defineStore("connection", () => {
   const sessionConnectedIds = ref<Set<string>>(new Set());
   /** Tracks the currently active DB per connection (separate from the default DB in conn.db) */
   const activeDbMap = ref<Record<string, number>>({});
+  /** Custom display order for session list (persisted in localStorage) */
+  const sessionOrder = ref<string[]>((() => {
+    try {
+      const saved = localStorage.getItem("sessionOrder");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  })());
 
   // ── Cancellation support ──
   const _cancellers = new Map<string, () => void>();
@@ -52,11 +61,39 @@ export const useConnectionStore = defineStore("connection", () => {
   );
 
   /** Connections visible in status bar: pinned (startup) + connected this session (stays until exit) */
-  const statusBarConnections = computed(() =>
-    connections.value.filter(
+  const statusBarConnections = computed(() => {
+    const filtered = connections.value.filter(
       (c) => c.pinned || c.status === "connected" || sessionConnectedIds.value.has(c.id)
-    )
-  );
+    );
+    // Apply custom session order if available
+    const order = sessionOrder.value;
+    if (order.length > 0) {
+      return [...filtered].sort((a, b) => {
+        const ai = order.indexOf(a.id);
+        const bi = order.indexOf(b.id);
+        // Items not in order list go to the end
+        return (ai === -1 ? Infinity : ai) - (bi === -1 ? Infinity : bi);
+      });
+    }
+    return filtered;
+  });
+
+  /** Reorder session list: swap the positions of two sessions */
+  function reorderSessions(fromId: string, toId: string) {
+    if (fromId === toId) return;
+    const currentIds = statusBarConnections.value.map((c) => c.id);
+    const fromIdx = currentIds.indexOf(fromId);
+    const toIdx = currentIds.indexOf(toId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    // Build new order from current visible order, then swap
+    const newOrder = [...currentIds];
+    const [moved] = newOrder.splice(fromIdx, 1);
+    newOrder.splice(toIdx, 0, moved);
+    sessionOrder.value = newOrder;
+    try {
+      localStorage.setItem("sessionOrder", JSON.stringify(newOrder));
+    } catch { /* ignore quota errors */ }
+  }
 
   /** Load saved connections from encrypted local storage */
   async function loadSavedConnections() {
@@ -437,6 +474,7 @@ export const useConnectionStore = defineStore("connection", () => {
     getActiveDb,
     togglePin,
     dismissSession,
+    reorderSessions,
     loadSavedConnections,
   };
 });

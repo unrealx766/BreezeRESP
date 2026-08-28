@@ -4,7 +4,7 @@
 // CLIENT LIST / KILL (confirm before kill).
 import { ref, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { Server, Settings, Users, RefreshCw, Search, XCircle, Info, Save } from "lucide-vue-next";
+import { Server, Settings, Users, RefreshCw, Search, Info } from "lucide-vue-next";
 import type { ClientInfo, InfoNode } from "@/types";
 import { tauriApi } from "@/services/tauriApi";
 import { useConnectionStore } from "@/stores/connectionStore";
@@ -83,9 +83,7 @@ const configPattern = ref("*");
 const configPairs = ref<Array<[string, string]>>([]);
 const configLoading = ref(false);
 const configSearch = ref("");
-const editParam = ref("");
-const editValue = ref("");
-const configSaving = ref(false);
+
 
 const filteredConfigs = computed(() => {
   const q = configSearch.value.trim().toLowerCase();
@@ -103,41 +101,6 @@ async function loadConfig() {
     toast.error(e instanceof Error ? e.message : String(e));
   } finally {
     configLoading.value = false;
-  }
-}
-
-function startEdit(name: string, value: string) {
-  editParam.value = name;
-  editValue.value = value;
-}
-
-function cancelEdit() {
-  editParam.value = "";
-  editValue.value = "";
-}
-
-async function saveConfig() {
-  const connId = connStore.activeConnectionId;
-  if (!connId || !editParam.value) return;
-  const ok = await confirmDialog.value?.open({
-    title: t("serverAdmin.configSetConfirmTitle"),
-    message: t("serverAdmin.configSetConfirmMessage", { param: editParam.value, value: editValue.value }),
-    confirmLabel: t("common.confirm"),
-    cancelLabel: t("common.cancel"),
-    danger: true,
-  });
-  if (!ok) return;
-
-  configSaving.value = true;
-  try {
-    await tauriApi.serverAdmin.configSet(connId, editParam.value, editValue.value);
-    toast.success(t("serverAdmin.configSetSuccess", { param: editParam.value }));
-    cancelEdit();
-    await loadConfig();
-  } catch (e) {
-    toast.error(e instanceof Error ? e.message : String(e));
-  } finally {
-    configSaving.value = false;
   }
 }
 
@@ -182,9 +145,13 @@ async function killClient(client: ClientInfo) {
 
   killingId.value = client.id;
   try {
-    await tauriApi.serverAdmin.clientKill(connId, client.id);
-    toast.success(t("serverAdmin.clientKillSuccess", { id: client.id }));
-    await loadClients();
+    const killed = await tauriApi.serverAdmin.clientKill(connId, client.id);
+    if (killed) {
+      toast.success(t("serverAdmin.clientKillSuccess", { id: client.id }));
+      await loadClients();
+    } else {
+      toast.error(t("serverAdmin.clientKillFailed", { id: client.id }));
+    }
   } catch (e) {
     toast.error(e instanceof Error ? e.message : String(e));
   } finally {
@@ -333,49 +300,18 @@ function switchTab(tab: "info" | "config" | "clients") {
           <RefreshCw :size="24" class="animate-spin" />
         </div>
         <div v-else class="flex-1 min-h-0 overflow-y-auto rounded-lg border border-border">
-          <div class="sticky top-0 z-10 grid grid-cols-[240px_1fr_60px] gap-2 px-3 py-2 text-[11px] font-semibold text-text-muted uppercase tracking-wider bg-bg-primary border-b border-border">
+          <div class="sticky top-0 z-10 grid grid-cols-[240px_1fr] gap-2 px-3 py-2 text-[11px] font-semibold text-text-muted uppercase tracking-wider bg-bg-primary border-b border-border">
             <span>{{ t("serverAdmin.configParam") }}</span>
             <span>{{ t("serverAdmin.configValue") }}</span>
-            <span></span>
           </div>
           <div class="divide-y divide-border/40">
             <div
               v-for="[name, value] in filteredConfigs"
               :key="name"
-              class="grid grid-cols-[240px_1fr_60px] gap-2 px-3 py-1.5 hover:bg-bg-secondary/40 transition-colors items-center"
+              class="grid grid-cols-[240px_1fr] gap-2 px-3 py-1.5 hover:bg-bg-secondary/40 transition-colors items-center"
             >
               <span class="text-[11px] font-mono text-text-secondary truncate" :title="name">{{ name }}</span>
-              <template v-if="editParam === name">
-                <input
-                  v-model="editValue"
-                  type="text"
-                  @keyup.enter="saveConfig"
-                  class="h-6 px-2 text-[11px] font-mono rounded border border-redis/50 bg-bg-primary text-text-primary focus:outline-none"
-                />
-              </template>
-              <span v-else class="text-[11px] font-mono text-text-primary break-all">{{ value || t('serverAdmin.emptyValue') }}</span>
-              <div class="flex items-center justify-end gap-1">
-                <template v-if="editParam === name">
-                  <button
-                    @click="saveConfig"
-                    :disabled="configSaving"
-                    class="p-1 rounded hover:bg-bg-hover text-success"
-                    :title="t('common.save')"
-                  >
-                    <Save :size="13" />
-                  </button>
-                  <button @click="cancelEdit" class="p-1 rounded hover:bg-bg-hover text-text-muted" :title="t('common.cancel')">
-                    <XCircle :size="13" />
-                  </button>
-                </template>
-                <button
-                  v-else
-                  @click="startEdit(name, value)"
-                  class="text-[10px] px-1.5 py-0.5 rounded border border-border text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors"
-                >
-                  {{ t("serverAdmin.edit") }}
-                </button>
-              </div>
+              <span class="text-[11px] font-mono text-text-primary break-all">{{ value || t('serverAdmin.emptyValue') }}</span>
             </div>
           </div>
         </div>

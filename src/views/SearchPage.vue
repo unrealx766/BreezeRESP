@@ -237,15 +237,7 @@ watch(connId, (id, old) => {
       <div class="max-w-md text-center rounded-2xl border border-border bg-bg-secondary p-8">
         <TriangleAlert :size="36" class="mx-auto mb-4 text-warning" />
         <h3 class="text-base font-semibold text-text-primary mb-2">{{ t("search.moduleMissingTitle") }}</h3>
-        <p class="text-sm text-text-muted leading-relaxed mb-4">{{ t("search.moduleMissingDesc") }}</p>
-        <a
-          href="https://redis.io/downloads/"
-          target="_blank"
-          rel="noopener"
-          class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-redis rounded-lg hover:bg-redis-dark transition-colors"
-        >
-          {{ t("search.downloadStack") }}
-        </a>
+        <p class="text-sm text-text-muted leading-relaxed">{{ t("search.moduleMissingDesc") }}</p>
       </div>
     </div>
 

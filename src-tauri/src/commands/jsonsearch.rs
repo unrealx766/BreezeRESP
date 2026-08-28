@@ -34,7 +34,7 @@ async fn ensure_json(
     let cap = capability::get_or_probe(pool, connection_id, false).await?;
     if !cap.json_supported {
         return Err(
-            "RedisJSON module is not installed on this server. Install Redis Stack or the RedisJSON module to manage JSON keys.".to_string(),
+            "RedisJSON module is not installed on this server. Install the RedisJSON module to manage JSON keys.".to_string(),
         );
     }
     Ok(cap)
@@ -47,7 +47,7 @@ async fn ensure_search(
     let cap = capability::get_or_probe(pool, connection_id, false).await?;
     if !cap.search_supported {
         return Err(
-            "RediSearch module is not installed on this server. Install Redis Stack or the RediSearch module to use search features.".to_string(),
+            "RediSearch module is not installed on this server. Install the RediSearch module to use search features.".to_string(),
         );
     }
     Ok(cap)

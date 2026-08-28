@@ -273,23 +273,46 @@ pub async fn client_kill(conn: &mut AnyConn, client_id: u64) -> Result<bool, Str
             )
             .await
             .map_err(|e| format!("CLIENT KILL error: {}", e))?;
-        if let redis::Value::Map(entries) = val {
-            for (_addr, result) in entries {
-                if let Ok(n) = redis::from_redis_value::<u64>(&result) {
-                    if n > 0 {
+        // The cluster multi-node response may arrive as a Map (addr→result)
+        // or an Array of per-node results, depending on the redis crate
+        // version and protocol (RESP2 vs RESP3).
+        match val {
+            redis::Value::Map(entries) => {
+                for (_addr, result) in entries {
+                    if value_to_kill_count(&result) > 0 {
                         return Ok(true);
                     }
                 }
             }
+            redis::Value::Array(items) => {
+                for result in items {
+                    if value_to_kill_count(&result) > 0 {
+                        return Ok(true);
+                    }
+                }
+            }
+            other => return Ok(value_to_kill_count(&other) > 0),
         }
         return Ok(false);
     }
 
-    let killed: u64 = cmd
+    // Standalone: parse as generic Value to tolerate different response shapes.
+    let val: redis::Value = cmd
         .query_async(conn)
         .await
         .map_err(|e| format!("CLIENT KILL error: {}", e))?;
-    Ok(killed > 0)
+    Ok(value_to_kill_count(&val) > 0)
+}
+
+/// Extract the number of killed clients from a CLIENT KILL response.
+/// Redis returns an integer, but we tolerate non-integer shapes (e.g. OK
+/// means the legacy single-client form succeeded).
+fn value_to_kill_count(val: &redis::Value) -> u64 {
+    match val {
+        redis::Value::Int(n) => (*n).max(0) as u64,
+        redis::Value::Okay => 1,
+        _ => redis::from_redis_value::<u64>(val).unwrap_or(0),
+    }
 }
 
 // ---------------------------------------------------------------------------

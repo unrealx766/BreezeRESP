@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, reactive } from "vue";
+import { computed, reactive, ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { useCapabilityStore } from "@/stores/capabilityStore";
-import { Database, Server, Layers, FlaskConical, History, Plus, Unplug, X, Pin, PanelLeftClose, PanelLeftOpen, Radio, Gauge, ListTree, Radar, TriangleAlert } from "lucide-vue-next";
+import { Database, Server, Layers, FlaskConical, History, Plus, Unplug, X, Pin, PinOff, PanelLeftClose, PanelLeftOpen, Radio, Gauge, ListTree, Radar, TriangleAlert } from "lucide-vue-next";
 import type { RedisConnection } from "@/types";
 import { toast } from "@/utils/toast";
 import { sidebarCollapsed, toggleSidebar, getDotColor } from "@/utils/uiSettings";
@@ -63,6 +63,12 @@ async function handleSidebarConnect(id: string) {
 }
 
 function handleConnectionClick(conn: RedisConnection) {
+  // Ignore click that immediately follows a drag
+  if (_dragJustFinished) {
+    _dragJustFinished = false;
+    return;
+  }
+  _dragJustFinished = false;
   if (conn.status === "connected") {
     if (connStore.activeConnectionId !== conn.id) {
       connStore.activeConnectionId = conn.id;
@@ -73,6 +79,64 @@ function handleConnectionClick(conn: RedisConnection) {
 }
 
 const disconnectingIds = reactive<Record<string, boolean>>({});
+
+// ── Drag-and-drop state for session reordering (pointer-based for Tauri compat) ──
+const dragFromId = ref<string | null>(null);
+const dragOverId = ref<string | null>(null);
+const isDragging = ref(false);
+/** Whether the drop target should show the insertion line above (true) or below (false) */
+const dropInsertBefore = ref(true);
+let _pointerStartX = 0;
+let _pointerStartY = 0;
+const DRAG_THRESHOLD = 5; // px before drag activates
+let _dragArmed = false;
+let _dragJustFinished = false;
+
+function onSessionPointerDown(e: PointerEvent, id: string) {
+  if (e.button !== 0) return;
+  _pointerStartX = e.clientX;
+  _pointerStartY = e.clientY;
+  dragFromId.value = id;
+  _dragArmed = false;
+  isDragging.value = false;
+  document.addEventListener("pointermove", onPointerMove);
+  document.addEventListener("pointerup", onPointerUp);
+}
+
+function onPointerMove(e: PointerEvent) {
+  const dx = e.clientX - _pointerStartX;
+  const dy = e.clientY - _pointerStartY;
+  if (!_dragArmed && Math.sqrt(dx * dx + dy * dy) < DRAG_THRESHOLD) return;
+  _dragArmed = true;
+  isDragging.value = true;
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  if (!el) return;
+  const item = el.closest("[data-session-id]") as HTMLElement | null;
+  if (item) {
+    const id = item.getAttribute("data-session-id");
+    dragOverId.value = id;
+    // Determine insertion position based on pointer Y relative to element midpoint
+    const rect = item.getBoundingClientRect();
+    dropInsertBefore.value = (e.clientY - rect.top) < rect.height / 2;
+  } else {
+    dragOverId.value = null;
+  }
+}
+
+function onPointerUp() {
+  document.removeEventListener("pointermove", onPointerMove);
+  document.removeEventListener("pointerup", onPointerUp);
+  if (isDragging.value && dragFromId.value && dragOverId.value && dragFromId.value !== dragOverId.value) {
+    connStore.reorderSessions(dragFromId.value, dragOverId.value);
+  }
+  if (isDragging.value) {
+    _dragJustFinished = true;
+  }
+  dragFromId.value = null;
+  dragOverId.value = null;
+  isDragging.value = false;
+  _dragArmed = false;
+}
 
 async function handleSidebarDisconnect(id: string) {
   if (disconnectingIds[id]) return;
@@ -168,10 +232,26 @@ async function handleSidebarDisconnect(id: string) {
         <div
           v-for="conn in connStore.statusBarConnections"
           :key="conn.id"
-          class="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs cursor-pointer hover:bg-bg-hover transition-colors overflow-hidden"
-          :class="connStore.activeConnectionId === conn.id ? 'bg-bg-active' : ''"
+          :data-session-id="conn.id"
+          @pointerdown="onSessionPointerDown($event, conn.id)"
+          class="session-item relative flex items-center gap-2 px-3 py-1.5 rounded-md text-xs cursor-pointer hover:bg-bg-hover overflow-hidden select-none"
+          :class="[
+            connStore.activeConnectionId === conn.id ? 'session-item--active' : '',
+            dragFromId === conn.id && isDragging ? 'session-item--dragging' : '',
+            dragOverId === conn.id && dragFromId !== conn.id ? 'session-item--target' : ''
+          ]"
+          :style="{
+            transition: isDragging ? 'none' : 'background-color 0.15s ease, box-shadow 0.15s ease',
+            ...(connStore.activeConnectionId === conn.id ? { boxShadow: `inset 2.5px 0 0 ${getDotColor(conn.id)}` } : {})
+          }"
           @click="handleConnectionClick(conn)"
         >
+          <!-- Drop indicator line -->
+          <span
+            v-if="dragOverId === conn.id && dragFromId !== conn.id"
+            class="absolute left-1 right-1 h-0.5 rounded-full bg-redis z-10 pointer-events-none"
+            :class="dropInsertBefore ? '-top-px' : '-bottom-px'"
+          />
           <span
             class="w-2 h-2 rounded-full shrink-0 transition-all duration-300"
             :class="{
@@ -207,21 +287,24 @@ async function handleSidebarDisconnect(id: string) {
             <Unplug :size="12" class="text-text-muted group-hover/disconnect:text-danger" />
           </button>
           <template v-else>
-            <Pin
-              v-if="conn.pinned"
-              :size="10"
-              class="text-danger shrink-0 overflow-hidden"
-              :class="sidebarCollapsed ? 'w-0 opacity-0' : 'w-2.5 opacity-100'"
+            <button
+              @click.stop="connStore.togglePin(conn.id)"
+              class="w-5 h-5 rounded flex items-center justify-center hover:bg-danger/10 transition-opacity shrink-0 group/pin overflow-hidden"
+              :class="sidebarCollapsed ? 'w-0 opacity-0' : 'w-5 opacity-100'"
               style="transition: all 0.2s ease"
-            />
+              :title="conn.pinned ? t('connection.unpin') : t('connection.pin')"
+            >
+              <PinOff v-if="conn.pinned" :size="12" class="text-text-muted group-hover/pin:text-danger" />
+              <Pin v-else :size="12" class="text-text-muted group-hover/pin:text-danger" />
+            </button>
             <button
               @click.stop="connStore.dismissSession(conn.id)"
-              class="w-5 h-5 rounded flex items-center justify-center hover:bg-bg-hover transition-opacity shrink-0 group/dismiss overflow-hidden"
+              class="w-5 h-5 rounded flex items-center justify-center hover:bg-danger/10 transition-opacity shrink-0 group/dismiss overflow-hidden"
               :class="sidebarCollapsed ? 'w-0 opacity-0' : 'w-5 opacity-100'"
               style="transition: all 0.2s ease"
               :title="t('connection.dismissSession')"
             >
-              <X :size="12" class="text-text-muted group-hover/dismiss:text-text-secondary" />
+              <X :size="12" class="text-text-muted group-hover/dismiss:text-danger" />
             </button>
           </template>
         </div>
@@ -249,3 +332,23 @@ async function handleSidebarDisconnect(id: string) {
     </div>
   </aside>
 </template>
+
+<style scoped>
+.session-item--active {
+  background-color: var(--color-bg-active);
+}
+.session-item--active .truncate {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.session-item--dragging {
+  opacity: 0.35;
+  outline: 1.5px dashed var(--color-redis);
+  outline-offset: -1.5px;
+}
+
+.session-item--target {
+  background-color: color-mix(in srgb, var(--color-redis) 8%, transparent);
+}
+</style>
