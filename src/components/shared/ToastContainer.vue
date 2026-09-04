@@ -20,10 +20,10 @@ const iconMap = {
 };
 
 const colorMap = {
-  success: "text-success bg-success/10 border-success/20",
-  error: "text-danger bg-danger/10 border-danger/20",
-  warning: "text-warning bg-warning/10 border-warning/20",
-  info: "text-info bg-info/10 border-info/20",
+  success: { border: "toast-border-success", icon: "text-success", glow: "toast-glow-success" },
+  error:   { border: "toast-border-danger", icon: "text-danger", glow: "toast-glow-danger" },
+  warning: { border: "toast-border-warning", icon: "text-warning", glow: "toast-glow-warning" },
+  info:    { border: "toast-border-info", icon: "text-info", glow: "toast-glow-info" },
 };
 
 function dismiss(id: number) {
@@ -58,23 +58,24 @@ onUnmounted(() => {
         <div
           v-for="item in toasts"
           :key="item.id"
-          class="pointer-events-auto flex items-start gap-2.5 px-4 py-3 rounded-xl border shadow-lg backdrop-blur-sm max-w-sm"
-          :class="colorMap[item.type]"
+          class="toast-item pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-xl shadow-lg max-w-sm bg-bg-secondary border border-border"
+          :class="[colorMap[item.type].border, colorMap[item.type].glow]"
         >
-          <component :is="iconMap[item.type]" :size="16" class="shrink-0 mt-0.5" />
+          <component :is="iconMap[item.type]" :size="18" class="shrink-0 mt-0.5" :class="colorMap[item.type].icon" />
           <div class="flex-1 min-w-0">
-            <p class="text-sm leading-relaxed break-all">{{ item.message }}</p>
+            <p class="text-sm leading-relaxed break-all text-text-primary">{{ item.message }}</p>
             <button
               v-if="item.action"
               @click="runAction(item)"
-              class="mt-1 text-xs font-semibold underline underline-offset-2 opacity-80 hover:opacity-100 transition-opacity"
+              class="mt-1.5 text-xs font-semibold underline underline-offset-2 transition-opacity hover:opacity-100"
+              :class="colorMap[item.type].icon"
             >
               {{ item.action.label }}
             </button>
           </div>
           <button
             @click="dismiss(item.id)"
-            class="shrink-0 opacity-60 hover:opacity-100 transition-opacity mt-0.5"
+            class="shrink-0 text-text-muted hover:text-text-primary transition-colors mt-0.5"
           >
             <X :size="14" />
           </button>
@@ -85,6 +86,25 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.toast-item {
+  border-left-width: 3px;
+  border-left-style: solid;
+}
+.toast-border-success { border-left-color: var(--color-success); }
+.toast-border-danger  { border-left-color: var(--color-danger); }
+.toast-border-warning { border-left-color: var(--color-warning); }
+.toast-border-info    { border-left-color: var(--color-info); }
+
+.toast-glow-success { box-shadow: 0 4px 20px -4px rgba(16, 185, 129, 0.18), 0 1px 3px rgba(0,0,0,0.08); }
+.toast-glow-danger  { box-shadow: 0 4px 20px -4px rgba(239, 68, 68, 0.18), 0 1px 3px rgba(0,0,0,0.08); }
+.toast-glow-warning { box-shadow: 0 4px 20px -4px rgba(245, 158, 11, 0.18), 0 1px 3px rgba(0,0,0,0.08); }
+.toast-glow-info    { box-shadow: 0 4px 20px -4px rgba(59, 130, 246, 0.18), 0 1px 3px rgba(0,0,0,0.08); }
+
+:global(.dark) .toast-glow-success { box-shadow: 0 4px 20px -4px rgba(52, 211, 153, 0.15), 0 1px 3px rgba(0,0,0,0.3); }
+:global(.dark) .toast-glow-danger  { box-shadow: 0 4px 20px -4px rgba(248, 113, 113, 0.15), 0 1px 3px rgba(0,0,0,0.3); }
+:global(.dark) .toast-glow-warning { box-shadow: 0 4px 20px -4px rgba(251, 191, 36, 0.15), 0 1px 3px rgba(0,0,0,0.3); }
+:global(.dark) .toast-glow-info    { box-shadow: 0 4px 20px -4px rgba(96, 165, 250, 0.15), 0 1px 3px rgba(0,0,0,0.3); }
+
 .toast-enter-active {
   animation: toast-in 0.25s ease-out;
 }
