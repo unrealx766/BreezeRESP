@@ -9,6 +9,7 @@ import type { BigKeyEntry, MemoryStatItem, MemoryDoctorEntry } from "@/types";
 import { tauriApi } from "@/services/tauriApi";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { toast } from "@/utils/toast";
+import { formatBytes } from "@/utils/format";
 
 const { t } = useI18n();
 const connStore = useConnectionStore();
@@ -442,7 +443,7 @@ const maxMemory = computed(() =>
                 class="flex items-center justify-between gap-2 px-2 py-1 rounded hover:bg-bg-secondary/60 transition-colors"
               >
                 <span class="text-[11px] font-mono text-text-secondary truncate" :title="item.name">{{ item.name }}</span>
-                <span class="text-[11px] font-mono text-text-primary shrink-0">{{ item.value.toLocaleString() }}</span>
+                <span class="text-[11px] font-mono text-text-primary shrink-0">{{ formatBytes(item.value) }}</span>
               </div>
             </div>
           </div>

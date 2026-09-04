@@ -8,3 +8,13 @@ export function truncateValue(val: string | null | undefined): string {
   }
   return val;
 }
+
+/** Format bytes into human-readable string (e.g. 1024 → "1.00 KB") */
+export function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(Math.abs(bytes)) / Math.log(1024));
+  const idx = Math.min(i, units.length - 1);
+  if (idx === 0) return `${bytes.toLocaleString()} B`;
+  return `${(bytes / Math.pow(1024, idx)).toFixed(2)} ${units[idx]}`;
+}

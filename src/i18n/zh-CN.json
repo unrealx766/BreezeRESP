@@ -436,7 +436,7 @@
         "doctorHealthy": "正常",
     "statsFilterPlaceholder": "过滤指标名...",
     "statsEmpty": "点击 MEMORY STATS 查看内存细分指标",
-    "statsDesc": "查看内存使用详细指标"
+    "statsDesc": "查看内存使用详细指标（单位：字节）"
   },
   "cmdstats": {
     "searchPlaceholder": "过滤命令名...",

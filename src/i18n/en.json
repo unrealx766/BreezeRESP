@@ -436,7 +436,7 @@
         "doctorHealthy": "OK",
     "statsFilterPlaceholder": "Filter metric names...",
     "statsEmpty": "Click MEMORY STATS to view memory breakdown",
-    "statsDesc": "View detailed memory usage metrics"
+    "statsDesc": "View detailed memory usage metrics (unit: bytes)"
   },
   "cmdstats": {
     "searchPlaceholder": "Filter command names...",
