@@ -786,8 +786,19 @@ watch(
   () => cascade.selectedKey,
   () => {
     resetAllEditingState();
-    // Auto-detect JSON content and switch to JSON view
-    viewMode.value = isJsonContent.value ? 'json' : 'text';
+    // Reset to text view immediately — stale data from the previous key
+    // would otherwise cause a false JSON detection (race condition).
+    viewMode.value = 'text';
+  }
+);
+
+// Auto-detect JSON content once the new key's data has actually loaded.
+watch(
+  () => detail.currentValue,
+  () => {
+    if (detail.currentValue?.type === 'string' && isJsonContent.value) {
+      viewMode.value = 'json';
+    }
   }
 );
 
@@ -795,12 +806,15 @@ watch(
 type ValueViewMode = 'text' | 'hex' | 'json' | 'ascii';
 const viewMode = ref<ValueViewMode>('text');
 
-/** Whether the current string value is valid JSON */
+/** Whether the current string value is valid JSON (object or array, not primitives) */
 const isJsonContent = computed(() => {
   if (detail.currentValue?.type !== 'string') return false;
   const val = (detail.currentValue as StringValue).value;
   if (!val.trim()) return false;
-  try { JSON.parse(val); return true; } catch { return false; }
+  try {
+    const parsed = JSON.parse(val);
+    return parsed !== null && typeof parsed === 'object';
+  } catch { return false; }
 });
 
 /** Format value as pretty-printed JSON */
