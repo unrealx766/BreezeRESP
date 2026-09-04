@@ -13,6 +13,7 @@ import type {
   FtCreateSpec,
   BigKeyBatch,
   MemoryStatItem,
+  MemoryDoctorEntry,
   InfoNode,
   ClientInfo,
   KeyFreq,
@@ -445,7 +446,7 @@ export const tauriApi = {
       withConn(connectionId, () => invoke<MemoryStatItem[]>("memory_stats", { connectionId })),
 
     memoryDoctor: (connectionId: string) =>
-      withConn(connectionId, () => invoke<string>("memory_doctor", { connectionId })),
+      withConn(connectionId, () => invoke<MemoryDoctorEntry[]>("memory_doctor", { connectionId })),
   },
 
   serverAdmin: {

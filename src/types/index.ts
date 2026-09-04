@@ -351,6 +351,13 @@ export interface MemoryStatItem {
   value: number;
 }
 
+export interface MemoryDoctorEntry {
+  /** Node address; empty string for standalone connections */
+  addr: string;
+  /** Advice text from MEMORY DOCTOR */
+  advice: string;
+}
+
 // Server administration
 export interface InfoNode {
   /** Node address; "server" for standalone connections */

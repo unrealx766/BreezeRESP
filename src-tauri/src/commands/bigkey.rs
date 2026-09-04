@@ -73,12 +73,12 @@ pub async fn memory_stats(
     BigKeyAnalyzer::new().memory_stats(&mut conn).await
 }
 
-/// MEMORY DOCTOR advice text (empty when unsupported).
+/// MEMORY DOCTOR per-node advice (empty vec when unsupported).
 #[tauri::command]
 pub async fn memory_doctor(
     state: State<'_, AppState>,
     connection_id: String,
-) -> Result<String, String> {
+) -> Result<Vec<crate::core::bigkey::MemoryDoctorEntry>, String> {
     validate_connection_id(&connection_id)?;
 
     let pool = {

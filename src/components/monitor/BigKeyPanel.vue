@@ -4,8 +4,8 @@
 // TYPE / PTTL / MEMORY USAGE / element count, then ranks by memory.
 import { ref, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { Play, Square, RefreshCw, Search, MemoryStick, Stethoscope, Flame, ArrowUpDown } from "lucide-vue-next";
-import type { BigKeyEntry, MemoryStatItem } from "@/types";
+import { Play, Square, RefreshCw, Search, MemoryStick, Stethoscope, Flame, ArrowUpDown, ChevronDown, ChevronRight, CheckCircle } from "lucide-vue-next";
+import type { BigKeyEntry, MemoryStatItem, MemoryDoctorEntry } from "@/types";
 import { tauriApi } from "@/services/tauriApi";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { toast } from "@/utils/toast";
@@ -94,7 +94,7 @@ function resetScan() {
   entries.value = [];
   scannedKeys.value = 0;
   error.value = "";
-  doctor.value = "";
+  doctorEntries.value = [];
   stats.value = [];
 }
 
@@ -126,15 +126,34 @@ async function loadMemoryStats() {
   }
 }
 
-const doctor = ref("");
+const doctorEntries = ref<MemoryDoctorEntry[]>([]);
 const loadingDoctor = ref(false);
+const doctorExpanded = ref<Set<string>>(new Set());
+
+function toggleDoctorNode(addr: string) {
+  const s = new Set(doctorExpanded.value);
+  if (s.has(addr)) s.delete(addr);
+  else s.add(addr);
+  doctorExpanded.value = s;
+}
+
+/** Whether a node's advice indicates no problems */
+function isHealthy(advice: string): boolean {
+  return !advice || advice.trim().startsWith("Sam, I have no memory problems");
+}
 
 async function loadDoctor() {
   const connId = connStore.activeConnectionId;
   if (!connId) return;
   loadingDoctor.value = true;
   try {
-    doctor.value = await tauriApi.bigkey.memoryDoctor(connId);
+    doctorEntries.value = await tauriApi.bigkey.memoryDoctor(connId);
+    // Auto-expand all nodes that have problems
+    const expand = new Set<string>();
+    for (const e of doctorEntries.value) {
+      if (!isHealthy(e.advice)) expand.add(e.addr);
+    }
+    doctorExpanded.value = expand;
   } catch (e) {
     toast.error(e instanceof Error ? e.message : String(e));
   } finally {
@@ -351,16 +370,51 @@ const maxMemory = computed(() =>
         <!-- Memory side panel -->
         <div class="flex flex-col gap-4 min-h-0 overflow-y-auto">
           <!-- MEMORY DOCTOR -->
-          <div class="rounded-lg border border-border p-4">
-            <h3 class="text-sm font-semibold text-text-primary flex items-center gap-2 mb-2">
+          <div class="rounded-lg border border-border flex flex-col max-h-[45%] min-h-0">
+            <h3 class="text-sm font-semibold text-text-primary flex items-center gap-2 px-4 pt-4 pb-2 shrink-0">
               <Stethoscope :size="15" class="text-redis" />
               MEMORY DOCTOR
             </h3>
-            <p v-if="loadingDoctor" class="text-xs text-text-muted">
-              <RefreshCw :size="11" class="inline animate-spin mr-1" />{{ t("common.loading") }}
-            </p>
-            <pre v-else-if="doctor" class="text-xs text-text-secondary whitespace-pre-wrap break-words font-mono leading-relaxed">{{ doctor }}</pre>
-            <p v-else class="text-xs text-text-muted">{{ t("bigkey.doctorEmpty") }}</p>
+            <div class="flex-1 overflow-y-auto min-h-0 px-4 pb-4">
+              <p v-if="loadingDoctor" class="text-xs text-text-muted">
+                <RefreshCw :size="11" class="inline animate-spin mr-1" />{{ t("common.loading") }}
+              </p>
+              <p v-else-if="doctorEntries.length === 0" class="text-xs text-text-muted">{{ t("bigkey.doctorEmpty") }}</p>
+              <div v-else class="space-y-1.5">
+                <div
+                  v-for="entry in doctorEntries"
+                  :key="entry.addr"
+                  class="rounded-lg border transition-colors"
+                  :class="isHealthy(entry.advice) ? 'border-border bg-bg-secondary/30' : 'border-warning/30 bg-warning/5'"
+                >
+                  <!-- Node header (clickable in cluster mode) -->
+                  <button
+                    v-if="doctorEntries.length > 1"
+                    @click="toggleDoctorNode(entry.addr)"
+                    class="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono transition-colors hover:bg-bg-hover/50 rounded-lg"
+                  >
+                    <component :is="doctorExpanded.has(entry.addr) ? ChevronDown : ChevronRight" :size="12" class="shrink-0 text-text-muted" />
+                    <CheckCircle v-if="isHealthy(entry.advice)" :size="12" class="shrink-0 text-success" />
+                    <Stethoscope v-else :size="12" class="shrink-0 text-warning" />
+                    <span class="truncate" :class="isHealthy(entry.advice) ? 'text-text-secondary' : 'text-warning font-medium'">{{ entry.addr }}</span>
+                    <span v-if="isHealthy(entry.advice)" class="text-[10px] text-success ml-auto">{{ t("bigkey.doctorHealthy") }}</span>
+                  </button>
+                  <!-- Standalone header (single node, not clickable) -->
+                  <div v-else class="flex items-center gap-1.5 px-3 py-1.5 text-xs">
+                    <CheckCircle v-if="isHealthy(entry.advice)" :size="12" class="shrink-0 text-success" />
+                    <Stethoscope v-else :size="12" class="shrink-0 text-warning" />
+                    <span v-if="entry.addr" class="font-mono text-text-secondary truncate">{{ entry.addr }}</span>
+                    <span v-if="isHealthy(entry.advice)" class="text-[10px] text-success ml-auto">{{ t("bigkey.doctorHealthy") }}</span>
+                  </div>
+                  <!-- Advice content (collapsible) -->
+                  <pre
+                    v-if="doctorEntries.length === 1 || doctorExpanded.has(entry.addr)"
+                    v-show="!isHealthy(entry.advice)"
+                    class="px-3 pb-2 text-[11px] text-text-secondary whitespace-pre-wrap break-words font-mono leading-relaxed"
+                  >{{ entry.advice }}</pre>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- MEMORY STATS -->

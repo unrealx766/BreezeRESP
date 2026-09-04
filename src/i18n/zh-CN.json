@@ -432,6 +432,7 @@
     "collectCapped": "已达到单次分析上限 {max} 个键，建议缩小匹配模式",
     "lfuUnsupported": "当前实例未启用 LFU 淘汰策略，OBJECT FREQ 不可用",
     "doctorEmpty": "点击 MEMORY DOCTOR 获取内存优化建议",
+        "doctorHealthy": "正常",
     "statsFilterPlaceholder": "过滤指标名...",
     "statsEmpty": "点击 MEMORY STATS 查看内存细分指标"
   },

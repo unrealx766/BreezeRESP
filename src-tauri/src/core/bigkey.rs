@@ -30,6 +30,16 @@ pub struct MemoryStatItem {
     pub value: i64,
 }
 
+/// Per-node MEMORY DOCTOR result for cluster-aware display.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryDoctorEntry {
+    /// Node address (e.g. "127.0.0.1:6379"), or empty for standalone.
+    pub addr: String,
+    /// Advice text. Empty when the node reports no problems.
+    pub advice: String,
+}
+
 /// Element-count command for a given Redis type.
 fn len_command(key_type: &str) -> Option<&'static str> {
     match key_type {
@@ -217,31 +227,36 @@ impl BigKeyAnalyzer {
         Ok(items)
     }
 
-    /// MEMORY DOCTOR free-form advice text. Empty string when unsupported.
-    pub async fn memory_doctor(&self, conn: &mut AnyConn) -> Result<String, String> {
+    /// MEMORY DOCTOR per-node advice. Returns one entry per master in cluster
+    /// mode, or a single entry with empty addr for standalone connections.
+    pub async fn memory_doctor(&self, conn: &mut AnyConn) -> Result<Vec<MemoryDoctorEntry>, String> {
         if let Some(cluster) = conn.as_cluster() {
             let values = per_master_values(
                 cluster,
                 redis::cmd("MEMORY").arg("DOCTOR"),
             )
             .await?;
-            let mut parts = Vec::new();
+            let mut entries = Vec::new();
             for (addr, value) in values {
                 if let Ok(text) = redis::from_redis_value::<String>(&value) {
                     let text = text.trim().to_string();
-                    if !text.is_empty() && !text.starts_with("Sam, I have no memory problems") {
-                        parts.push(format!("[{}] {}", addr, text));
-                    }
+                    entries.push(MemoryDoctorEntry {
+                        addr,
+                        advice: text,
+                    });
                 }
             }
-            return Ok(parts.join("\n"));
+            return Ok(entries);
         }
 
         let result: Result<String, _> = redis::cmd("MEMORY").arg("DOCTOR").query_async(conn).await;
         match result {
-            Ok(text) => Ok(text),
+            Ok(text) => Ok(vec![MemoryDoctorEntry {
+                addr: String::new(),
+                advice: text,
+            }]),
             // Command absent on Redis < 4.0 — degrade silently.
-            Err(_) => Ok(String::new()),
+            Err(_) => Ok(vec![]),
         }
     }
 }

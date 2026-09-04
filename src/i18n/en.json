@@ -432,6 +432,7 @@
     "collectCapped": "Reached the per-run cap of {max} keys; consider narrowing the pattern",
     "lfuUnsupported": "LFU eviction policy is not enabled; OBJECT FREQ unavailable",
     "doctorEmpty": "Click MEMORY DOCTOR to get memory optimization advice",
+        "doctorHealthy": "OK",
     "statsFilterPlaceholder": "Filter metric names...",
     "statsEmpty": "Click MEMORY STATS to view memory breakdown"
   },
