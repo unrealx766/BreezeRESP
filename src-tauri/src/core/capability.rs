@@ -193,7 +193,7 @@ pub async fn probe(conn: &mut impl AsyncCommands) -> Result<ServerCapability, St
         .arg("LIST")
         .query_async(conn)
         .await
-        .unwrap_or(redis::Value::Array(Vec::new()));
+        .map_err(|e| format!("MODULE LIST error: {}", e))?;
     Ok(build_capability(&info, &modules))
 }
 
@@ -209,8 +209,7 @@ pub async fn probe_cluster(
         .ok_or_else(|| "Failed to read INFO from cluster nodes".to_string())?;
 
     let module_values = per_master_values(conn, redis::cmd("MODULE").arg("LIST"))
-        .await
-        .unwrap_or_default();
+        .await?;
     let modules: redis::Value = module_values
         .into_iter()
         .map(|(_, v)| v)

@@ -7,6 +7,7 @@ use crate::core::jsonsearch::{
 };
 use crate::core::pool::AnyPool;
 use crate::core::validate::{validate_connection_id, validate_key, validate_non_empty};
+use redis::cluster_routing::{MultipleNodeRoutingInfo, RoutingInfo};
 use crate::AppState;
 use tauri::State;
 
@@ -153,6 +154,9 @@ pub async fn json_type(
 // ---------------------------------------------------------------------------
 
 /// FT._LIST → all index names.
+/// In cluster mode the command has no key argument, so redis-rs would route
+/// it to a random node (possibly a replica that may not serve search metadata).
+/// We explicitly fan out to all masters and merge the results.
 #[tauri::command]
 pub async fn ft_list(
     state: State<'_, AppState>,
@@ -163,6 +167,28 @@ pub async fn ft_list(
     let pool = pool_of(&state, &connection_id)?;
     ensure_search(&pool, &connection_id).await?;
     let mut conn = pool.get().await.map_err(|e| format!("Pool error: {}", e))?;
+
+    // Cluster: route FT._LIST to all masters to avoid hitting replicas.
+    if let Some(cluster) = conn.as_cluster() {
+        let val = cluster
+            .route_command(
+                &redis::cmd("FT._LIST"),
+                RoutingInfo::MultiNode((MultipleNodeRoutingInfo::AllMasters, None)),
+            )
+            .await
+            .map_err(|e| format!("FT._LIST error: {}", e))?;
+        let mut indexes: Vec<String> = Vec::new();
+        if let redis::Value::Map(entries) = val {
+            for (_, node_val) in entries {
+                if let Ok(names) = redis::from_redis_value::<Vec<String>>(&node_val) {
+                    indexes.extend(names);
+                }
+            }
+        }
+        indexes.sort();
+        indexes.dedup();
+        return Ok(indexes);
+    }
 
     JsonSearchCollector::new().ft_list(&mut conn).await
 }

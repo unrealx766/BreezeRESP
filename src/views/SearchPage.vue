@@ -85,11 +85,10 @@ const vectorMetricOptions = computed(() => [
 
 async function refreshAll() {
   if (!connId.value) return;
-  // Force re-probe capability on explicit refresh so newly loaded modules
-  // are picked up (the initial probe may have missed them).
-  await capStore.fetchCapability(connId.value, true);
-  // Always try to load indexes — let the backend return a proper error
-  // if search is truly unsupported (capability probe can be flaky).
+  // Probe capability if not yet cached (but don't force re-probe —
+  // MODULE LIST can fail intermittently and overwrite a good result).
+  await capStore.fetchCapability(connId.value);
+  // Always try to load indexes regardless of capability status.
   try {
     await searchStore.loadIndexes(connId.value);
     if (searchStore.selectedIndex && searchStore.indexes.includes(searchStore.selectedIndex)) {
