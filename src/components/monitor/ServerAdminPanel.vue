@@ -10,6 +10,7 @@ import { tauriApi } from "@/services/tauriApi";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { toast } from "@/utils/toast";
 import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
+import CustomSelect from "@/components/shared/CustomSelect.vue";
 
 const { t } = useI18n();
 const connStore = useConnectionStore();
@@ -30,6 +31,10 @@ const infoNodes = ref<InfoNode[]>([]);
 const selectedNode = ref(0);
 const infoLoading = ref(false);
 const infoError = ref("");
+
+const nodeOptions = computed(() =>
+  infoNodes.value.map((node, idx) => ({ value: idx, label: node.addr }))
+);
 
 const currentNode = computed(() => infoNodes.value[selectedNode.value] ?? infoNodes.value[0] ?? null);
 
@@ -229,13 +234,12 @@ function switchTab(tab: "info" | "config" | "clients") {
       <!-- ================= INFO ================= -->
       <div v-if="subTab === 'info'" class="flex-1 min-h-0 flex flex-col">
         <div class="flex items-center gap-2 mb-3 shrink-0 flex-wrap">
-          <select
+          <CustomSelect
             v-if="infoNodes.length > 1"
-            v-model.number="selectedNode"
-            class="h-7 px-2 text-xs rounded-lg border border-border bg-bg-secondary text-text-primary focus:outline-none focus:border-redis/50 transition-colors"
-          >
-            <option v-for="(node, idx) in infoNodes" :key="node.addr" :value="idx">{{ node.addr }}</option>
-          </select>
+            v-model="selectedNode"
+            :options="nodeOptions"
+            :mono="true"
+          />
           <button
             @click="loadInfo"
             :disabled="infoLoading"

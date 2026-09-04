@@ -4,7 +4,7 @@
 // TYPE / PTTL / MEMORY USAGE / element count, then ranks by memory.
 import { ref, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { Play, Square, RefreshCw, Search, MemoryStick, Stethoscope, Flame, ArrowUpDown, ChevronDown, ChevronRight, CheckCircle } from "lucide-vue-next";
+import { Play, Square, RefreshCw, Search, MemoryStick, Stethoscope, Flame, ArrowUpDown, ChevronDown, ChevronRight, CheckCircle, Info } from "lucide-vue-next";
 import type { BigKeyEntry, MemoryStatItem, MemoryDoctorEntry } from "@/types";
 import { tauriApi } from "@/services/tauriApi";
 import { useConnectionStore } from "@/stores/connectionStore";
@@ -374,6 +374,7 @@ const maxMemory = computed(() =>
             <h3 class="text-sm font-semibold text-text-primary flex items-center gap-2 px-4 pt-4 pb-2 shrink-0">
               <Stethoscope :size="15" class="text-redis" />
               MEMORY DOCTOR
+              <span class="cursor-help" :title="t('bigkey.doctorDesc')"><Info :size="12" class="text-text-muted" /></span>
             </h3>
             <div class="flex-1 overflow-y-auto min-h-0 px-4 pb-4">
               <p v-if="loadingDoctor" class="text-xs text-text-muted">
@@ -422,6 +423,7 @@ const maxMemory = computed(() =>
             <h3 class="text-sm font-semibold text-text-primary flex items-center gap-2 mb-2 shrink-0">
               <MemoryStick :size="15" class="text-redis" />
               MEMORY STATS
+              <span class="cursor-help" :title="t('bigkey.statsDesc')"><Info :size="12" class="text-text-muted" /></span>
             </h3>
             <input
               v-model="statsFilter"

@@ -11,6 +11,7 @@ import { useCapabilityStore } from "@/stores/capabilityStore";
 import { tauriApi } from "@/services/tauriApi";
 import { toast } from "@/utils/toast";
 import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
+import CustomSelect from "@/components/shared/CustomSelect.vue";
 import type { FtFieldSpec } from "@/types";
 
 const { t } = useI18n();
@@ -47,17 +48,48 @@ const vectorFields = computed(() =>
   (searchStore.indexInfo?.fields ?? []).filter((f) => f.fieldType.toUpperCase() === "VECTOR"),
 );
 
+const vectorFieldOptions = computed(() =>
+  vectorFields.value.map((f) => ({
+    value: f.identifier,
+    label: `@${f.identifier} (dim ${formatDim(f)})`,
+  }))
+);
+
+const onTypeOptions = computed(() => [
+  { value: "HASH", label: "HASH" },
+  { value: "JSON", label: "JSON" },
+]);
+
+const fieldTypeOptions = computed(() => [
+  { value: "TEXT", label: "TEXT" },
+  { value: "TAG", label: "TAG" },
+  { value: "NUMERIC", label: "NUMERIC" },
+  { value: "GEO", label: "GEO" },
+  ...(vectorSupported.value ? [{ value: "VECTOR", label: "VECTOR" }] : []),
+]);
+
+const vectorAlgoOptions = computed(() => [
+  { value: "FLAT", label: "FLAT" },
+  { value: "HNSW", label: "HNSW" },
+]);
+
+const vectorMetricOptions = computed(() => [
+  { value: "COSINE", label: "COSINE" },
+  { value: "L2", label: "L2" },
+  { value: "IP", label: "IP" },
+]);
+
 // ---------------------------------------------------------------------------
 // Loading
 // ---------------------------------------------------------------------------
 
 async function refreshAll() {
   if (!connId.value) return;
-  const cap = await capStore.fetchCapability(connId.value);
-  if (cap && !cap.searchSupported) {
-    searchStore.reset();
-    return;
-  }
+  // Force re-probe capability on explicit refresh so newly loaded modules
+  // are picked up (the initial probe may have missed them).
+  await capStore.fetchCapability(connId.value, true);
+  // Always try to load indexes — let the backend return a proper error
+  // if search is truly unsupported (capability probe can be flaky).
   try {
     await searchStore.loadIndexes(connId.value);
     if (searchStore.selectedIndex && searchStore.indexes.includes(searchStore.selectedIndex)) {
@@ -386,14 +418,11 @@ watch(connId, (id, old) => {
               <!-- KNN query -->
               <div v-else class="space-y-2">
                 <div class="flex items-center gap-2">
-                  <select
+                  <CustomSelect
                     v-model="knnField"
-                    class="h-8 px-2 text-xs rounded-lg border border-border bg-bg-primary text-text-primary focus:outline-none"
-                  >
-                    <option v-for="f in vectorFields" :key="f.identifier" :value="f.identifier">
-                      @{{ f.identifier }} (dim {{ formatDim(f) }})
-                    </option>
-                  </select>
+                    :options="vectorFieldOptions"
+                    :mono="true"
+                  />
                   <label class="text-xs text-text-secondary">K =</label>
                   <input
                     v-model.number="knnK"
@@ -497,13 +526,7 @@ watch(connId, (id, old) => {
 
           <div class="flex items-center gap-3 mb-3">
             <label class="text-xs text-text-secondary">{{ t("search.onType") }}</label>
-            <select
-              v-model="createOnType"
-              class="h-8 px-2 text-xs rounded-lg border border-border bg-bg-primary text-text-primary focus:outline-none"
-            >
-              <option value="HASH">HASH</option>
-              <option value="JSON">JSON</option>
-            </select>
+            <CustomSelect v-model="createOnType" :options="onTypeOptions" :mono="true" :z-index="99999" />
             <label class="text-xs text-text-secondary ml-2">{{ t("search.prefixes") }}</label>
             <input
               v-model="createPrefixes"
@@ -522,25 +545,10 @@ watch(connId, (id, old) => {
                 :placeholder="t('search.colField')"
                 class="flex-1 min-w-24 h-7 px-2 text-xs font-mono rounded-md border border-border bg-bg-primary text-text-primary placeholder:text-text-muted focus:outline-none focus:border-redis/50"
               />
-              <select
-                v-model="f.fieldType"
-                class="h-7 px-2 text-xs rounded-md border border-border bg-bg-primary text-text-primary focus:outline-none"
-              >
-                <option value="TEXT">TEXT</option>
-                <option value="TAG">TAG</option>
-                <option value="NUMERIC">NUMERIC</option>
-                <option value="GEO">GEO</option>
-                <option value="VECTOR" :disabled="!vectorSupported">VECTOR</option>
-              </select>
+              <CustomSelect v-model="f.fieldType" :options="fieldTypeOptions" :mono="true" :z-index="99999" />
               <!-- Vector options -->
               <template v-if="f.fieldType === 'VECTOR'">
-                <select
-                  v-model="f.vectorAlgorithm"
-                  class="h-7 px-2 text-xs rounded-md border border-border bg-bg-primary text-text-primary focus:outline-none"
-                >
-                  <option value="FLAT">FLAT</option>
-                  <option value="HNSW">HNSW</option>
-                </select>
+                <CustomSelect v-model="f.vectorAlgorithm" :options="vectorAlgoOptions" :mono="true" :z-index="99999" />
                 <input
                   v-model.number="f.vectorDim"
                   type="number"
@@ -548,14 +556,7 @@ watch(connId, (id, old) => {
                   placeholder="dim"
                   class="w-20 h-7 px-2 text-xs rounded-md border border-border bg-bg-primary text-text-primary placeholder:text-text-muted focus:outline-none focus:border-redis/50"
                 />
-                <select
-                  v-model="f.vectorDistanceMetric"
-                  class="h-7 px-2 text-xs rounded-md border border-border bg-bg-primary text-text-primary focus:outline-none"
-                >
-                  <option value="COSINE">COSINE</option>
-                  <option value="L2">L2</option>
-                  <option value="IP">IP</option>
-                </select>
+                <CustomSelect v-model="f.vectorDistanceMetric" :options="vectorMetricOptions" :mono="true" :z-index="99999" />
               </template>
               <button
                 @click="removeCreateField(idx)"

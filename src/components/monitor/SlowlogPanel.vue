@@ -9,6 +9,7 @@ import { useSlowlogStore } from "@/stores/slowlogStore";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { toast } from "@/utils/toast";
 import { tauriApi } from "@/services/tauriApi";
+import CustomSelect from "@/components/shared/CustomSelect.vue";
 
 const trendCanvasRef = ref<HTMLCanvasElement | null>(null);
 const trendContainerRef = ref<HTMLElement | null>(null);
@@ -21,6 +22,20 @@ const searchQuery = ref("");
 const fetchCount = ref(128);
 const durationFilter = ref<"all" | "10ms" | "100ms" | "1s">("all");
 const viewMode = ref<"list" | "analytics">("list");
+
+const countOptions = computed(() => [
+  { value: 20, label: t("slowlog.count20") },
+  { value: 50, label: t("slowlog.count50") },
+  { value: 128, label: t("slowlog.count128") },
+  { value: 200, label: t("slowlog.count200") },
+]);
+
+const durationOptions = computed(() => [
+  { value: "all", label: t("slowlog.filterAll") },
+  { value: "10ms", label: t("slowlog.filter10ms") },
+  { value: "100ms", label: t("slowlog.filter100ms") },
+  { value: "1s", label: t("slowlog.filter1s") },
+]);
 
 // Fetch on mount and when connection changes
 onMounted(() => {
@@ -580,26 +595,9 @@ function handleCountChange() {
           </button>
         </div>
         <!-- Count selector -->
-        <select
-          v-model.number="fetchCount"
-          @change="handleCountChange"
-          class="h-7 px-2 text-xs rounded-lg border border-border bg-bg-secondary text-text-primary focus:outline-none focus:border-redis/50 transition-colors"
-        >
-          <option :value="20">{{ t("slowlog.count20") }}</option>
-          <option :value="50">{{ t("slowlog.count50") }}</option>
-          <option :value="128">{{ t("slowlog.count128") }}</option>
-          <option :value="200">{{ t("slowlog.count200") }}</option>
-        </select>
+        <CustomSelect v-model="fetchCount" :options="countOptions" @update:model-value="handleCountChange" />
         <!-- Duration filter -->
-        <select
-          v-model="durationFilter"
-          class="h-7 px-2 text-xs rounded-lg border border-border bg-bg-secondary text-text-primary focus:outline-none focus:border-redis/50 transition-colors"
-        >
-          <option value="all">{{ t("slowlog.filterAll") }}</option>
-          <option value="10ms">{{ t("slowlog.filter10ms") }}</option>
-          <option value="100ms">{{ t("slowlog.filter100ms") }}</option>
-          <option value="1s">{{ t("slowlog.filter1s") }}</option>
-        </select>
+        <CustomSelect v-model="durationFilter" :options="durationOptions" />
         <!-- Search -->
         <div class="relative">
           <Search :size="14" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />

@@ -4,17 +4,17 @@
 // average latency, with Top-N bar view and a sortable/filterable table.
 import { ref, computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { Terminal, RefreshCw, Search, ArrowUpDown } from "lucide-vue-next";
+import { Terminal, RefreshCw, Search } from "lucide-vue-next";
 import type { CmdStat, CmdStatNode } from "@/types";
 import { tauriApi } from "@/services/tauriApi";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { toast } from "@/utils/toast";
+import CustomSelect from "@/components/shared/CustomSelect.vue";
 
 const { t } = useI18n();
 const connStore = useConnectionStore();
 
 type SortKey = "totalUsec" | "calls" | "avgUsec";
-type Metric = SortKey;
 
 const nodes = ref<CmdStatNode[]>([]);
 const loading = ref(false);
@@ -22,7 +22,6 @@ const loaded = ref(false);
 const error = ref("");
 const search = ref("");
 const sortKey = ref<SortKey>("totalUsec");
-const metric = ref<Metric>("totalUsec");
 const TOP_N = 10;
 
 watch(() => connStore.activeConnectionId, () => {
@@ -90,18 +89,18 @@ const totalCalls = computed(() => stats.value.reduce((sum, s) => sum + s.calls, 
 const totalUsec = computed(() => stats.value.reduce((sum, s) => sum + s.totalUsec, 0));
 
 const topStats = computed(() => {
-  const list = [...stats.value].sort((a, b) => sortValue(b, metric.value) - sortValue(a, metric.value));
+  const list = [...stats.value].sort((a, b) => sortValue(b, sortKey.value) - sortValue(a, sortKey.value));
   return list.slice(0, TOP_N);
 });
 
 const maxMetric = computed(() =>
-  topStats.value.reduce((max, s) => Math.max(max, sortValue(s, metric.value)), 0)
+  topStats.value.reduce((max, s) => Math.max(max, sortValue(s, sortKey.value)), 0)
 );
 
 function barWidth(s: CmdStat): string {
   const max = maxMetric.value;
   if (max <= 0) return "0%";
-  return `${Math.max((sortValue(s, metric.value) / max) * 100, 1)}%`;
+  return `${Math.max((sortValue(s, sortKey.value) / max) * 100, 1)}%`;
 }
 
 /** Microseconds → human readable duration. */
@@ -123,6 +122,12 @@ function callPercent(s: CmdStat): string {
   if (totalCalls.value <= 0) return "0%";
   return `${((s.calls / totalCalls.value) * 100).toFixed(1)}%`;
 }
+
+const sortOptions = computed(() => [
+  { value: "totalUsec" as const, label: t("cmdstats.sortByTime") },
+  { value: "calls" as const, label: t("cmdstats.sortByCalls") },
+  { value: "avgUsec" as const, label: t("cmdstats.sortByAvg") },
+]);
 </script>
 
 <template>
@@ -156,16 +161,8 @@ function callPercent(s: CmdStat): string {
             class="w-full h-7 pl-7 pr-2 text-xs rounded-lg border border-border bg-bg-secondary text-text-primary placeholder:text-text-muted focus:outline-none focus:border-redis/50 transition-colors"
           />
         </div>
-        <div class="flex items-center gap-1 text-[11px] text-text-muted ml-auto">
-          <ArrowUpDown :size="12" />
-          <select
-            v-model="sortKey"
-            class="h-7 px-2 text-xs rounded-lg border border-border bg-bg-secondary text-text-primary focus:outline-none focus:border-redis/50 transition-colors"
-          >
-            <option value="totalUsec">{{ t("cmdstats.sortByTime") }}</option>
-            <option value="calls">{{ t("cmdstats.sortByCalls") }}</option>
-            <option value="avgUsec">{{ t("cmdstats.sortByAvg") }}</option>
-          </select>
+        <div class="ml-auto">
+          <CustomSelect v-model="sortKey" :options="sortOptions" />
         </div>
       </div>
 
@@ -200,21 +197,10 @@ function callPercent(s: CmdStat): string {
 
         <!-- Top-N bar chart -->
         <div class="rounded-lg border border-border">
-          <div class="flex items-center justify-between px-3 py-2 border-b border-border bg-bg-secondary/50">
+          <div class="px-3 py-2 border-b border-border bg-bg-secondary/50">
             <h4 class="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
               {{ t("cmdstats.topN", { n: TOP_N }) }}
             </h4>
-            <div class="flex items-center rounded-md border border-border overflow-hidden">
-              <button
-                v-for="opt in (['totalUsec', 'calls', 'avgUsec'] as Metric[])"
-                :key="opt"
-                @click="metric = opt"
-                class="px-2 py-0.5 text-[10px] transition-colors"
-                :class="metric === opt ? 'bg-redis/10 text-redis font-medium' : 'text-text-muted hover:bg-bg-hover'"
-              >
-                {{ t(opt === "totalUsec" ? "cmdstats.metricTime" : opt === "calls" ? "cmdstats.metricCalls" : "cmdstats.metricAvg") }}
-              </button>
-            </div>
           </div>
           <div class="p-3 space-y-2">
             <div v-for="s in topStats" :key="s.cmd" class="grid grid-cols-[110px_1fr_130px] gap-2 items-center">
@@ -223,7 +209,7 @@ function callPercent(s: CmdStat): string {
                 <div class="h-full rounded bg-redis/60 transition-all" :style="{ width: barWidth(s) }"></div>
               </div>
               <span class="text-[11px] font-mono text-text-secondary text-right truncate">
-                {{ metric === "calls" ? formatCalls(s.calls) : formatUsec(sortValue(s, metric)) }}
+                {{ sortKey === "calls" ? formatCalls(s.calls) : formatUsec(sortValue(s, sortKey)) }}
               </span>
             </div>
           </div>

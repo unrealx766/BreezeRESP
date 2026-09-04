@@ -11,6 +11,7 @@ import { useCapabilityStore } from "@/stores/capabilityStore";
 import { tauriApi } from "@/services/tauriApi";
 import { toast } from "@/utils/toast";
 import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
+import CustomSelect from "@/components/shared/CustomSelect.vue";
 
 const { t } = useI18n();
 const connStore = useConnectionStore();
@@ -40,6 +41,17 @@ const rangeEnd = ref("");
 const entryCount = ref(100);
 const selectedIds = ref<Set<string>>(new Set());
 const expandedId = ref("");
+
+const entryCountOptions = computed(() => [
+  { value: 50, label: "50" },
+  { value: 100, label: "100" },
+  { value: 200, label: "200" },
+  { value: 500, label: "500" },
+]);
+
+const groupOptions = computed(() =>
+  streamsStore.groups.map((g) => ({ value: g.name, label: g.name }))
+);
 
 // Pending tab state
 const selectedPendingIds = ref<Set<string>>(new Set());
@@ -523,13 +535,12 @@ watch(connId, (id, old) => {
                 </button>
               </div>
               <div v-else-if="activeTab === 'pending'" class="flex items-center gap-1.5 pb-1.5">
-                <select
-                  :value="streamsStore.selectedGroup"
-                  @change="selectGroup(($event.target as HTMLSelectElement).value)"
-                  class="h-6.5 px-2 text-[11px] rounded-md border border-border bg-bg-primary text-text-primary focus:outline-none"
-                >
-                  <option v-for="g in streamsStore.groups" :key="g.name" :value="g.name">{{ g.name }}</option>
-                </select>
+                <CustomSelect
+                  :model-value="streamsStore.selectedGroup"
+                  @update:model-value="selectGroup($event as string)"
+                  :options="groupOptions"
+                  :mono="true"
+                />
                 <button
                   @click="ackSelected"
                   :disabled="selectedPendingIds.size === 0"
@@ -565,15 +576,7 @@ watch(connId, (id, old) => {
                   :placeholder="t('streams.endId')"
                   class="w-40 h-6.5 px-2 text-[11px] font-mono rounded-md border border-border bg-bg-primary text-text-primary placeholder:text-text-muted focus:outline-none focus:border-redis/50"
                 />
-                <select
-                  v-model.number="entryCount"
-                  class="h-6.5 px-2 text-[11px] rounded-md border border-border bg-bg-primary text-text-primary focus:outline-none"
-                >
-                  <option :value="50">50</option>
-                  <option :value="100">100</option>
-                  <option :value="200">200</option>
-                  <option :value="500">500</option>
-                </select>
+                <CustomSelect v-model="entryCount" :options="entryCountOptions" />
                 <button
                   @click="loadEntries"
                   :disabled="streamsStore.loadingEntries"
