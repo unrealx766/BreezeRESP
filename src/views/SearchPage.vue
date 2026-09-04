@@ -561,7 +561,7 @@ watch(
               <CustomSelect v-model="f.fieldType" :options="fieldTypeOptions" :mono="true" :z-index="99999" />
               <!-- Vector options -->
               <template v-if="f.fieldType === 'VECTOR'">
-                <CustomSelect v-model="f.vectorAlgorithm" :options="vectorAlgoOptions" :mono="true" :z-index="99999" />
+                <CustomSelect v-model="f.vectorAlgorithm!" :options="vectorAlgoOptions" :mono="true" :z-index="99999" />
                 <input
                   v-model.number="f.vectorDim"
                   type="number"
@@ -569,7 +569,7 @@ watch(
                   placeholder="dim"
                   class="w-20 h-7 px-2 text-xs rounded-md border border-border bg-bg-primary text-text-primary placeholder:text-text-muted focus:outline-none focus:border-redis/50"
                 />
-                <CustomSelect v-model="f.vectorDistanceMetric" :options="vectorMetricOptions" :mono="true" :z-index="99999" />
+                <CustomSelect v-model="f.vectorDistanceMetric!" :options="vectorMetricOptions" :mono="true" :z-index="99999" />
               </template>
               <button
                 @click="removeCreateField(idx)"
