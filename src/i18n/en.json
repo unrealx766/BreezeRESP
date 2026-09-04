@@ -656,7 +656,11 @@
     "themeDark": "Dark",
     "autoCheckUpdate": "Check for updates automatically",
     "autoCheckUpdateDesc": "Automatically check for new versions on startup (at most once every 24 hours)",
+    "delimiter": "Key Tree Delimiter",
+    "delimiterDesc": "Delimiter character for the key tree hierarchy in the data browser",
+    "delimiterCustom": "Custom",
     "general": "General",
+    "standard": "Standard",
     "about": "About"
   },
   "updater": {

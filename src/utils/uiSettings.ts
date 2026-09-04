@@ -72,3 +72,13 @@ export function resetDotColor(connectionId: string) {
 export function removeDotColor(connectionId: string) {
   resetDotColor(connectionId);
 }
+
+// ── Browser key-tree delimiter ──
+const DELIMITER_KEY = "breezeresp-browser-delimiter";
+export const browserDelimiter = ref(
+  localStorage.getItem(DELIMITER_KEY) ?? ":"
+);
+
+watch(browserDelimiter, (v) => {
+  localStorage.setItem(DELIMITER_KEY, v);
+});

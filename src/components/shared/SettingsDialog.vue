@@ -2,9 +2,9 @@
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { availableLocales } from "@/i18n";
-import { Globe, Check, Settings, X, Info, SlidersHorizontal, Github, Sun, Moon, RefreshCw, Loader2, CheckCircle, Sparkles, AlertCircle } from "lucide-vue-next";
+import { Globe, Check, Settings, X, Info, SlidersHorizontal, Github, Sun, Moon, RefreshCw, Loader2, CheckCircle, Sparkles, AlertCircle, SeparatorHorizontal, FolderTree } from "lucide-vue-next";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { autoCheckUpdate } from "@/utils/uiSettings";
+import { autoCheckUpdate, browserDelimiter } from "@/utils/uiSettings";
 import { checkForUpdates } from "@/utils/updater";
 
 const GITHUB_URL = "https://github.com/unrealx766/BreezeRESP";
@@ -12,7 +12,7 @@ const GITHUB_URL = "https://github.com/unrealx766/BreezeRESP";
 const { t, locale } = useI18n();
 
 const visible = ref(false);
-const activeTab = ref<"general" | "about">("general");
+const activeTab = ref<"general" | "standard" | "about">("general");
 
 // Theme state
 const THEME_KEY = "breezeresp-theme";
@@ -42,6 +42,9 @@ function setLocale(code: string) {
 }
 
 const appVersion = __APP_VERSION__;
+
+// Preset delimiters for quick selection
+const DELIMITER_PRESETS = [":", "/", "-", "_", "."];
 
 // ── Manual update check ──
 const checking = ref(false);
@@ -109,6 +112,16 @@ defineExpose({ open });
               >
                 <SlidersHorizontal :size="13" />
                 {{ t("settings.general") }}
+              </button>
+              <button
+                @click="activeTab = 'standard'"
+                class="flex items-center gap-2 px-2.5 py-2 text-xs font-medium rounded-lg transition-colors"
+                :class="activeTab === 'standard'
+                  ? 'bg-redis/10 text-redis'
+                  : 'text-text-muted hover:bg-bg-hover hover:text-text-secondary'"
+              >
+                <FolderTree :size="13" />
+                {{ t("settings.standard") }}
               </button>
               <button
                 @click="activeTab = 'about'"
@@ -206,6 +219,40 @@ defineExpose({ open });
                         :class="autoCheckUpdate ? 'translate-x-4' : 'translate-x-0'"
                       />
                     </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Standard Tab -->
+              <div v-show="activeTab === 'standard'" class="space-y-5">
+                <!-- Key-Tree Delimiter -->
+                <div>
+                  <div class="flex items-center gap-2 mb-2.5">
+                    <SeparatorHorizontal :size="13" class="text-text-muted" />
+                    <span class="text-xs font-medium text-text-primary">{{ t("settings.delimiter") }}</span>
+                  </div>
+                  <p class="text-[11px] text-text-muted mb-3 pl-[21px]">{{ t("settings.delimiterDesc") }}</p>
+                  <div class="flex items-center gap-2 pl-[21px]">
+                    <button
+                      v-for="d in DELIMITER_PRESETS"
+                      :key="d"
+                      @click="browserDelimiter = d"
+                      class="w-8 h-8 text-sm font-mono rounded-lg border transition-colors flex items-center justify-center"
+                      :class="browserDelimiter === d
+                        ? 'border-redis/40 bg-redis/5 text-redis font-semibold'
+                        : 'border-border bg-bg-secondary text-text-secondary hover:border-border-hover hover:bg-bg-hover'"
+                    >
+                      {{ d }}
+                    </button>
+                    <div class="relative">
+                      <input
+                        v-model="browserDelimiter"
+                        type="text"
+                        maxlength="5"
+                        class="w-16 h-8 px-2 text-xs font-mono text-center rounded-lg border border-border bg-bg-secondary text-text-primary focus:outline-none focus:border-redis/50 focus:ring-1 focus:ring-redis/20 transition-colors"
+                        :placeholder="t('settings.delimiterCustom')"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>

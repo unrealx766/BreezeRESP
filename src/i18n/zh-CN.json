@@ -656,7 +656,11 @@
     "themeDark": "深色",
     "autoCheckUpdate": "自动检查更新",
     "autoCheckUpdateDesc": "启动应用时自动检查是否有新版本（每 24 小时最多一次）",
+    "delimiter": "Key 树分隔符",
+    "delimiterDesc": "数据浏览器中 Key 树层级的分隔字符",
+    "delimiterCustom": "自定义",
     "general": "通用",
+    "standard": "常规",
     "about": "关于"
   },
   "updater": {

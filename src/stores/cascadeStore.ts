@@ -4,6 +4,7 @@ import type { RedisKey, RedisDataType, KeyTreeNode, SortField, SortOrder } from 
 import { tauriApi } from "@/services/tauriApi";
 import { useConnectionStore } from "./connectionStore";
 import { useHistoryStore } from "./historyStore";
+import { browserDelimiter } from "@/utils/uiSettings";
 
 /** Normalize backend TYPE command output to frontend RedisDataType */
 export function normalizeKeyType(raw: string): RedisDataType {
@@ -46,14 +47,15 @@ export const useCascadeStore = defineStore("cascade", () => {
     const root: KeyTreeNode[] = [];
     const nodeMap = new Map<string, KeyTreeNode>();
     const expanded = expandedPaths.value;
+    const sep = browserDelimiter.value || ":";
 
     for (const key of filteredKeys.value) {
-      const parts = key.key.split(":");
+      const parts = key.key.split(sep);
       let currentPath = "";
 
       for (let i = 0; i < parts.length; i++) {
         const parentPath = currentPath;
-        currentPath = currentPath ? `${currentPath}:${parts[i]}` : parts[i];
+        currentPath = currentPath ? `${currentPath}${sep}${parts[i]}` : parts[i];
         const isLeaf = i === parts.length - 1;
 
         if (!nodeMap.has(currentPath)) {
