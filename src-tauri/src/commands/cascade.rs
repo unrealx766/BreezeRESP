@@ -341,103 +341,85 @@ pub async fn scan_keys(
         return Ok((next_cursor, result));
     }
 
-    // Cluster: cross-key pipelines can hit CROSSSLOT errors; query metadata per key
+    // Cluster: group keys by hash slot, then pipeline TYPE query per slot
     if pool.is_cluster() {
+        // Step 1: batch CLUSTER KEYSLOT to determine each key's slot (1 RTT)
+        let mut slot_pipe = redis::pipe();
         for key in &keys {
-            let type_str: String = redis::cmd("TYPE")
-                .arg(key)
-                .query_async(&mut conn)
-                .await
-                .unwrap_or_else(|_| "none".to_string());
-            let ttl: i64 = conn.ttl(key).await.unwrap_or(-1);
-            let size: u64 = redis::cmd("MEMORY")
-                .arg("USAGE")
-                .arg(key)
-                .query_async(&mut conn)
-                .await
-                .unwrap_or(0);
-            result.push(RedisKeyInfo {
-                key: key.clone(),
-                key_type: type_str,
-                ttl,
-                size,
-            });
+            slot_pipe.cmd("CLUSTER").arg("KEYSLOT").arg(key);
         }
+        let slot_vals: Vec<redis::Value> = slot_pipe
+            .query_async(&mut conn)
+            .await
+            .unwrap_or_default();
+
+        // Step 2: group key indices by slot
+        let mut slot_groups: std::collections::HashMap<u64, Vec<usize>> =
+            std::collections::HashMap::new();
+        for (i, val) in slot_vals.iter().enumerate() {
+            let slot: u64 = redis::from_redis_value(val).unwrap_or(0);
+            slot_groups.entry(slot).or_default().push(i);
+        }
+
+        // Step 3: per-slot pipeline — only TYPE (1 RTT per slot)
+        let mut infos: Vec<Option<RedisKeyInfo>> = vec![None; keys.len()];
+        for (_slot, indices) in &slot_groups {
+            let mut pipe = redis::pipe();
+            for &i in indices {
+                pipe.cmd("TYPE").arg(&keys[i]);
+            }
+            let vals: Vec<redis::Value> = pipe
+                .query_async(&mut conn)
+                .await
+                .unwrap_or_default();
+
+            let n = indices.len();
+            if vals.len() == n {
+                for (j, &i) in indices.iter().enumerate() {
+                    let key_type =
+                        redis::from_redis_value::<String>(&vals[j]).unwrap_or_else(|_| "unknown".to_string());
+                    infos[i] = Some(RedisKeyInfo {
+                        key: keys[i].clone(),
+                        key_type,
+                        ttl: i64::MAX, // 标记为未加载
+                        size: u64::MAX, // 标记为未加载
+                    });
+                }
+            } else {
+                // Fallback: per-key query
+                for &i in indices {
+                    let key_type: String = redis::cmd("TYPE")
+                        .arg(&keys[i])
+                        .query_async(&mut conn)
+                        .await
+                        .unwrap_or_else(|_| "unknown".to_string());
+                    infos[i] = Some(RedisKeyInfo {
+                        key: keys[i].clone(),
+                        key_type,
+                        ttl: i64::MAX,
+                        size: u64::MAX,
+                    });
+                }
+            }
+        }
+
+        result.extend(infos.into_iter().flatten());
         return Ok((next_cursor, result));
     }
 
-    // Pipeline: batch TYPE + TTL for all keys (1 round-trip)
+    // Standalone: simple batch TYPE query (1 RTT)
     let mut pipe = redis::pipe();
     for key in &keys {
         pipe.cmd("TYPE").arg(key);
     }
-    for key in &keys {
-        pipe.cmd("TTL").arg(key);
-    }
-
-    let n = keys.len();
-    let expected = 2 * n;
-    let values: Vec<redis::Value> = pipe
-        .query_async(&mut conn)
-        .await
-        .unwrap_or_default();
-
-    // Fallback: if pipeline returned wrong count, query per-key
-    if values.len() != expected {
-        result.clear();
-        for key in &keys {
-            let type_str: String = redis::cmd("TYPE")
-                .arg(key)
-                .query_async(&mut conn)
-                .await
-                .unwrap_or_else(|_| "none".to_string());
-            let ttl: i64 = conn.ttl(key).await.unwrap_or(-1);
-            let size: u64 = redis::cmd("MEMORY")
-                .arg("USAGE")
-                .arg(key)
-                .query_async(&mut conn)
-                .await
-                .unwrap_or(0);
-            result.push(RedisKeyInfo {
-                key: key.clone(),
-                key_type: type_str,
-                ttl,
-                size,
-            });
-        }
-        return Ok((next_cursor, result));
-    }
-
-    // MEMORY USAGE may not exist on Redis < 4.0; query separately with graceful fallback
-    let sizes: Vec<u64> = {
-        let mut size_pipe = redis::pipe();
-        for key in &keys {
-            size_pipe.cmd("MEMORY").arg("USAGE").arg(key);
-        }
-        let size_vals: Vec<redis::Value> = size_pipe
-            .query_async(&mut conn)
-            .await
-            .unwrap_or_default();
-        if size_vals.len() == n {
-            size_vals.iter().map(|v| redis::from_redis_value::<u64>(v).unwrap_or(0)).collect()
-        } else {
-            // MEMORY USAGE not supported or partial failure — all sizes default to 0
-            vec![0u64; n]
-        }
-    };
-
+    let vals: Vec<redis::Value> = pipe.query_async(&mut conn).await.unwrap_or_default();
     for (i, key) in keys.iter().enumerate() {
-        let type_str = redis::from_redis_value::<String>(&values[i])
-            .unwrap_or_else(|_| "none".to_string());
-
-        let ttl: i64 = redis::from_redis_value::<i64>(&values[n + i])
-            .unwrap_or(-1);
-
+        let key_type = redis::from_redis_value::<String>(&vals[i]).unwrap_or_else(|_| "unknown".to_string());
         result.push(RedisKeyInfo {
             key: key.clone(),
-            key_type: type_str,
-            ttl,
-            size: sizes[i],
+            key_type,
+            ttl: i64::MAX, // 标记为未加载
+            size: u64::MAX, // 标记为未加载
         });
     }
 

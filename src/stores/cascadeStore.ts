@@ -139,12 +139,16 @@ export const useCascadeStore = defineStore("cascade", () => {
       const rustKeys = Array.isArray(response[1]) ? response[1] : [];
 
       newKeys.push(
-        ...rustKeys.map((rk: any) => ({
-          key: rk.key,
-          type: normalizeKeyType(rk.keyType || rk.key_type || "string"),
-          ttl: rk.ttl ?? -1,
-          size: rk.size ?? 0,
-        }))
+        ...rustKeys.map((rk: any) => {
+          // Check if ttl/size are "unloaded" markers (i64::MAX = 9223372036854775807, u64::MAX ≈ 1.8e19)
+          const isUnloaded = rk.ttl === 9223372036854775807n || rk.size === 18446744073709551615n;
+          return {
+            key: rk.key,
+            type: normalizeKeyType(rk.keyType || rk.key_type || "string"),
+            ttl: isUnloaded ? -2 : (rk.ttl as number),
+            size: isUnloaded ? 0 : (rk.size as number),
+          };
+        })
       );
       cursor = nextCursor;
       iterations++;
