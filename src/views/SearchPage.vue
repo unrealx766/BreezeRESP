@@ -232,6 +232,20 @@ watch(connId, (id, old) => {
     if (id) refreshAll();
   }
 });
+
+// Initialize VECTOR field defaults when type changes
+watch(
+  createFields,
+  (fields) => {
+    for (const f of fields) {
+      if (f.fieldType === "VECTOR") {
+        if (f.vectorAlgorithm == null) f.vectorAlgorithm = "FLAT";
+        if (f.vectorDistanceMetric == null) f.vectorDistanceMetric = "COSINE";
+      }
+    }
+  },
+  { deep: true }
+);
 </script>
 
 <template>
