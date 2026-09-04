@@ -5,12 +5,13 @@
 // preview it, then import with skip / replace policy.
 import { ref, computed } from "vue";
 import { useI18n } from "vue-i18n";
-import { X, Download, Upload, RefreshCw, Eye } from "lucide-vue-next";
+import { X, Download, Upload, RefreshCw, Eye, FolderOpen } from "lucide-vue-next";
 import type { ExportResult, ImportPolicy, ImportResult, KeyExportFormat } from "@/types";
 import { tauriApi } from "@/services/tauriApi";
 import { useConnectionStore } from "@/stores/connectionStore";
 import { toast } from "@/utils/toast";
 import ConfirmDialog from "@/components/shared/ConfirmDialog.vue";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 
 const { t } = useI18n();
 const connStore = useConnectionStore();
@@ -104,6 +105,19 @@ async function inspectFile() {
     toast.error(e instanceof Error ? e.message : String(e));
   } finally {
     inspecting.value = false;
+  }
+}
+
+async function browseFile() {
+  const selected = await openDialog({
+    multiple: false,
+    filters: [{ name: "Export Files", extensions: ["json", "dump"] }],
+    title: t("keyTransfer.importBrowseTitle"),
+  });
+  if (selected && typeof selected === "string") {
+    importPath.value = selected;
+    // Auto-validate after file selection
+    await inspectFile();
   }
 }
 
@@ -271,6 +285,14 @@ async function doImport() {
                     @keyup.enter="inspectFile"
                     class="flex-1 h-8 px-2.5 text-xs font-mono rounded-lg border border-border bg-bg-primary text-text-primary placeholder:text-text-muted focus:outline-none focus:border-redis/50 transition-colors"
                   />
+                  <button
+                    @click="browseFile"
+                    :disabled="inspecting"
+                    :title="t('keyTransfer.importBrowse')"
+                    class="h-8 px-2.5 text-xs rounded-lg border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors flex items-center gap-1 disabled:opacity-40"
+                  >
+                    <FolderOpen :size="12" />
+                  </button>
                   <button
                     @click="inspectFile"
                     :disabled="inspecting || !importPath.trim()"
